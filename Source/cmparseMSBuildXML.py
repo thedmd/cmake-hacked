@@ -6,10 +6,13 @@
 #  "${PROGRAMFILES}/MSBuild/Microsoft.Cpp/v4.0/1033/cl.xml"
 #  "${PROGRAMFILES}/MSBuild/Microsoft.Cpp/v4.0/1033/lib.xml"
 #  "${PROGRAMFILES}/MSBuild/Microsoft.Cpp/v4.0/1033/link.xml"
+#  "${PROGRAMFILES}/MSBuild/Microsoft.Cpp/v4.0/V110/1033/cl.xml"
+#  "${PROGRAMFILES}/MSBuild/Microsoft.Cpp/v4.0/V110/1033/lib.xml"
+#  "${PROGRAMFILES}/MSBuild/Microsoft.Cpp/v4.0/V110/1033/link.xml"
 #
 #  BoolProperty  <Name>true|false</Name>
 #   simple example:
-#     <BoolProperty ReverseSwitch="Oy-" Name="OmitFramePointers" 
+#     <BoolProperty ReverseSwitch="Oy-" Name="OmitFramePointers"
 #      Category="Optimization" Switch="Oy">
 #   <BoolProperty.DisplayName>  <BoolProperty.Description>
 # <CLCompile>
@@ -67,7 +70,7 @@
 #     <Optimization>MaxSpeed</Optimization>
 #     example for O1 would be this:
 #     <Optimization>MinSpace</Optimization>
-# 
+#
 #  StringListProperty
 #   <StringListProperty Name="PreprocessorDefinitions" Category="Preprocessor" Switch="D ">
 #     <StringListProperty.DisplayName>
@@ -130,7 +133,7 @@ class Property:
     if document is not None:
       self.populate(document)
     pass
-   
+
   #document = the dom file that's root node is the Property node (ex. if you were parsing a BoolProperty the root node should be something like <BoolProperty Name="RegisterOutput" Category="General" IncludeInCommandLine="false">
   #spaces = do not use
   def populate(self,document, spaces = ""):
@@ -148,16 +151,16 @@ class Property:
           self.argumentProperty = child.getAttribute("Property")
           self.argumentIsRequired = child.getAttribute("IsRequired")
         if child.nodeName == self.prefix_type+"Value":
-          va = Property(self.prefix_type,["Name","Switch"])
+          va = Property(self.prefix_type,["Name","DisplayName","Switch"])
           va.suffix_type = "Value"
           va.populate(child)
           self.values.append(va)
       self.populate(child,spaces+"----")
       pass
 
-  #toString function 
+  #toString function
   def __str__(self):
-    toReturn = self.prefix_type+self.suffix_type+":" 
+    toReturn = self.prefix_type+self.suffix_type+":"
     for i in self.attributeNames:
       toReturn += "\n    "+i+": "+self.attributes[i]
     if self.argumentProperty != "":
@@ -191,7 +194,7 @@ class MSBuildToCMake:
   #        self.<Name>Properties.append(Property("<Name>",[<List of attributes>],child))
   #
   #Replace <Name> with the name of the new property (ex. if property is StringProperty replace <Name> with String)
-  #Replace <List of attributes> with a list of attributes in your property's root node 
+  #Replace <List of attributes> with a list of attributes in your property's root node
   #in the __init__ function add the line self.<Name>Properties = []
   #
   #That is all that is required to add new properties
@@ -203,11 +206,11 @@ class MSBuildToCMake:
         if child.nodeName == "EnumProperty":
           self.enumProperties.append(Property("Enum",["Name","Category"],child))
         if child.nodeName == "StringProperty":
-          self.stringProperties.append(Property("String",["Name","Subtype","Separator","Category","Visible","IncludeInCommandLine","Switch","ReadOnly"],child))
+          self.stringProperties.append(Property("String",["Name","Subtype","Separator","Category","Visible","IncludeInCommandLine","Switch","DisplayName","ReadOnly"],child))
         if child.nodeName == "StringListProperty":
-           self.stringListProperties.append(Property("StringList",["Name","Category","Switch","Subtype"],child))
+           self.stringListProperties.append(Property("StringList",["Name","Category","Switch","DisplayName","Subtype"],child))
         if child.nodeName == "BoolProperty":
-           self.boolProperties.append(Property("Bool",["ReverseSwitch","Name","Category","Switch","SwitchPrefix","IncludeInCommandLine"],child))
+           self.boolProperties.append(Property("Bool",["ReverseSwitch","Name","Category","Switch","DisplayName","SwitchPrefix","IncludeInCommandLine"],child))
         if child.nodeName == "IntProperty":
            self.intProperties.append(Property("Int",["Name","Category","Visible"],child))
       self.populate(child,spaces+"----")
@@ -226,17 +229,17 @@ class MSBuildToCMake:
       for j in i.values:
         #hardcore Brad King's manual fixes for cmVS10CLFlagTable.h
         if i.attributes["Name"] == "PrecompiledHeader" and j.attributes["Switch"] != "":
-          toReturn+="  {\""+i.attributes["Name"]+"\", \""+j.attributes["Switch"]+"\",\n   \""+j.DisplayName+"\", \""+j.attributes["Name"]+"\",\n   cmVS7FlagTable::UserValueIgnored | cmVS7FlagTable::Continue},\n"
+          toReturn+="  {\""+i.attributes["Name"]+"\", \""+j.attributes["Switch"]+"\",\n   \""+j.attributes["DisplayName"]+"\", \""+j.attributes["Name"]+"\",\n   cmVS7FlagTable::UserValueIgnored | cmVS7FlagTable::Continue},\n"
         else:
           #default (normal, non-hardcoded) case
-          toReturn+="  {\""+i.attributes["Name"]+"\", \""+j.attributes["Switch"]+"\",\n   \""+j.DisplayName+"\", \""+j.attributes["Name"]+"\", 0},\n"
+          toReturn+="  {\""+i.attributes["Name"]+"\", \""+j.attributes["Switch"]+"\",\n   \""+j.attributes["DisplayName"]+"\", \""+j.attributes["Name"]+"\", 0},\n"
       toReturn += "\n"
 
     if lastProp != {}:
       for j in lastProp.values:
-          toReturn+="  {\""+lastProp.attributes["Name"]+"\", \""+j.attributes["Switch"]+"\",\n   \""+j.DisplayName+"\", \""+j.attributes["Name"]+"\", 0},\n"
+          toReturn+="  {\""+lastProp.attributes["Name"]+"\", \""+j.attributes["Switch"]+"\",\n   \""+j.attributes["DisplayName"]+"\", \""+j.attributes["Name"]+"\", 0},\n"
       toReturn += "\n"
-    
+
     toReturn += "\n  //Bool Properties\n"
     for i in self.boolProperties:
       if i.argumentProperty == "":
@@ -250,17 +253,17 @@ class MSBuildToCMake:
       if i.argumentProperty != "":
         if i.attributes["ReverseSwitch"] != "":
           toReturn += "  {\""+i.attributes["Name"]+"\", \""+i.attributes["ReverseSwitch"]+"\", \"\", \"false\",\n   cmVS7FlagTable::UserValueIgnored | cmVS7FlagTable::Continue},\n"
-          toReturn += "  {\""+i.attributes["Name"]+"\", \""+i.attributes["ReverseSwitch"]+"\", \""+i.DisplayName+"\", \"\",\n   cmVS7FlagTable::UserValueRequired},\n"
+          toReturn += "  {\""+i.attributes["Name"]+"\", \""+i.attributes["ReverseSwitch"]+"\", \""+i.attributes["DisplayName"]+"\", \"\",\n   cmVS7FlagTable::UserValueRequired},\n"
         if i.attributes["Switch"] != "":
           toReturn += "  {\""+i.attributes["Name"]+"\", \""+i.attributes["Switch"]+"\", \"\", \"true\",\n   cmVS7FlagTable::UserValueIgnored | cmVS7FlagTable::Continue},\n"
-          toReturn += "  {\""+i.argumentProperty+"\", \""+i.attributes["Switch"]+"\", \""+i.DisplayName+"\", \"\",\n   cmVS7FlagTable::UserValueRequired},\n"
-    
+          toReturn += "  {\""+i.argumentProperty+"\", \""+i.attributes["Switch"]+"\", \""+i.attributes["DisplayName"]+"\", \"\",\n   cmVS7FlagTable::UserValueRequired},\n"
+
     toReturn += "\n  //String List Properties\n"
     for i in self.stringListProperties:
       if i.attributes["Switch"] == "":
         toReturn += "  // Skip [" + i.attributes["Name"] + "] - no command line Switch.\n";
       else:
-        toReturn +="  {\""+i.attributes["Name"]+"\", \""+i.attributes["Switch"]+"\",\n   \""+i.DisplayName+"\",\n   \"\", cmVS7FlagTable::UserValue | cmVS7FlagTable::SemicolonAppendable},\n"
+        toReturn +="  {\""+i.attributes["Name"]+"\", \""+i.attributes["Switch"]+"\",\n   \""+i.attributes["DisplayName"]+"\",\n   \"\", cmVS7FlagTable::UserValue | cmVS7FlagTable::SemicolonAppendable},\n"
 
     toReturn += "\n  //String Properties\n"
     for i in self.stringProperties:
@@ -276,7 +279,7 @@ class MSBuildToCMake:
         else:
           toReturn += "  // Skip [" + i.attributes["Name"] + "] - no command line Switch.\n";
       else:
-        toReturn +="  {\""+i.attributes["Name"]+"\", \""+i.attributes["Switch"]+i.attributes["Separator"]+"\",\n   \""+i.DisplayName+"\",\n   \"\", cmVS7FlagTable::UserValue},\n"
+        toReturn +="  {\""+i.attributes["Name"]+"\", \""+i.attributes["Switch"]+i.attributes["Separator"]+"\",\n   \""+i.attributes["DisplayName"]+"\",\n   \"\", cmVS7FlagTable::UserValue},\n"
 
     toReturn += "  {0,0,0,0,0}\n};"
     return toReturn
@@ -289,7 +292,7 @@ class MSBuildToCMake:
     for p in allList:
       for i in p:
         toReturn += "==================================================\n"+str(i).replace("\n","\n    ")+"\n==================================================\n"
-    
+
     return toReturn
 ###########################################################################################
 
@@ -305,8 +308,8 @@ def main(argv):
   for i in range(0,len(argv)):
     if argv[i] == "-x":
       xml_file = argv[i+1]
-    if argv[i] == "-h": 
-      print help 
+    if argv[i] == "-h":
+      print help
       sys.exit(0)
     pass
   if xml_file == None:

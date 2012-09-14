@@ -89,7 +89,7 @@ void cmFindPackageCommand::GenerateDocumentation()
                                "FIND_XXX", "find_package");
   this->CommandDocumentation =
     "  find_package(<package> [version] [EXACT] [QUIET] [MODULE]\n"
-    "               [[REQUIRED|COMPONENTS] [components...]]\n"
+    "               [REQUIRED] [[COMPONENTS] [components...]]\n"
     "               [OPTIONAL_COMPONENTS components...]\n"
     "               [NO_POLICY_SCOPE])\n"
     "Finds and loads settings from an external project.  "
@@ -102,7 +102,7 @@ void cmFindPackageCommand::GenerateDocumentation()
     "package cannot be found."
     "\n"
     "A package-specific list of required components may be listed after the "
-    "COMPONENTS option or directly after the REQUIRED option.  "
+    "COMPONENTS option (or after the REQUIRED option if present).  "
     "Additional optional components may be listed after OPTIONAL_COMPONENTS.  "
     "Available components and their influence on whether a package is "
     "considered to be found are defined by the target package."
@@ -136,7 +136,7 @@ void cmFindPackageCommand::GenerateDocumentation()
     "proceeds to Config mode.\n"
     "The complete Config mode command signature is:\n"
     "  find_package(<package> [version] [EXACT] [QUIET]\n"
-    "               [[REQUIRED|COMPONENTS] [components...]]\n"
+    "               [REQUIRED] [[COMPONENTS] [components...]]\n"
     "               [CONFIG|NO_MODULE]\n"
     "               [NO_POLICY_SCOPE]\n"
     "               [NAMES name1 [name2 ...]]\n"
@@ -353,6 +353,29 @@ void cmFindPackageCommand::GenerateDocumentation()
     "variable CMAKE_DISABLE_FIND_PACKAGE_<package> to TRUE. See the "
     "documentation for the CMAKE_DISABLE_FIND_PACKAGE_<package> variable for "
     "more information.\n"
+    "When loading a find module or package configuration file find_package "
+    "defines variables to provide information about the call arguments "
+    "(and restores their original state before returning):\n"
+    " <package>_FIND_REQUIRED      = true if REQUIRED option was given\n"
+    " <package>_FIND_QUIETLY       = true if QUIET option was given\n"
+    " <package>_FIND_VERSION       = full requested version string\n"
+    " <package>_FIND_VERSION_MAJOR = major version if requested, else 0\n"
+    " <package>_FIND_VERSION_MINOR = minor version if requested, else 0\n"
+    " <package>_FIND_VERSION_PATCH = patch version if requested, else 0\n"
+    " <package>_FIND_VERSION_TWEAK = tweak version if requested, else 0\n"
+    " <package>_FIND_VERSION_COUNT = number of version components, 0 to 4\n"
+    " <package>_FIND_VERSION_EXACT = true if EXACT option was given\n"
+    " <package>_FIND_COMPONENTS    = list of requested components\n"
+    " <package>_FIND_REQUIRED_<c>  = true if component <c> is required\n"
+    "                                false if component <c> is optional\n"
+    "In Module mode the loaded find module is responsible to honor the "
+    "request detailed by these variables; see the find module for details.  "
+    "In Config mode find_package handles REQUIRED, QUIET, and version "
+    "options automatically but leaves it to the package configuration file "
+    "to handle components in a way that makes sense for the package.  "
+    "The package configuration file may set <package>_FOUND to false "
+    "to tell find_package that component requirements are not satisfied."
+    "\n"
     "See the cmake_policy() command documentation for discussion of the "
     "NO_POLICY_SCOPE option."
     ;
@@ -1345,41 +1368,73 @@ bool cmFindPackageCommand::ReadListFile(const char* f, PolicyScopeRule psr)
 }
 
 //----------------------------------------------------------------------------
-void cmFindPackageCommand::AppendToProperty(const char* propertyName)
+void cmFindPackageCommand::AppendToFoundProperty(bool found)
 {
-  std::string propertyValue;
-  const char *prop =
-      this->Makefile->GetCMakeInstance()->GetProperty(propertyName);
-  if (prop && *prop)
+  std::vector<std::string> foundContents;
+  const char *foundProp =
+             this->Makefile->GetCMakeInstance()->GetProperty("PACKAGES_FOUND");
+  if (foundProp && *foundProp)
     {
-    propertyValue = prop;
+    std::string tmp = foundProp;
 
-    std::vector<std::string> contents;
-    cmSystemTools::ExpandListArgument(propertyValue, contents, false);
+    cmSystemTools::ExpandListArgument(tmp, foundContents, false);
+    std::vector<std::string>::iterator nameIt = std::find(
+                       foundContents.begin(), foundContents.end(), this->Name);
+    if(nameIt != foundContents.end())
+      {
+      foundContents.erase(nameIt);
+      }
+    }
 
-    bool alreadyInserted = false;
-    for(std::vector<std::string>::const_iterator it = contents.begin();
-      it != contents.end(); ++ it )
+  std::vector<std::string> notFoundContents;
+  const char *notFoundProp =
+         this->Makefile->GetCMakeInstance()->GetProperty("PACKAGES_NOT_FOUND");
+  if (notFoundProp && *notFoundProp)
+    {
+    std::string tmp = notFoundProp;
+
+    cmSystemTools::ExpandListArgument(tmp, notFoundContents, false);
+    std::vector<std::string>::iterator nameIt = std::find(
+                 notFoundContents.begin(), notFoundContents.end(), this->Name);
+    if(nameIt != notFoundContents.end())
       {
-      if (*it == this->Name)
-        {
-        alreadyInserted = true;
-        break;
-        }
+      notFoundContents.erase(nameIt);
       }
-    if (!alreadyInserted)
-      {
-      propertyValue += ";";
-      propertyValue += this->Name;
-      }
+    }
+
+  if(found)
+    {
+    foundContents.push_back(this->Name);
     }
   else
     {
-    propertyValue = this->Name;
+    notFoundContents.push_back(this->Name);
     }
-  this->Makefile->GetCMakeInstance()->SetProperty(propertyName,
-                                                  propertyValue.c_str());
- }
+
+
+  std::string tmp;
+  const char* sep ="";
+  for(size_t i=0; i<foundContents.size(); i++)
+    {
+    tmp += sep;
+    tmp += foundContents[i];
+    sep = ";";
+    }
+
+  this->Makefile->GetCMakeInstance()->SetProperty("PACKAGES_FOUND",
+                                                  tmp.c_str());
+
+  tmp = "";
+  sep = "";
+  for(size_t i=0; i<notFoundContents.size(); i++)
+    {
+    tmp += sep;
+    tmp += notFoundContents[i];
+    sep = ";";
+    }
+  this->Makefile->GetCMakeInstance()->SetProperty("PACKAGES_NOT_FOUND",
+                                                  tmp.c_str());
+}
 
 //----------------------------------------------------------------------------
 void cmFindPackageCommand::AppendSuccessInformation()
@@ -1390,14 +1445,10 @@ void cmFindPackageCommand::AppendSuccessInformation()
 
   const char* upperResult = this->Makefile->GetDefinition(upperFound.c_str());
   const char* result = this->Makefile->GetDefinition(found.c_str());
-  if ((cmSystemTools::IsOn(result)) || (cmSystemTools::IsOn(upperResult)))
-    {
-    this->AppendToProperty("PACKAGES_FOUND");
-    }
-  else
-    {
-    this->AppendToProperty("PACKAGES_NOT_FOUND");
-    }
+  bool packageFound = ((cmSystemTools::IsOn(result))
+                                        || (cmSystemTools::IsOn(upperResult)));
+
+  this->AppendToFoundProperty(packageFound);
 
   // Record whether the find was quiet or not, so this can be used
   // e.g. in FeatureSummary.cmake

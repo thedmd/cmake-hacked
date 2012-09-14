@@ -19,10 +19,10 @@
 class cmInstallCommandArguments
 {
   public:
-    cmInstallCommandArguments();
-    void SetGenericArguments(cmInstallCommandArguments* args) 
+    cmInstallCommandArguments(const std::string& defaultComponent);
+    void SetGenericArguments(cmInstallCommandArguments* args)
                                                {this->GenericArguments = args;}
-    void Parse(const std::vector<std::string>* args, 
+    void Parse(const std::vector<std::string>* args,
                std::vector<std::string>* unconsumedArgs);
 
     // Compute destination path.and check permissions
@@ -37,14 +37,15 @@ class cmInstallCommandArguments
     bool GetNamelinkOnly() const;
     bool GetNamelinkSkip() const;
 
-    // once HandleDirectoryMode() is also switched to using 
+    // once HandleDirectoryMode() is also switched to using
     // cmInstallCommandArguments then these two functions can become non-static
     // private member functions without arguments
-    static bool CheckPermissions(const std::string& onePerm, 
+    static bool CheckPermissions(const std::string& onePerm,
                                  std::string& perm);
     cmCommandArgumentsHelper Parser;
     cmCommandArgumentGroup ArgumentGroup;
   private:
+    cmInstallCommandArguments(); // disabled
     cmCAString Destination;
     cmCAString Component;
     cmCAString Rename;
@@ -60,6 +61,7 @@ class cmInstallCommandArguments
     cmInstallCommandArguments* GenericArguments;
     static const char* PermissionsTable[];
     static const std::string EmptyString;
+    std::string DefaultComponentName;
     bool CheckPermissions();
 };
 

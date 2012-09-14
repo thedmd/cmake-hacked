@@ -435,6 +435,15 @@ int cmCTestScriptHandler::ReadInScript(const std::string& total_script_arg)
     return 2;
     }
 
+  // Add definitions of variables passed in on the command line:
+  const std::map<std::string, std::string> &defs =
+    this->CTest->GetDefinitions();
+  for (std::map<std::string, std::string>::const_iterator it = defs.begin();
+       it != defs.end(); ++it)
+    {
+    this->Makefile->AddDefinition(it->first.c_str(), it->second.c_str());
+    }
+
   // finally read in the script
   if (!this->Makefile->ReadListFile(0, script.c_str()) ||
     cmSystemTools::GetErrorOccuredFlag())
@@ -643,11 +652,7 @@ int cmCTestScriptHandler::RunCurrentScript()
     {
     std::vector<std::string> envArgs;
     cmSystemTools::ExpandListArgument(this->CTestEnv.c_str(),envArgs);
-    // for each variable/argument do a putenv
-    for (unsigned i = 0; i < envArgs.size(); ++i)
-      {
-      cmSystemTools::PutEnv(envArgs[i].c_str());
-      }
+    cmSystemTools::AppendEnv(envArgs);
     }
 
   // now that we have done most of the error checking finally run the

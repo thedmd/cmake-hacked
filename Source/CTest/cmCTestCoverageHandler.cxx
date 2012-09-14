@@ -11,6 +11,8 @@
 ============================================================================*/
 #include "cmCTestCoverageHandler.h"
 #include "cmParsePHPCoverage.h"
+#include "cmParseGTMCoverage.h"
+#include "cmParseCacheCoverage.h"
 #include "cmCTest.h"
 #include "cmake.h"
 #include "cmMakefile.h"
@@ -78,15 +80,15 @@ public:
         {
         args.push_back(i->c_str());
         }
-      args.push_back(0); // null terminate 
+      args.push_back(0); // null terminate
       cmsysProcess_SetCommand(this->Process, &*args.begin());
       if(this->WorkingDirectory.size())
         {
         cmsysProcess_SetWorkingDirectory(this->Process,
                                          this->WorkingDirectory.c_str());
         }
-      
-      cmsysProcess_SetOption(this->Process, 
+
+      cmsysProcess_SetOption(this->Process,
                              cmsysProcess_Option_HideWindow, 1);
       if(this->TimeOut != -1)
         {
@@ -110,7 +112,7 @@ public:
     {
     cmsysProcess_SetPipeFile(this->Process, cmsysProcess_Pipe_STDERR, fname);
     }
-  int WaitForExit(double* timeout =0) 
+  int WaitForExit(double* timeout =0)
     {
       this->PipeState = cmsysProcess_WaitForExit(this->Process,
                                                  timeout);
@@ -181,7 +183,7 @@ bool cmCTestCoverageHandler::StartCoverageLogFile(
   this->CTest->StartXML(covLogFile, this->AppendXML);
   covLogFile << "<CoverageLog>" << std::endl
              << "\t<StartDateTime>" << local_start_time << "</StartDateTime>"
-             << "\t<StartTime>" 
+             << "\t<StartTime>"
              << static_cast<unsigned int>(cmSystemTools::GetTime())
              << "</StartTime>"
     << std::endl;
@@ -194,7 +196,7 @@ void cmCTestCoverageHandler::EndCoverageLogFile(cmGeneratedFileStream& ostr,
 {
   std::string local_end_time = this->CTest->CurrentTime();
   ostr << "\t<EndDateTime>" << local_end_time << "</EndDateTime>" << std::endl
-       << "\t<EndTime>" << 
+       << "\t<EndTime>" <<
        static_cast<unsigned int>(cmSystemTools::GetTime())
        << "</EndTime>" << std::endl
     << "</CoverageLog>" << std::endl;
@@ -323,7 +325,7 @@ int cmCTestCoverageHandler::ProcessHandler()
     {
     return error;
     }
-  
+
   std::string coverage_start_time = this->CTest->CurrentTime();
   unsigned int coverage_start_time_time = static_cast<unsigned int>(
     cmSystemTools::GetTime());
@@ -373,21 +375,29 @@ int cmCTestCoverageHandler::ProcessHandler()
     }
   int file_count = 0;
   file_count += this->HandleGCovCoverage(&cont);
+  error = cont.Error;
   if ( file_count < 0 )
     {
     return error;
     }
   file_count += this->HandleTracePyCoverage(&cont);
+  error = cont.Error;
   if ( file_count < 0 )
     {
     return error;
     }
   file_count += this->HandlePHPCoverage(&cont);
+  error = cont.Error;
   if ( file_count < 0 )
     {
     return error;
     }
+  file_count += this->HandleMumpsCoverage(&cont);
   error = cont.Error;
+  if ( file_count < 0 )
+    {
+    return error;
+    }
 
   std::set<std::string> uncovered = this->FindUncoveredFiles(&cont);
 
@@ -649,7 +659,7 @@ int cmCTestCoverageHandler::ProcessHandler()
   covSumFile.precision(2);
   covSumFile << (percent_coverage)<< "</PercentCoverage>\n"
     << "\t<EndDateTime>" << end_time << "</EndDateTime>\n"
-    << "\t<EndTime>" << 
+    << "\t<EndTime>" <<
          static_cast<unsigned int>(cmSystemTools::GetTime())
     << "</EndTime>\n";
   covSumFile << "<ElapsedMinutes>" <<
@@ -751,6 +761,73 @@ int cmCTestCoverageHandler::HandlePHPCoverage(
     }
   return static_cast<int>(cont->TotalCoverage.size());
 }
+//----------------------------------------------------------------------
+int cmCTestCoverageHandler::HandleMumpsCoverage(
+  cmCTestCoverageHandlerContainer* cont)
+{
+  // try gtm coverage
+  cmParseGTMCoverage cov(*cont, this->CTest);
+  std::string coverageFile = this->CTest->GetBinaryDir() +
+    "/gtm_coverage.mcov";
+  if(cmSystemTools::FileExists(coverageFile.c_str()))
+    {
+    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
+               "Parsing Cache Coverage: " << coverageFile
+               << std::endl);
+    cov.ReadCoverageFile(coverageFile.c_str());
+    return static_cast<int>(cont->TotalCoverage.size());
+    }
+  else
+    {
+    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
+               " Cannot find foobar GTM coverage file: " << coverageFile
+               << std::endl);
+    }
+  cmParseCacheCoverage ccov(*cont, this->CTest);
+  coverageFile = this->CTest->GetBinaryDir() +
+    "/cache_coverage.cmcov";
+  if(cmSystemTools::FileExists(coverageFile.c_str()))
+    {
+    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
+               "Parsing Cache Coverage: " << coverageFile
+               << std::endl);
+    ccov.ReadCoverageFile(coverageFile.c_str());
+    }
+  else
+    {
+    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
+               " Cannot find Cache coverage file: " << coverageFile
+               << std::endl);
+    }
+  return static_cast<int>(cont->TotalCoverage.size());
+}
+
+struct cmCTestCoverageHandlerLocale
+{
+  cmCTestCoverageHandlerLocale()
+    {
+    if(const char* l = cmSystemTools::GetEnv("LC_ALL"))
+      {
+      lc_all = l;
+      }
+    if(lc_all != "C")
+      {
+      cmSystemTools::PutEnv("LC_ALL=C");
+      }
+    }
+  ~cmCTestCoverageHandlerLocale()
+    {
+    if(!lc_all.empty())
+      {
+      cmSystemTools::PutEnv(("LC_ALL=" + lc_all).c_str());
+      }
+    else
+      {
+      cmSystemTools::UnsetEnv("LC_ALL");
+      }
+    }
+  std::string lc_all;
+};
 
 //----------------------------------------------------------------------
 int cmCTestCoverageHandler::HandleGCovCoverage(
@@ -773,7 +850,7 @@ int cmCTestCoverageHandler::HandleGCovCoverage(
   std::string st2gcovOutputRex1 = "^File *[`'](.*)'$";
   std::string st2gcovOutputRex2
     = "Lines executed: *[0-9]+\\.[0-9]+% of [0-9]+$";
-  std::string st2gcovOutputRex3 = "^(.*):creating [`'](.*\\.gcov)'";
+  std::string st2gcovOutputRex3 = "^(.*)reating [`'](.*\\.gcov)'";
   std::string st2gcovOutputRex4 = "^(.*):unexpected EOF *$";
   std::string st2gcovOutputRex5 = "^(.*):cannot open source file*$";
   std::string st2gcovOutputRex6
@@ -794,7 +871,7 @@ int cmCTestCoverageHandler::HandleGCovCoverage(
     cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
       " Cannot find any GCov coverage files."
       << std::endl);
-    // No coverage files is a valid thing, so the exit code is 0 
+    // No coverage files is a valid thing, so the exit code is 0
     return 0;
     }
 
@@ -815,7 +892,8 @@ int cmCTestCoverageHandler::HandleGCovCoverage(
   int file_count = 0;
 
   // make sure output from gcov is in English!
-  cmSystemTools::PutEnv("LC_ALL=POSIX");
+  cmCTestCoverageHandlerLocale locale_C;
+  static_cast<void>(locale_C);
 
   // files is a list of *.da and *.gcda files with coverage data in them.
   // These are binary files that you give as input to gcov so that it will
@@ -1216,7 +1294,7 @@ int cmCTestCoverageHandler::HandleTracePyCoverage(
     cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
       " Cannot find any Python Trace.py coverage files."
       << std::endl);
-    // No coverage files is a valid thing, so the exit code is 0 
+    // No coverage files is a valid thing, so the exit code is 0
     return 0;
     }
 
@@ -1358,7 +1436,7 @@ std::string cmCTestCoverageHandler::FindFile(
 // This is a header put on each marked up source file
 namespace
 {
-  const char* bullseyeHelp[] = 
+  const char* bullseyeHelp[] =
   {"    Coverage produced by bullseye covbr tool: ",
    "      www.bullseye.com/help/ref_covbr.html",
    "    * An arrow --> indicates incomplete coverage.",
@@ -1373,7 +1451,7 @@ namespace
    "    * The slash / means this probe is excluded from summary results. ",
    0};
 }
-  
+
 //----------------------------------------------------------------------
 int cmCTestCoverageHandler::RunBullseyeCoverageBranch(
   cmCTestCoverageHandlerContainer* cont,
@@ -1383,7 +1461,7 @@ int cmCTestCoverageHandler::RunBullseyeCoverageBranch(
 {
   if(files.size() != filesFullPath.size())
     {
-    cmCTestLog(this->CTest, ERROR_MESSAGE, 
+    cmCTestLog(this->CTest, ERROR_MESSAGE,
                "Files and full path files not the same size?:\n");
     return 0;
     }
@@ -1420,13 +1498,13 @@ int cmCTestCoverageHandler::RunBullseyeCoverageBranch(
     }
   std::map<cmStdString, cmStdString> fileMap;
   std::vector<std::string>::iterator fp = filesFullPath.begin();
-  for(std::vector<std::string>::iterator f =  files.begin(); 
+  for(std::vector<std::string>::iterator f =  files.begin();
       f != files.end(); ++f, ++fp)
     {
     fileMap[*f] = *fp;
     }
 
-  int count =0; // keep count of the number of files 
+  int count =0; // keep count of the number of files
   // Now parse each line from the bullseye cov log file
   std::string lineIn;
   bool valid = false; // are we in a valid output file
@@ -1464,9 +1542,9 @@ int cmCTestCoverageHandler::RunBullseyeCoverageBranch(
           {
           return -1;
           }
-        count++; // move on one 
+        count++; // move on one
         }
-      std::map<cmStdString, cmStdString>::iterator 
+      std::map<cmStdString, cmStdString>::iterator
         i = fileMap.find(file);
       // if the file should be covered write out the header for that file
       if(i != fileMap.end())
@@ -1581,10 +1659,10 @@ int cmCTestCoverageHandler::RunBullseyeSourceSummary(
     cmCTestLog(this->CTest, ERROR_MESSAGE, "error running covsrc:\n");
     return 0;
     }
-  
+
   std::ostream& tmpLog = *cont->OFS;
   // copen the Coverage.xml file in the Testing directory
-  cmGeneratedFileStream covSumFile; 
+  cmGeneratedFileStream covSumFile;
   if(!this->StartResultingXML(cmCTest::PartCoverage, "Coverage", covSumFile))
     {
     cmCTestLog(this->CTest, ERROR_MESSAGE,
@@ -1595,10 +1673,10 @@ int cmCTestCoverageHandler::RunBullseyeSourceSummary(
   double elapsed_time_start = cmSystemTools::GetTime();
   std::string coverage_start_time = this->CTest->CurrentTime();
   covSumFile << "<Coverage>" << std::endl
-             << "\t<StartDateTime>" 
+             << "\t<StartDateTime>"
              << coverage_start_time << "</StartDateTime>"
              << std::endl
-             << "\t<StartTime>" 
+             << "\t<StartTime>"
              << static_cast<unsigned int>(cmSystemTools::GetTime())
              << "</StartTime>"
              << std::endl;
@@ -1639,7 +1717,7 @@ int cmCTestCoverageHandler::RunBullseyeSourceSummary(
       {
       // parse the comma separated output
       this->ParseBullsEyeCovsrcLine(stdline,
-                                    sourceFile, 
+                                    sourceFile,
                                     functionsCalled,
                                     totalFunctions,
                                     percentFunction,
@@ -1663,7 +1741,7 @@ int cmCTestCoverageHandler::RunBullseyeSourceSummary(
       file = cmSystemTools::CollapseFullPath(file.c_str());
       bool shouldIDoCoverage
         = this->ShouldIDoCoverage(file.c_str(),
-                                  cont->SourceDir.c_str(), 
+                                  cont->SourceDir.c_str(),
                                   cont->BinaryDir.c_str());
       if ( !shouldIDoCoverage )
         {
@@ -1719,20 +1797,20 @@ int cmCTestCoverageHandler::RunBullseyeSourceSummary(
                  << "\t\t<BranchesTested>"
                  << branchCovered
                  << "</BranchesTested>\n"
-                 << "\t\t<BranchesUnTested>" 
+                 << "\t\t<BranchesUnTested>"
                  << totalBranches - branchCovered
                  << "</BranchesUnTested>\n"
                  << "\t\t<FunctionsTested>"
                  << functionsCalled
                  << "</FunctionsTested>\n"
-                 << "\t\t<FunctionsUnTested>" 
+                 << "\t\t<FunctionsUnTested>"
                  << totalFunctions - functionsCalled
                  << "</FunctionsUnTested>\n"
         // Hack for conversion of function to loc assume a function
         // has 100 lines of code
                  << "\t\t<LOCTested>" << functionsCalled *100
                  << "</LOCTested>\n"
-                 << "\t\t<LOCUnTested>" 
+                 << "\t\t<LOCUnTested>"
                  << (totalFunctions - functionsCalled)*100
                  << "</LOCUnTested>\n"
                  << "\t\t<PercentCoverage>";
@@ -1754,12 +1832,12 @@ int cmCTestCoverageHandler::RunBullseyeSourceSummary(
     << "\t<PercentCoverage>";
   covSumFile.setf(std::ios::fixed, std::ios::floatfield);
   covSumFile.precision(2);
-  covSumFile 
+  covSumFile
     << SAFEDIV(percent_coverage,number_files)<< "</PercentCoverage>\n"
     << "\t<EndDateTime>" << end_time << "</EndDateTime>\n"
     << "\t<EndTime>" << static_cast<unsigned int>(cmSystemTools::GetTime())
     << "</EndTime>\n";
-  covSumFile 
+  covSumFile
     << "<ElapsedMinutes>" <<
     static_cast<int>((cmSystemTools::GetTime() - elapsed_time_start)/6)/10.0
     << "</ElapsedMinutes>"
@@ -1778,24 +1856,24 @@ int cmCTestCoverageHandler::HandleBullseyeCoverage(
   cmCTestCoverageHandlerContainer* cont)
 {
   const char* covfile = cmSystemTools::GetEnv("COVFILE");
-  if(!covfile)
+  if(!covfile || strlen(covfile) == 0)
     {
-    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, 
-               " COVFILE environment variable not found, not running " 
+    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
+               " COVFILE environment variable not found, not running "
                " bullseye\n");
     return 0;
     }
-  cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, 
-             " run covsrc with COVFILE=[" 
+  cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
+             " run covsrc with COVFILE=["
              << covfile
              << "]" << std::endl);
   if(!this->RunBullseyeSourceSummary(cont))
-    { 
-    cmCTestLog(this->CTest, ERROR_MESSAGE, 
+    {
+    cmCTestLog(this->CTest, ERROR_MESSAGE,
                "Error running bullseye summary.\n");
     return 0;
     }
-  cmCTestLog(this->CTest, DEBUG, "HandleBullseyeCoverage return 1 "  
+  cmCTestLog(this->CTest, DEBUG, "HandleBullseyeCoverage return 1 "
              << std::endl);
   return 1;
 }
@@ -1803,7 +1881,7 @@ int cmCTestCoverageHandler::HandleBullseyeCoverage(
 bool cmCTestCoverageHandler::GetNextInt(std::string const& inputLine,
                                         std::string::size_type& pos,
                                         int& value)
-{ 
+{
   std::string::size_type start = pos;
   pos = inputLine.find(',', start);
   value = atoi(inputLine.substr(start, pos).c_str());
@@ -1814,7 +1892,7 @@ bool cmCTestCoverageHandler::GetNextInt(std::string const& inputLine,
   pos++;
   return true;
 }
-                                                 
+
 bool cmCTestCoverageHandler::ParseBullsEyeCovsrcLine(
   std::string const& inputLine,
   std::string& sourceFile,
@@ -1828,7 +1906,7 @@ bool cmCTestCoverageHandler::ParseBullsEyeCovsrcLine(
   // find the first comma
   std::string::size_type pos = inputLine.find(',');
   if(pos == inputLine.npos)
-    { 
+    {
     cmCTestLog(this->CTest, ERROR_MESSAGE, "Error parsing string : "
                << inputLine.c_str() << "\n");
     return false;
@@ -1864,7 +1942,7 @@ bool cmCTestCoverageHandler::ParseBullsEyeCovsrcLine(
   if(pos != inputLine.npos)
     {
     cmCTestLog(this->CTest, ERROR_MESSAGE, "Error parsing input : "
-               << inputLine.c_str() << " last pos not npos =  " << pos << 
+               << inputLine.c_str() << " last pos not npos =  " << pos <<
                "\n");
     }
   return true;

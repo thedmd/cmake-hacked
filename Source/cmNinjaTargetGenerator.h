@@ -16,6 +16,7 @@
 #include "cmStandardIncludes.h"
 #include "cmNinjaTypes.h"
 #include "cmLocalNinjaGenerator.h"
+#include "cmOSXBundleGenerator.h"
 
 class cmTarget;
 class cmGlobalNinjaGenerator;
@@ -39,10 +40,12 @@ public:
 
   virtual void Generate() = 0;
 
-  std::string GetTargetPDB() const;
   std::string GetTargetName() const;
 
 protected:
+
+  bool SetMsvcTargetPdbVariable(cmNinjaVars&) const;
+
   cmGeneratedFileStream& GetBuildFileStream() const;
   cmGeneratedFileStream& GetRulesFileStream() const;
 
@@ -111,6 +114,30 @@ protected:
   // Helper to add flag for windows .def file.
   void AddModuleDefinitionFlag(std::string& flags);
 
+  void EnsureDirectoryExists(const std::string& dir) const;
+  void EnsureParentDirectoryExists(const std::string& path) const;
+
+  // write rules for Mac OS X Application Bundle content.
+  struct MacOSXContentGeneratorType :
+    cmOSXBundleGenerator::MacOSXContentGeneratorType
+  {
+    MacOSXContentGeneratorType(cmNinjaTargetGenerator* g) :
+      Generator(g)  {}
+
+    void operator()(cmSourceFile& source, const char* pkgloc);
+
+  private:
+    cmNinjaTargetGenerator* Generator;
+  };
+  friend struct MacOSXContentGeneratorType;
+
+protected:
+  MacOSXContentGeneratorType* MacOSXContentGenerator;
+  // Properly initialized by sub-classes.
+  cmOSXBundleGenerator* OSXBundleGenerator;
+  std::set<cmStdString> MacContentFolders;
+
+
 private:
   cmTarget* Target;
   cmGeneratorTarget* GeneratorTarget;
@@ -118,6 +145,9 @@ private:
   cmLocalNinjaGenerator* LocalGenerator;
   /// List of object files for this target.
   cmNinjaDeps Objects;
+
+  // The windows module definition source file (.def), if any.
+  std::string ModuleDefinitionFile;
 };
 
 #endif // ! cmNinjaTargetGenerator_h

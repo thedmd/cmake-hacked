@@ -26,7 +26,7 @@ public:
   /**
    * This is a virtual constructor for the command.
    */
-  virtual cmCommand* Clone() 
+  virtual cmCommand* Clone()
     {
     return new cmAddLibraryCommand;
     }
@@ -50,7 +50,7 @@ public:
     {
     return "Add a library to the project using the specified source files.";
     }
-  
+
   /**
    * More documentation.
    */
@@ -78,7 +78,9 @@ public:
       "functionality.  "
       "If no type is given explicitly the type is STATIC or SHARED based "
       "on whether the current value of the variable BUILD_SHARED_LIBS is "
-      "true."
+      "true.  "
+      "For SHARED and MODULE libraries the POSITION_INDEPENDENT_CODE "
+      "target property is set to TRUE automatically."
       "\n"
       "By default the library file will be created in the build tree "
       "directory corresponding to the source tree directory in which "
@@ -134,7 +136,7 @@ public:
       "Object libraries cannot be imported, exported, installed, or linked."
       ;
     }
-  
+
   cmTypeMacro(cmAddLibraryCommand, cmCommand);
 };
 

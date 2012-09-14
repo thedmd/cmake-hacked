@@ -17,7 +17,7 @@
 class cmSetTargetPropertiesCommand : public cmCommand
 {
 public:
-  virtual cmCommand* Clone() 
+  virtual cmCommand* Clone()
     {
       return new cmSetTargetPropertiesCommand;
     }
@@ -41,12 +41,12 @@ public:
     {
     return "Targets can have properties that affect how they are built.";
     }
-  
+
   /**
    *  Used by this command and cmSetPropertiesCommand
    */
-  static bool SetOneTarget(const char *tname, 
-                           std::vector<std::string> &propertyPairs, 
+  static bool SetOneTarget(const char *tname,
+                           std::vector<std::string> &propertyPairs,
                            cmMakefile *mf);
 
   /**
@@ -138,7 +138,7 @@ public:
         "are used to initialize these properties.\n"
         "PROJECT_LABEL can be used to change the name of "
         "the target in an IDE like visual studio.  VS_KEYWORD can be set "
-        "to change the visual studio keyword, for example QT integration "
+        "to change the visual studio keyword, for example Qt integration "
         "works better if this is set to Qt4VSv1.0.\n"
         "VS_SCC_PROJECTNAME, VS_SCC_LOCALPATH, VS_SCC_PROVIDER and "
         "VS_SCC_AUXPATH can be set "
@@ -159,7 +159,7 @@ public:
         "part of the default build when you select \"Build Solution\"."
         ;
     }
-  
+
   cmTypeMacro(cmSetTargetPropertiesCommand, cmCommand);
 };
 

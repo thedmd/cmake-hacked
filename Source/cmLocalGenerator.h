@@ -140,7 +140,8 @@ public:
 
   void AddLanguageFlags(std::string& flags, const char* lang,
                         const char* config);
-  void AddSharedFlags(std::string& flags, const char* lang, bool shared);
+  void AddCMP0018Flags(std::string &flags, cmTarget* target,
+                       std::string const& lang);
   void AddConfigVariableFlags(std::string& flags, const char* var,
                               const char* config);
   ///! Append flags to a string.
@@ -153,8 +154,14 @@ public:
    * Encode a list of preprocessor definitions for the compiler
    * command line.
    */
-  void AppendDefines(std::string& defines, const char* defines_list,
-                     const char* lang);
+  void AppendDefines(std::set<std::string>& defines,
+                     const char* defines_list);
+  /**
+   * Join a set of defines into a definesString with a space separator.
+   */
+  void JoinDefines(const std::set<std::string>& defines,
+                   std::string &definesString,
+                   const char* lang);
 
   /** Lookup and append options associated with a particular feature.  */
   void AppendFeatureOptions(std::string& flags, const char* lang,
@@ -204,6 +211,10 @@ public:
   /** Compute the language used to compile the given source file.  */
   const char* GetSourceFileLanguage(const cmSourceFile& source);
 
+  // Fill the vector with the target names for the object files,
+  // preprocessed files and assembly files.
+  virtual void GetIndividualFileTargets(std::vector<std::string>&) {}
+
   // Create a struct to hold the varibles passed into
   // ExpandRuleVariables
   struct RuleVariables
@@ -228,12 +239,14 @@ public:
     const char* ObjectDir;
     const char* Flags;
     const char* ObjectsQuoted;
+    const char* SONameFlag;
     const char* TargetSOName;
     const char* TargetInstallNameDir;
     const char* LinkFlags;
     const char* LanguageCompileFlags;
     const char* Defines;
     const char* RuleLauncher;
+    const char* DependencyFile;
   };
 
   /** Set whether to treat conversions to SHELL as a link script shell.  */
@@ -424,6 +437,11 @@ protected:
 private:
   std::string ConvertToOutputForExistingCommon(const char* remote,
                                                std::string const& result);
+
+  void AddSharedFlags(std::string& flags, const char* lang, bool shared);
+  bool GetShouldUseOldFlags(bool shared, const std::string &lang) const;
+  void AddPositionIndependentFlags(std::string& flags, std::string const& l,
+                                   int targetType);
 };
 
 #endif

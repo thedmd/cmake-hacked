@@ -70,6 +70,7 @@
 #    include "cmGlobalVisualStudio10Win64Generator.h"
 #    include "cmGlobalVisualStudio11Generator.h"
 #    include "cmGlobalVisualStudio11Win64Generator.h"
+#    include "cmGlobalVisualStudio11ARMGenerator.h"
 #    include "cmGlobalVisualStudio8Win64Generator.h"
 #    include "cmGlobalBorlandMakefileGenerator.h"
 #    include "cmGlobalNMakeMakefileGenerator.h"
@@ -83,10 +84,8 @@
 #else
 #endif
 #include "cmGlobalUnixMakefileGenerator3.h"
+#include "cmGlobalNinjaGenerator.h"
 
-#ifdef CMAKE_USE_NINJA
-#  include "cmGlobalNinjaGenerator.h"
-#endif
 
 #if defined(CMAKE_HAVE_VS_GENERATORS)
 #include "cmCallVisualStudioMacro.h"
@@ -1044,7 +1043,7 @@ int cmake::AddCMakePaths()
       {
       cMakeRoot = cMakeRoot.substr(0, slashPos);
       }
-    // is there no Modules direcory there?
+    // is there no Modules directory there?
     modules = cMakeRoot + "/Modules/CMake.cmake";
     }
 
@@ -1073,7 +1072,7 @@ int cmake::AddCMakePaths()
     {
     // next try exe
     cMakeRoot  = cmSystemTools::GetProgramPath(cMakeSelf.c_str());
-    // is there no Modules direcory there?
+    // is there no Modules directory there?
     modules = cMakeRoot + "/Modules/CMake.cmake";
     }
   if (!cmSystemTools::FileExists(modules.c_str()))
@@ -1422,7 +1421,7 @@ int cmake::ExecuteCMakeCommand(std::vector<std::string>& args)
       int retval = 0;
       int timeout = 0;
       if ( cmSystemTools::RunSingleCommand(command.c_str(), 0, &retval,
-             directory.c_str(), cmSystemTools::OUTPUT_MERGE, timeout) )
+             directory.c_str(), cmSystemTools::OUTPUT_NORMAL, timeout) )
         {
         return retval;
         }
@@ -1698,8 +1697,8 @@ int cmake::ExecuteCMakeCommand(std::vector<std::string>& args)
     else if (args[1] == "cmake_automoc")
       {
         cmQtAutomoc automoc;
-        automoc.Run(args[2].c_str());
-        return 0;
+        bool automocSuccess = automoc.Run(args[2].c_str());
+        return automocSuccess ? 0 : 1;
       }
 #endif
 
@@ -2327,6 +2326,17 @@ int cmake::ActualConfigure()
     this->CacheManager->RemoveCacheEntry("CMAKE_GENERATOR");
     this->CacheManager->RemoveCacheEntry("CMAKE_EXTRA_GENERATOR");
     }
+
+  cmMakefile* mf=this->GlobalGenerator->GetLocalGenerators()[0]->GetMakefile();
+  if (mf->IsOn("CTEST_USE_LAUNCHERS")
+              && !this->GetProperty("RULE_LAUNCH_COMPILE", cmProperty::GLOBAL))
+    {
+    cmSystemTools::Error("CTEST_USE_LAUNCHERS is enabled, but the "
+                        "RULE_LAUNCH_COMPILE global property is not defined.\n"
+                        "Did you forget to include(CTest) in the toplevel "
+                         "CMakeLists.txt ?");
+    }
+
   // only save the cache if there were no fatal errors
   if ( this->GetWorkingMode() == NORMAL_MODE )
     {
@@ -2438,9 +2448,6 @@ int cmake::Run(const std::vector<std::string>& args, bool noconfigure)
     }
 
   this->PreLoadCMakeFiles();
-
-  std::string systemFile = this->GetHomeOutputDirectory();
-  systemFile += "/CMakeSystem.cmake";
 
   if ( noconfigure )
     {
@@ -2569,6 +2576,8 @@ void cmake::AddDefaultGenerators()
     &cmGlobalVisualStudio11Generator::New;
   this->Generators[cmGlobalVisualStudio11Win64Generator::GetActualName()] =
     &cmGlobalVisualStudio11Win64Generator::New;
+  this->Generators[cmGlobalVisualStudio11ARMGenerator::GetActualName()] =
+    &cmGlobalVisualStudio11ARMGenerator::New;
   this->Generators[cmGlobalVisualStudio71Generator::GetActualName()] =
     &cmGlobalVisualStudio71Generator::New;
   this->Generators[cmGlobalVisualStudio8Generator::GetActualName()] =
@@ -2597,10 +2606,8 @@ void cmake::AddDefaultGenerators()
 #endif
   this->Generators[cmGlobalUnixMakefileGenerator3::GetActualName()] =
     &cmGlobalUnixMakefileGenerator3::New;
-#ifdef CMAKE_USE_NINJA
   this->Generators[cmGlobalNinjaGenerator::GetActualName()] =
     &cmGlobalNinjaGenerator::New;
-#endif
 #ifdef CMAKE_USE_XCODE
   this->Generators[cmGlobalXCodeGenerator::GetActualName()] =
     &cmGlobalXCodeGenerator::New;

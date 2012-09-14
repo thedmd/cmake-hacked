@@ -21,6 +21,7 @@
 //----------------------------------------------------------------------------
 cmGlobalVisualStudioGenerator::cmGlobalVisualStudioGenerator()
 {
+  this->ArchitectureId = "X86";
 }
 
 //----------------------------------------------------------------------------
@@ -53,7 +54,7 @@ void cmGlobalVisualStudioGenerator::Generate()
       {
       // Use no actual command lines so that the target itself is not
       // considered always out of date.
-      cmTarget* allBuild = 
+      cmTarget* allBuild =
         gen[0]->GetMakefile()->
         AddUtilityCommand("ALL_BUILD", true, no_working_dir,
                           no_depends, no_commands, false,
@@ -94,6 +95,16 @@ void cmGlobalVisualStudioGenerator::Generate()
   // Configure CMake Visual Studio macros, for this user on this version
   // of Visual Studio.
   this->ConfigureCMakeVisualStudioMacros();
+
+  // Add CMakeLists.txt with custom command to rerun CMake.
+  for(std::vector<cmLocalGenerator*>::const_iterator
+        lgi = this->LocalGenerators.begin();
+      lgi != this->LocalGenerators.end(); ++lgi)
+    {
+    cmLocalVisualStudioGenerator* lg =
+      static_cast<cmLocalVisualStudioGenerator*>(*lgi);
+    lg->AddCMakeListsRules();
+    }
 
   // Run all the local generators.
   this->cmGlobalGenerator::Generate();
@@ -476,6 +487,13 @@ void cmGlobalVisualStudioGenerator::ComputeVSTargetDepends(cmTarget& target)
       vsTargetDepend.insert(this->GetUtilityDepend(dep));
       }
     }
+}
+
+//----------------------------------------------------------------------------
+void cmGlobalVisualStudioGenerator::AddPlatformDefinitions(cmMakefile* mf)
+{
+  mf->AddDefinition("MSVC_C_ARCHITECTURE_ID", this->ArchitectureId);
+  mf->AddDefinition("MSVC_CXX_ARCHITECTURE_ID", this->ArchitectureId);
 }
 
 //----------------------------------------------------------------------------

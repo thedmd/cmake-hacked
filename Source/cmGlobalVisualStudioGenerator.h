@@ -58,7 +58,7 @@ public:
    */
   virtual void CallVisualStudioMacro(MacroName m,
                                      const char* vsSolutionFile = 0);
-  
+
   // return true if target is fortran only
   bool TargetIsFortranOnly(cmTarget& t);
 
@@ -84,6 +84,8 @@ protected:
 
   virtual const char* GetIDEVersion() = 0;
 
+  virtual void AddPlatformDefinitions(cmMakefile* mf);
+
   virtual bool ComputeTargetDepends();
   class VSDependSet: public std::set<cmStdString> {};
   class VSDependMap: public std::map<cmTarget*, VSDependSet> {};
@@ -96,6 +98,8 @@ protected:
   std::string GetUtilityDepend(cmTarget* target);
   typedef std::map<cmTarget*, cmStdString> UtilityDependsMap;
   UtilityDependsMap UtilityDepends;
+  const char* ArchitectureId;
+
 private:
   void ComputeTargetObjects(cmGeneratorTarget* gt) const;
 

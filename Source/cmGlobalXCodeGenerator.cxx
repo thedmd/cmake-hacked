@@ -136,8 +136,23 @@ cmGlobalGenerator* cmGlobalXCodeGenerator::New()
 {
 #if defined(CMAKE_BUILD_WITH_CMAKE)
   cmXcodeVersionParser parser;
-  if (cmSystemTools::FileExists(
-       "/Applications/Xcode.app/Contents/version.plist"))
+  std::string versionFile;
+  {
+  std::string out;
+  std::string::size_type pos;
+  if(cmSystemTools::RunSingleCommand("xcode-select --print-path", &out, 0, 0,
+                                     cmSystemTools::OUTPUT_NONE) &&
+     (pos = out.find(".app/"), pos != out.npos))
+    {
+    versionFile = out.substr(0, pos+5)+"Contents/version.plist";
+    }
+  }
+  if(!versionFile.empty() && cmSystemTools::FileExists(versionFile.c_str()))
+    {
+    parser.ParseFile(versionFile.c_str());
+    }
+  else if (cmSystemTools::FileExists(
+             "/Applications/Xcode.app/Contents/version.plist"))
     {
     parser.ParseFile
       ("/Applications/Xcode.app/Contents/version.plist");
@@ -723,6 +738,10 @@ GetSourcecodeValueFromFileExtension(const std::string& _ext,
     {
     sourcecode = "file.xib";
     }
+  else if(ext == "storyboard")
+    {
+    sourcecode = "file.storyboard";
+    }
   else if(ext == "mm")
     {
     sourcecode += ".cpp.objcpp";
@@ -767,6 +786,10 @@ GetSourcecodeValueFromFileExtension(const std::string& _ext,
   else if(lang == "Fortran")
     {
     sourcecode += ".fortran.f90";
+    }
+  else if(lang == "ASM")
+    {
+    sourcecode += ".asm";
     }
   //else
   //  {
@@ -1590,14 +1613,14 @@ void cmGlobalXCodeGenerator::CreateBuildSettings(cmTarget& target,
     if(strcmp(lang, "CXX") == 0)
       {
       this->CurrentLocalGenerator->AddLanguageFlags(cflags, "C", configName);
-      this->CurrentLocalGenerator->AddSharedFlags(cflags, lang, shared);
+      this->CurrentLocalGenerator->AddCMP0018Flags(cflags, &target, "C");
       }
 
     // Add language-specific flags.
     this->CurrentLocalGenerator->AddLanguageFlags(flags, lang, configName);
 
     // Add shared-library flags if needed.
-    this->CurrentLocalGenerator->AddSharedFlags(flags, lang, shared);
+    this->CurrentLocalGenerator->AddCMP0018Flags(flags, &target, lang);
     }
   else if(binary)
   {
@@ -3023,6 +3046,7 @@ void cmGlobalXCodeGenerator
   cmXCodeObject* buildConfigurations =
     this->CreateObject(cmXCodeObject::OBJECT_LIST);
   std::vector<cmXCodeObject*> configs;
+  const char *defaultConfigName = "Debug";
   if(this->XcodeVersion == 15)
     {
     cmXCodeObject* configDebug =
@@ -3039,6 +3063,10 @@ void cmGlobalXCodeGenerator
     for(unsigned int i = 0; i < this->CurrentConfigurationTypes.size(); ++i)
       {
       const char* name = this->CurrentConfigurationTypes[i].c_str();
+      if (0 == i)
+        {
+        defaultConfigName = name;
+        }
       cmXCodeObject* config =
         this->CreateObject(cmXCodeObject::XCBuildConfiguration);
       config->AddAttribute("name", this->CreateString(name));
@@ -3060,7 +3088,7 @@ void cmGlobalXCodeGenerator
   configlist->AddAttribute("defaultConfigurationIsVisible",
                            this->CreateString("0"));
   configlist->AddAttribute("defaultConfigurationName",
-                           this->CreateString("Debug"));
+                           this->CreateString(defaultConfigName));
   cmXCodeObject* buildSettings =
       this->CreateObject(cmXCodeObject::ATTRIBUTE_GROUP);
   const char* osxArch =
@@ -3737,7 +3765,7 @@ cmGlobalXCodeGenerator
 
   const char* configName = this->GetCMakeCFGIntDir();
   std::string dir = this->GetObjectsNormalDirectory(
-    this->CurrentProject, configName, gt->Target);
+    "$(PROJECT_NAME)", configName, gt->Target);
   if(this->XcodeVersion >= 21)
     {
     dir += "$(CURRENT_ARCH)/";

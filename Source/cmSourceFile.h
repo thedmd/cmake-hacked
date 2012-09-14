@@ -21,7 +21,7 @@ class cmake;
 /** \class cmSourceFile
  * \brief Represent a class loaded from a makefile.
  *
- * cmSourceFile is represents a class loaded from 
+ * cmSourceFile is represents a class loaded from
  * a makefile.
  */
 class cmSourceFile
@@ -115,5 +115,8 @@ private:
 
   std::vector<std::string> Depends;
 };
+
+// TODO: Factor out into platform information modules.
+#define CM_HEADER_REGEX "\\.(h|hh|h\\+\\+|hm|hpp|hxx|in|txx|inl)$"
 
 #endif

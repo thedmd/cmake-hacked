@@ -93,7 +93,7 @@ public:
    */
   static int HTTPRequest(std::string url, HTTPMethod method,
                           std::string& response,
-                          std::string fields = "", 
+                          std::string fields = "",
                           std::string putFile = "", int timeout = 0);
 #endif
 
@@ -198,13 +198,13 @@ public:
   //! base64 encode a file
   std::string Base64EncodeFile(std::string file);
 
-  /** 
+  /**
    * Return the time remaining that the script is allowed to run in
    * seconds if the user has set the variable CTEST_TIME_LIMIT. If that has
    * not been set it returns 1e7 seconds
    */
   double GetRemainingTimeAllowed();
-    
+
   ///! Open file in the output directory and set the stream
   bool OpenOutputFile(const std::string& path,
                       const std::string& name,
@@ -417,6 +417,12 @@ public:
   bool GetLabelSummary() { return this->LabelSummary;}
 
   std::string GetCostDataFile();
+
+  const std::map<std::string, std::string> &GetDefinitions()
+    {
+    return this->Definitions;
+    }
+
 private:
   std::string ConfigType;
   std::string ScheduleType;
@@ -516,12 +522,18 @@ private:
   //! parse the option after -D and convert it into the appropriate steps
   bool AddTestsForDashboardType(std::string &targ);
 
+  //! read as "emit an error message for an unknown -D value"
+  void ErrorMessageUnknownDashDValue(std::string &val);
+
+  //! add a variable definition from a command line -D value
+  bool AddVariableDefinition(const std::string &arg);
+
   //! parse and process most common command line arguments
-  void HandleCommandLineArguments(size_t &i, 
+  void HandleCommandLineArguments(size_t &i,
                                   std::vector<std::string> &args);
 
   //! hande the -S -SP and -SR arguments
-  void HandleScriptArguments(size_t &i, 
+  void HandleScriptArguments(size_t &i,
                              std::vector<std::string> &args,
                              bool &SRArgumentSpecified);
 
@@ -558,6 +570,8 @@ private:
   int OutputLogFileLastTag;
 
   bool OutputTestOutputOnTestFailure;
+
+  std::map<std::string, std::string> Definitions;
 };
 
 class cmCTestLogWrite

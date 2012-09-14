@@ -35,7 +35,7 @@ private:
   void ParseTranslationUnits()
   {
     this->TranslationUnits = TranslationUnitsType();
-    ExpectOrDie('[', "at start of compile command file");
+    ExpectOrDie('[', "at start of compile command file\n");
     do
       {
       ParseTranslationUnit();
@@ -63,12 +63,12 @@ private:
 
   void ParseString()
   {
-    this->String.clear();
+    this->String = "";
     if(!Expect('"')) return;
     while (!Expect('"'))
       {
       Expect('\\');
-      this->String.push_back(C);
+      this->String.append(1,C);
       Next();
       }
   }

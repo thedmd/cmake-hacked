@@ -114,12 +114,12 @@
 #   _gtkversion_hdr = Header file to parse
 #=============================================================
 function(_GTK2_GET_VERSION _OUT_major _OUT_minor _OUT_micro _gtkversion_hdr)
-    file(READ ${_gtkversion_hdr} _contents)
+    file(STRINGS ${_gtkversion_hdr} _contents REGEX "#define GTK_M[A-Z]+_VERSION[ \t]+")
     if(_contents)
         string(REGEX REPLACE ".*#define GTK_MAJOR_VERSION[ \t]+\\(([0-9]+)\\).*" "\\1" ${_OUT_major} "${_contents}")
         string(REGEX REPLACE ".*#define GTK_MINOR_VERSION[ \t]+\\(([0-9]+)\\).*" "\\1" ${_OUT_minor} "${_contents}")
         string(REGEX REPLACE ".*#define GTK_MICRO_VERSION[ \t]+\\(([0-9]+)\\).*" "\\1" ${_OUT_micro} "${_contents}")
-        
+
         if(NOT ${_OUT_major} MATCHES "[0-9]+")
             message(FATAL_ERROR "Version parsing failed for GTK2_MAJOR_VERSION!")
         endif()
@@ -172,7 +172,7 @@ function(_GTK2_FIND_INCLUDE_DIR _var _hdr)
         sigc++-2.0
     )
 
-    set(_suffixes)
+    set(_suffixes include lib)
     foreach(_d ${_relatives})
         list(APPEND _suffixes ${_d})
         list(APPEND _suffixes ${_d}/include) # for /usr/lib/gtk-2.0/include
@@ -186,23 +186,15 @@ function(_GTK2_FIND_INCLUDE_DIR _var _hdr)
     find_path(${_var} ${_hdr}
         PATHS
             /usr/local/lib64
-            /usr/local/lib
             /usr/lib64
-            /usr/lib
-            /opt/gnome/include
-            /opt/gnome/lib
-            /opt/openwin/include
-            /usr/openwin/lib
-            /sw/include
-            /sw/lib
-            /opt/local/include
-            /opt/local/lib
-            $ENV{GTKMM_BASEPATH}/include
-            $ENV{GTKMM_BASEPATH}/lib
-            [HKEY_CURRENT_USER\\SOFTWARE\\gtkmm\\2.4;Path]/include
-            [HKEY_CURRENT_USER\\SOFTWARE\\gtkmm\\2.4;Path]/lib
-            [HKEY_LOCAL_MACHINE\\SOFTWARE\\gtkmm\\2.4;Path]/include
-            [HKEY_LOCAL_MACHINE\\SOFTWARE\\gtkmm\\2.4;Path]/lib
+            /opt/gnome
+            /opt/openwin
+            /usr/openwin
+            /sw
+            /opt/local
+            ENV GTKMM_BASEPATH
+            [HKEY_CURRENT_USER\\SOFTWARE\\gtkmm\\2.4;Path]
+            [HKEY_LOCAL_MACHINE\\SOFTWARE\\gtkmm\\2.4;Path]
         PATH_SUFFIXES
             ${_suffixes}
     )
@@ -214,7 +206,7 @@ function(_GTK2_FIND_INCLUDE_DIR _var _hdr)
         endif()
     endif()
 
-endfunction(_GTK2_FIND_INCLUDE_DIR)
+endfunction()
 
 #=============================================================
 # _GTK2_FIND_LIBRARY
@@ -269,7 +261,7 @@ function(_GTK2_FIND_LIBRARY _var _lib _expand_vc _append_version)
         set(_lib_list ${_library})
         set(_libd_list ${_library_d})
     endif()
-    
+
     if(GTK2_DEBUG)
         message(STATUS "[FindGTK2.cmake:${CMAKE_CURRENT_LIST_LINE}]     "
                        "library list = ${_lib_list} and library debug list = ${_libd_list}")
@@ -301,13 +293,11 @@ function(_GTK2_FIND_LIBRARY _var _lib _expand_vc _append_version)
                        "While searching for ${_var}, our proposed library list is ${_lib_list}")
     endif()
 
-    find_library(${_var} 
+    find_library(${_var}
         NAMES ${_lib_list}
         PATHS
             /opt/gnome/lib
-            /opt/gnome/lib64
             /usr/openwin/lib
-            /usr/openwin/lib64
             /sw/lib
             $ENV{GTKMM_BASEPATH}/lib
             [HKEY_CURRENT_USER\\SOFTWARE\\gtkmm\\2.4;Path]/lib
@@ -345,7 +335,7 @@ function(_GTK2_FIND_LIBRARY _var _lib _expand_vc _append_version)
         set(${_var}_DEBUG ${${_var}})
         set(${_var}_DEBUG ${${_var}} PARENT_SCOPE)
     endif()
-endfunction(_GTK2_FIND_LIBRARY)
+endfunction()
 
 #=============================================================
 
@@ -405,8 +395,8 @@ if(GTK2_FIND_VERSION)
             else()
                 message(FATAL_ERROR "GTK2 version check failed.  Version ${GTK2_VERSION} was found, at least version ${GTK2_FIND_VERSION} is required")
             endif()
-        endif()    
-        
+        endif()
+
         # If the version check fails, exit out of the module here
         return()
     endif()
@@ -425,7 +415,7 @@ foreach(_GTK2_component ${GTK2_FIND_COMPONENTS})
         _GTK2_FIND_INCLUDE_DIR(GTK2_GLIB_INCLUDE_DIR glib.h)
         _GTK2_FIND_INCLUDE_DIR(GTK2_GLIBCONFIG_INCLUDE_DIR glibconfig.h)
         _GTK2_FIND_LIBRARY    (GTK2_GLIB_LIBRARY glib false true)
-        
+
         _GTK2_FIND_INCLUDE_DIR(GTK2_GOBJECT_INCLUDE_DIR gobject/gobject.h)
         _GTK2_FIND_LIBRARY    (GTK2_GOBJECT_LIBRARY gobject false true)
 
@@ -471,6 +461,7 @@ foreach(_GTK2_component ${GTK2_FIND_COMPONENTS})
         _GTK2_FIND_LIBRARY    (GTK2_GTKMM_LIBRARY gtkmm true true)
 
         _GTK2_FIND_INCLUDE_DIR(GTK2_CAIROMM_INCLUDE_DIR cairomm/cairomm.h)
+        _GTK2_FIND_INCLUDE_DIR(GTK2_CAIROMMCONFIG_INCLUDE_DIR cairommconfig.h)
         _GTK2_FIND_LIBRARY    (GTK2_CAIROMM_LIBRARY cairomm true true)
 
         _GTK2_FIND_INCLUDE_DIR(GTK2_PANGOMM_INCLUDE_DIR pangomm.h)
@@ -492,7 +483,7 @@ foreach(_GTK2_component ${GTK2_FIND_COMPONENTS})
 
         _GTK2_FIND_INCLUDE_DIR(GTK2_GLADE_INCLUDE_DIR glade/glade.h)
         _GTK2_FIND_LIBRARY    (GTK2_GLADE_LIBRARY glade false true)
-    
+
     elseif(_GTK2_component STREQUAL "glademm")
 
         _GTK2_FIND_INCLUDE_DIR(GTK2_GLADEMM_INCLUDE_DIR libglademm.h)

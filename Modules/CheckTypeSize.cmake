@@ -24,6 +24,11 @@
 # size check automatically includes the available headers, thus
 # supporting checks of types defined in the headers.
 #
+# Despite the name of the macro you may use it to check the size of
+# more complex expressions, too. To check e.g. for the size of a struct
+# member you can do something like this:
+#  check_type_size("((struct something*)0)->member" SIZEOF_MEMBER)
+#
 # The following variables may be set before calling this macro to
 # modify the way the check is run:
 #
@@ -142,7 +147,7 @@ function(__check_type_size_impl type var map builtin)
     file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
       "Determining size of ${type} passed with the following output:\n${output}\n\n")
     set(${var} "${${var}}" CACHE INTERNAL "CHECK_TYPE_SIZE: sizeof(${type})")
-  else(HAVE_${var})
+  else()
     # The check failed to compile.
     message(STATUS "Check size of ${type} - failed")
     file(READ ${src} content)
@@ -150,7 +155,7 @@ function(__check_type_size_impl type var map builtin)
       "Determining size of ${type} failed with the following output:\n${output}\n${src}:\n${content}\n\n")
     set(${var} "" CACHE INTERNAL "CHECK_TYPE_SIZE: ${type} unknown")
     file(REMOVE ${map})
-  endif(HAVE_${var})
+  endif()
 endfunction()
 
 #-----------------------------------------------------------------------------

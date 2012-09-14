@@ -21,7 +21,6 @@ cmGlobalVisualStudio8Generator::cmGlobalVisualStudio8Generator()
 {
   this->FindMakeProgramFile = "CMakeVS8FindMake.cmake";
   this->ProjectConfigurationSectionName = "ProjectConfigurationPlatforms";
-  this->ArchitectureId = "X86";
 }
 
 //----------------------------------------------------------------------------
@@ -35,7 +34,7 @@ cmLocalGenerator *cmGlobalVisualStudio8Generator::CreateLocalGenerator()
   lg->SetGlobalGenerator(this);
   return lg;
 }
-  
+
 //----------------------------------------------------------------------------
 // ouput standard header for dsw file
 void cmGlobalVisualStudio8Generator::WriteSLNHeader(std::ostream& fout)
@@ -51,14 +50,6 @@ void cmGlobalVisualStudio8Generator
   entry.Name = this->GetName();
   entry.Brief = "Generates Visual Studio .NET 2005 project files.";
   entry.Full = "";
-}
-
-//----------------------------------------------------------------------------
-void cmGlobalVisualStudio8Generator::AddPlatformDefinitions(cmMakefile* mf)
-{
-  mf->AddDefinition("MSVC_C_ARCHITECTURE_ID", this->ArchitectureId);
-  mf->AddDefinition("MSVC_CXX_ARCHITECTURE_ID", this->ArchitectureId);
-  mf->AddDefinition("MSVC80", "1");
 }
 
 //----------------------------------------------------------------------------
@@ -214,13 +205,11 @@ void cmGlobalVisualStudio8Generator::AddCheckTarget()
   // (this could be avoided with per-target source files)
   const char* no_main_dependency = 0;
   const char* no_working_directory = 0;
-  mf->AddCustomCommandToOutput(
-    stamps, listFiles,
-    no_main_dependency, commandLines, "Checking Build System",
-    no_working_directory, true);
-  std::string ruleName = stamps[0];
-  ruleName += ".rule";
-  if(cmSourceFile* file = mf->GetSource(ruleName.c_str()))
+  if(cmSourceFile* file =
+     mf->AddCustomCommandToOutput(
+       stamps, listFiles,
+       no_main_dependency, commandLines, "Checking Build System",
+       no_working_directory, true))
     {
     tgt->AddSourceFile(file);
     }
@@ -270,20 +259,23 @@ cmGlobalVisualStudio8Generator
 void
 cmGlobalVisualStudio8Generator
 ::WriteProjectConfigurations(std::ostream& fout, const char* name,
-                             bool partOfDefaultBuild)
+                             bool partOfDefaultBuild,
+                             const char* platformMapping)
 {
   std::string guid = this->GetGUID(name);
   for(std::vector<std::string>::iterator i = this->Configurations.begin();
       i != this->Configurations.end(); ++i)
     {
     fout << "\t\t{" << guid << "}." << *i
-         << "|" << this->GetPlatformName() << ".ActiveCfg = "
-         << *i << "|" << this->GetPlatformName() << "\n";
+         << "|" << this->GetPlatformName() << ".ActiveCfg = " << *i << "|"
+         << (platformMapping ? platformMapping : this->GetPlatformName())
+         << "\n";
     if(partOfDefaultBuild)
       {
       fout << "\t\t{" << guid << "}." << *i
-           << "|" << this->GetPlatformName() << ".Build.0 = "
-           << *i << "|" << this->GetPlatformName() << "\n";
+           << "|" << this->GetPlatformName() << ".Build.0 = " << *i << "|"
+           << (platformMapping ? platformMapping : this->GetPlatformName())
+           << "\n";
       }
     }
 }
@@ -335,7 +327,7 @@ bool cmGlobalVisualStudio8Generator::NeedLinkLibraryDependencies(
 
 //----------------------------------------------------------------------------
 static cmVS7FlagTable cmVS8ExtraFlagTable[] =
-{ 
+{
   {"CallingConvention", "Gd", "cdecl", "0", 0 },
   {"CallingConvention", "Gr", "fastcall", "1", 0 },
   {"CallingConvention", "Gz", "stdcall", "2", 0 },

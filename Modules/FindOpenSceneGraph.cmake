@@ -14,7 +14,7 @@
 #
 #    OpenSceneGraph_DEBUG - Enable debugging output
 #
-#    OpenSceneGraph_MARK_AS_ADVANCED - Mark cache variables as advanced 
+#    OpenSceneGraph_MARK_AS_ADVANCED - Mark cache variables as advanced
 #                                      automatically
 #
 # The following environment variables are also respected for finding the OSG
@@ -25,6 +25,10 @@
 #    OSG_DIR
 #    OSGDIR
 #    OSG_ROOT
+#
+# [CMake 2.8.10]:
+# The CMake variable OSG_DIR can now be used as well to influence detection, instead of needing
+# to specify an environment variable.
 #
 # This module defines the following output variables:
 #
@@ -49,7 +53,7 @@
 
 #=============================================================================
 # Copyright 2009 Kitware, Inc.
-# Copyright 2009 Philip Lowman <philip@yhbt.com>
+# Copyright 2009-2012 Philip Lowman <philip@yhbt.com>
 #
 # Distributed under the OSI-approved BSD License (the "License");
 # see accompanying file Copyright.txt for details.
@@ -96,14 +100,15 @@ if(OSG_INCLUDE_DIR)
         message(STATUS "[ FindOpenSceneGraph.cmake:${CMAKE_CURRENT_LIST_LINE} ] "
             "Detected OSG_INCLUDE_DIR = ${OSG_INCLUDE_DIR}")
     endif()
-    
+
     set(_osg_Version_file "${OSG_INCLUDE_DIR}/osg/Version")
     if("${OSG_INCLUDE_DIR}" MATCHES "\\.framework$" AND NOT EXISTS "${_osg_Version_file}")
         set(_osg_Version_file "${OSG_INCLUDE_DIR}/Headers/Version")
     endif()
-    
+
     if(EXISTS "${_osg_Version_file}")
-      file(READ "${_osg_Version_file}" _osg_Version_contents)
+      file(STRINGS "${_osg_Version_file}" _osg_Version_contents
+           REGEX "#define (OSG_VERSION_[A-Z]+|OPENSCENEGRAPH_[A-Z]+_VERSION)[ \t]+[0-9]+")
     else()
       set(_osg_Version_contents "unknown")
     endif()
@@ -130,6 +135,7 @@ if(OSG_INCLUDE_DIR)
         message(WARNING "[ FindOpenSceneGraph.cmake:${CMAKE_CURRENT_LIST_LINE} ] "
             "Failed to parse version number, please report this as a bug")
     endif()
+    unset(_osg_Version_contents)
 
     set(OPENSCENEGRAPH_VERSION "${_osg_VERSION_MAJOR}.${_osg_VERSION_MINOR}.${_osg_VERSION_PATCH}"
                                 CACHE INTERNAL "The version of OSG which was detected")
@@ -149,7 +155,7 @@ if(OpenSceneGraph_FIND_VERSION AND OPENSCENEGRAPH_VERSION)
         endif()
     else()
         # version is too low
-        if(NOT OPENSCENEGRAPH_VERSION VERSION_EQUAL ${OpenSceneGraph_FIND_VERSION} AND 
+        if(NOT OPENSCENEGRAPH_VERSION VERSION_EQUAL ${OpenSceneGraph_FIND_VERSION} AND
                 NOT OPENSCENEGRAPH_VERSION VERSION_GREATER ${OpenSceneGraph_FIND_VERSION})
             set(_osg_version_not_high_enough TRUE)
         endif()
@@ -161,7 +167,7 @@ if(OpenSceneGraph_FIND_QUIETLY)
     set(_osg_quiet "QUIET")
 endif()
 #
-# Here we call FIND_PACKAGE() on all of the components
+# Here we call find_package() on all of the components
 #
 foreach(_osg_module ${_osg_modules_to_process})
     if(OpenSceneGraph_DEBUG)
@@ -182,7 +188,7 @@ endforeach()
 if(OPENSCENEGRAPH_INCLUDE_DIR)
     list(REMOVE_DUPLICATES OPENSCENEGRAPH_INCLUDE_DIR)
 endif()
-        
+
 #
 # Inform the users with an error message based on
 # what version they have vs. what version was
@@ -221,7 +227,7 @@ else()
                 set(_osg_missing_message "${_osg_missing_message} ${_osg_module}")
             endif()
         endforeach()
-    
+
         if(_osg_missing_nodekit_fail)
             message(FATAL_ERROR "ERROR: Missing the following osg "
                 "libraries: ${_osg_missing_message}.\n"

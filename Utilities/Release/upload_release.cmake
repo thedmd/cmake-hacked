@@ -1,4 +1,7 @@
-set(PROJECT_PREFIX cmake-)
+set(CTEST_RUN_CURRENT_SCRIPT 0)
+if(NOT DEFINED PROJECT_PREFIX)
+  set(PROJECT_PREFIX cmake-)
+endif()
 if(NOT VERSION)
  set(VERSION 2.8)
 endif()
@@ -16,15 +19,22 @@ set(count 0)
 foreach(file ${FILES})
   if(NOT IS_DIRECTORY ${file})
     message("upload ${file} ${UPLOAD_LOC}")
-    execute_process(COMMAND 
+    execute_process(COMMAND
       scp ${file} ${UPLOAD_LOC}
-      RESULT_VARIABLE result)  
-    math(EXPR count "${count} + 1")
+      RESULT_VARIABLE result)
     if("${result}" GREATER 0)
       message(FATAL_ERROR "failed to upload file to ${UPLOAD_LOC}")
     endif()
+
+    # Pause to give each upload a distinct (to the nearest second)
+    # time stamp
+    if(COMMAND ctest_sleep)
+      ctest_sleep(2)
+    endif()
+
+    math(EXPR count "${count} + 1")
   endif()
-endforeach(file)
+endforeach()
 if(${count} EQUAL 0)
    message(FATAL_ERROR "Error no files uploaded.")
 endif()

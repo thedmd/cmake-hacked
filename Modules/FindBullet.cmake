@@ -29,7 +29,7 @@
 
 macro(_FIND_BULLET_LIBRARY _var)
   find_library(${_var}
-     NAMES 
+     NAMES
         ${ARGN}
      HINTS
         ${BULLET_ROOT}
@@ -63,12 +63,12 @@ _FIND_BULLET_LIBRARY(BULLET_DYNAMICS_LIBRARY_DEBUG  BulletDynamics_Debug BulletD
 _FIND_BULLET_LIBRARY(BULLET_COLLISION_LIBRARY       BulletCollision)
 _FIND_BULLET_LIBRARY(BULLET_COLLISION_LIBRARY_DEBUG BulletCollision_Debug BulletCollision_d)
 _FIND_BULLET_LIBRARY(BULLET_MATH_LIBRARY            BulletMath LinearMath)
-_FIND_BULLET_LIBRARY(BULLET_MATH_LIBRARY_DEBUG      BulletMath_Debug BulletMath_d LinearMath_d)
+_FIND_BULLET_LIBRARY(BULLET_MATH_LIBRARY_DEBUG      BulletMath_Debug BulletMath_d LinearMath_Debug LinearMath_d)
 _FIND_BULLET_LIBRARY(BULLET_SOFTBODY_LIBRARY        BulletSoftBody)
 _FIND_BULLET_LIBRARY(BULLET_SOFTBODY_LIBRARY_DEBUG  BulletSoftBody_Debug BulletSoftBody_d)
 
 
-# handle the QUIETLY and REQUIRED arguments and set BULLET_FOUND to TRUE if 
+# handle the QUIETLY and REQUIRED arguments and set BULLET_FOUND to TRUE if
 # all listed variables are TRUE
 include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(Bullet DEFAULT_MSG

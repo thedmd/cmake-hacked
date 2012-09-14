@@ -35,6 +35,20 @@ public:
   cmCPackRPMGenerator();
   virtual ~cmCPackRPMGenerator();
 
+  static bool CanGenerate()
+    {
+#ifdef __APPLE__
+    // on MacOS enable CPackRPM iff rpmbuild is found
+    std::vector<std::string> locations;
+    locations.push_back("/sw/bin");        // Fink
+    locations.push_back("/opt/local/bin"); // MacPorts
+    return cmSystemTools::FindProgram("rpmbuild") != "" ? true : false;
+#else
+    // legacy behavior on other systems
+    return true;
+#endif
+    }
+
 protected:
   virtual int InitializeInternal();
   virtual int PackageFiles();

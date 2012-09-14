@@ -26,7 +26,7 @@ public:
                                  cmExecutionStatus &);
   virtual bool ShouldRemove(const cmListFileFunction& lff,
                             cmMakefile &mf);
-  
+
   std::vector<cmListFileArgument> Args;
   std::vector<cmListFileFunction> Functions;
   bool IsBlocking;
@@ -41,7 +41,7 @@ public:
   /**
    * This is a virtual constructor for the command.
    */
-  virtual cmCommand* Clone() 
+  virtual cmCommand* Clone()
     {
     return new cmIfCommand;
     }
@@ -52,7 +52,7 @@ public:
    */
   virtual bool InvokeInitialPass(const std::vector<cmListFileArgument>& args,
                                  cmExecutionStatus &);
-    
+
   /**
    * This is called when the command is first encountered in
    * the CMakeLists.txt file.
@@ -72,7 +72,7 @@ public:
     {
     return "Conditionally execute a group of commands.";
     }
-  
+
   /**
    * This determines if the command is invoked when in script mode.
    */
@@ -123,6 +123,7 @@ public:
       "  if(<variable>)\n"
       "True if the variable is defined to a value that is not a false "
       "constant.  False otherwise.  "
+      "(Note macro arguments are not variables.)"
       "\n"
       "  if(NOT <expression>)\n"
       "True if the expression is not true."
@@ -148,7 +149,12 @@ public:
       "  if(file1 IS_NEWER_THAN file2)\n"
       "True if file1 is newer than file2 or if one of the two files "
       "doesn't exist. "
-      "Behavior is well-defined only for full paths.\n"
+      "Behavior is well-defined only for full paths. "
+      "If the file time stamps are exactly the same, an "
+      "IS_NEWER_THAN comparison returns true, so that any dependent "
+      "build operations will occur in the event of a tie. "
+      "This includes the case of passing the same file name for both "
+      "file1 and file2.\n"
       "  if(IS_DIRECTORY directory-name)\n"
       "True if the given name is a directory.  "
       "Behavior is well-defined only for full paths.\n"
@@ -237,22 +243,22 @@ public:
       "7) The left and right hand arguments to AND OR are "
       "independently tested to see if they are boolean constants, if "
       "so they are used as such, otherwise they are assumed to be "
-      "variables and are dereferenced. \n"    
+      "variables and are dereferenced. \n"
       ;
     }
 
   // this is a shared function for both If and Else to determine if the
   // arguments were valid, and if so, was the response true. If there is
   // an error, the errorString will be set.
-  static bool IsTrue(const std::vector<std::string> &args, 
-    std::string &errorString, cmMakefile *mf, 
+  static bool IsTrue(const std::vector<std::string> &args,
+    std::string &errorString, cmMakefile *mf,
     cmake::MessageType &status);
-  
+
   // Get a definition from the makefile.  If it doesn't exist,
   // return the original string.
   static const char* GetVariableOrString(const char* str,
                                          const cmMakefile* mf);
-  
+
   cmTypeMacro(cmIfCommand, cmCommand);
 };
 

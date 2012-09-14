@@ -31,6 +31,20 @@ public:
   cmCPackDebGenerator();
   virtual ~cmCPackDebGenerator();
 
+  static bool CanGenerate()
+    {
+#ifdef __APPLE__
+    // on MacOS enable CPackDeb iff dpkg is found
+    std::vector<std::string> locations;
+    locations.push_back("/sw/bin");        // Fink
+    locations.push_back("/opt/local/bin"); // MacPorts
+    return cmSystemTools::FindProgram("dpkg",locations) != "" ? true : false;
+#else
+    // legacy behavior on other systems
+    return true;
+#endif
+    }
+
 protected:
   virtual int InitializeInternal();
   /**

@@ -57,6 +57,10 @@ if("${_help}" MATCHES "GNU ld .* 2\\.1[1-6]")
   set(__WINDOWS_GNU_LD_RESPONSE 0)
 endif()
 
+if(NOT CMAKE_GENERATOR_RC AND CMAKE_GENERATOR MATCHES "Unix Makefiles")
+  set(CMAKE_GENERATOR_RC windres)
+endif()
+
 enable_language(RC)
 
 macro(__windows_compiler_gnu lang)
@@ -74,10 +78,14 @@ macro(__windows_compiler_gnu lang)
     foreach(type SHARED_LIBRARY SHARED_MODULE EXE)
       set(CMAKE_${type}_LINK_STATIC_${lang}_FLAGS "-Wl,-Bstatic")
       set(CMAKE_${type}_LINK_DYNAMIC_${lang}_FLAGS "-Wl,-Bdynamic")
-    endforeach(type)
+    endforeach()
   endif()
 
-  set(CMAKE_SHARED_LIBRARY_${lang}_FLAGS "") # No -fPIC on Windows
+  # No -fPIC on Windows
+  set(CMAKE_${lang}_COMPILE_OPTIONS_PIC "")
+  set(CMAKE_${lang}_COMPILE_OPTIONS_PIE "")
+  set(CMAKE_SHARED_LIBRARY_${lang}_FLAGS "")
+
   set(CMAKE_${lang}_USE_RESPONSE_FILE_FOR_OBJECTS ${__WINDOWS_GNU_LD_RESPONSE})
   set(CMAKE_${lang}_USE_RESPONSE_FILE_FOR_INCLUDES 1)
 
@@ -111,7 +119,9 @@ macro(__windows_compiler_gnu lang)
   list(APPEND CMAKE_${lang}_ABI_FILES "Platform/Windows-GNU-${lang}-ABI")
 
   # Support very long lists of object files.
-  if("${CMAKE_${lang}_RESPONSE_FILE_LINK_FLAG}" STREQUAL "@")
+  # TODO: check for which gcc versions this is still needed, not needed for gcc >= 4.4.
+  # Ninja generator doesn't support this work around.
+  if("${CMAKE_${lang}_RESPONSE_FILE_LINK_FLAG}" STREQUAL "@" AND NOT CMAKE_GENERATOR MATCHES "Ninja")
     foreach(rule CREATE_SHARED_MODULE CREATE_SHARED_LIBRARY LINK_EXECUTABLE)
       # The gcc/collect2/ld toolchain does not use response files
       # internally so we cannot pass long object lists.  Instead pass

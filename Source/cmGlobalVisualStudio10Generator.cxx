@@ -13,6 +13,7 @@
 #include "cmGlobalVisualStudio10Generator.h"
 #include "cmLocalVisualStudio10Generator.h"
 #include "cmMakefile.h"
+#include "cmSourceFile.h"
 #include "cmake.h"
 
 
@@ -28,9 +29,12 @@ cmGlobalVisualStudio10Generator::cmGlobalVisualStudio10Generator()
 //----------------------------------------------------------------------------
 void cmGlobalVisualStudio10Generator::AddPlatformDefinitions(cmMakefile* mf)
 {
-  mf->AddDefinition("MSVC10", "1");
-  mf->AddDefinition("MSVC_C_ARCHITECTURE_ID", "X86");
-  mf->AddDefinition("MSVC_CXX_ARCHITECTURE_ID", "X86");
+  cmGlobalVisualStudio8Generator::AddPlatformDefinitions(mf);
+  if(!this->PlatformToolset.empty())
+    {
+    mf->AddDefinition("CMAKE_VS_PLATFORM_TOOLSET",
+                      this->PlatformToolset.c_str());
+    }
 }
 
 //----------------------------------------------------------------------------
@@ -51,6 +55,38 @@ cmLocalGenerator *cmGlobalVisualStudio10Generator::CreateLocalGenerator()
 }
 
 //----------------------------------------------------------------------------
+void cmGlobalVisualStudio10Generator::Generate()
+{
+  this->LongestSource = LongestSourcePath();
+  this->cmGlobalVisualStudio8Generator::Generate();
+  if(this->LongestSource.Length > 0)
+    {
+    cmMakefile* mf = this->LongestSource.Target->GetMakefile();
+    cmOStringStream e;
+    e <<
+      "The binary and/or source directory paths may be too long to generate "
+      "Visual Studio 10 files for this project.  "
+      "Consider choosing shorter directory names to build this project with "
+      "Visual Studio 10.  "
+      "A more detailed explanation follows."
+      "\n"
+      "There is a bug in the VS 10 IDE that renders property dialog fields "
+      "blank for files referenced by full path in the project file.  "
+      "However, CMake must reference at least one file by full path:\n"
+      "  " << this->LongestSource.SourceFile->GetFullPath() << "\n"
+      "This is because some Visual Studio tools would append the relative "
+      "path to the end of the referencing directory path, as in:\n"
+      "  " << mf->GetCurrentOutputDirectory() << "/"
+      << this->LongestSource.SourceRel << "\n"
+      "and then incorrectly complain that the file does not exist because "
+      "the path length is too long for some internal buffer or API.  "
+      "To avoid this problem CMake must use a full path for this file "
+      "which then triggers the VS 10 property dialog bug.";
+    mf->IssueMessage(cmake::WARNING, e.str().c_str());
+    }
+}
+
+//----------------------------------------------------------------------------
 void cmGlobalVisualStudio10Generator
 ::GetDocumentation(cmDocumentationEntry& entry) const
 {
@@ -61,7 +97,7 @@ void cmGlobalVisualStudio10Generator
 
 //----------------------------------------------------------------------------
 void cmGlobalVisualStudio10Generator
-::EnableLanguage(std::vector<std::string>const &  lang, 
+::EnableLanguage(std::vector<std::string>const &  lang,
                  cmMakefile *mf, bool optional)
 {
   cmGlobalVisualStudio8Generator::EnableLanguage(lang, mf, optional);
@@ -113,12 +149,12 @@ std::string cmGlobalVisualStudio10Generator::GetUserMacrosRegKeyBase()
 
 std::string cmGlobalVisualStudio10Generator
 ::GenerateBuildCommand(const char* makeProgram,
-                       const char *projectName, 
+                       const char *projectName,
                        const char* additionalOptions, const char *targetName,
                        const char* config, bool ignoreErrors, bool fast)
 {
   // now build the test
-  std::string makeCommand 
+  std::string makeCommand
     = cmSystemTools::ConvertToOutputPath(makeProgram);
   std::string lowerCaseCommand = makeCommand;
   cmSystemTools::LowerCase(lowerCaseCommand);
@@ -144,7 +180,7 @@ std::string cmGlobalVisualStudio10Generator
   if(!targetName || strlen(targetName) == 0)
     {
     targetName = "ALL_BUILD";
-    }    
+    }
   bool clean = false;
   if ( targetName && strcmp(targetName, "clean") == 0 )
     {
@@ -211,4 +247,43 @@ bool cmGlobalVisualStudio10Generator::Find64BitTools(cmMakefile* mf)
     cmSystemTools::SetFatalErrorOccured();
     return false;
     }
+}
+
+//----------------------------------------------------------------------------
+std::string
+cmGlobalVisualStudio10Generator
+::GenerateRuleFile(std::string const& output) const
+{
+  // The VS 10 generator needs to create the .rule files on disk.
+  // Hide them away under the CMakeFiles directory.
+  std::string ruleDir = this->GetCMakeInstance()->GetHomeOutputDirectory();
+  ruleDir += cmake::GetCMakeFilesDirectory();
+  ruleDir += "/";
+  ruleDir += cmSystemTools::ComputeStringMD5(
+    cmSystemTools::GetFilenamePath(output).c_str());
+  std::string ruleFile = ruleDir + "/";
+  ruleFile += cmSystemTools::GetFilenameName(output);
+  ruleFile += ".rule";
+  return ruleFile;
+}
+
+//----------------------------------------------------------------------------
+void cmGlobalVisualStudio10Generator::PathTooLong(
+  cmTarget* target, cmSourceFile* sf, std::string const& sfRel)
+{
+  size_t len = (strlen(target->GetMakefile()->GetCurrentOutputDirectory()) +
+                1 + sfRel.length());
+  if(len > this->LongestSource.Length)
+    {
+    this->LongestSource.Length = len;
+    this->LongestSource.Target = target;
+    this->LongestSource.SourceFile = sf;
+    this->LongestSource.SourceRel = sfRel;
+    }
+}
+
+//----------------------------------------------------------------------------
+bool cmGlobalVisualStudio10Generator::UseFolderProperty()
+{
+  return IsExpressEdition() ? false : cmGlobalGenerator::UseFolderProperty();
 }

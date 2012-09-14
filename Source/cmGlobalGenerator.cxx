@@ -315,9 +315,11 @@ cmGlobalGenerator::EnableLanguage(std::vector<std::string>const& languages,
     {
     rootBin = this->ConfiguredFilesPath;
     }
+  rootBin += "/";
+  rootBin += cmVersion::GetCMakeVersion();
 
   // set the dir for parent files so they can be used by modules
-  mf->AddDefinition("CMAKE_PLATFORM_ROOT_BIN",rootBin.c_str());
+  mf->AddDefinition("CMAKE_PLATFORM_INFO_DIR",rootBin.c_str());
 
   // find and make sure CMAKE_MAKE_PROGRAM is defined
   this->FindMakeProgram(mf);
@@ -376,21 +378,16 @@ cmGlobalGenerator::EnableLanguage(std::vector<std::string>const& languages,
     std::string loadedLang = "CMAKE_";
     loadedLang +=  lang;
     loadedLang += "_COMPILER_LOADED";
-    // If the existing build tree was already configured with this
-    // version of CMake then try to load the configured file first
-    // to avoid duplicate compiler tests.
-    unsigned int cacheMajor = mf->GetCacheMajorVersion();
-    unsigned int cacheMinor = mf->GetCacheMinorVersion();
-    unsigned int selfMajor = cmVersion::GetMajorVersion();
-    unsigned int selfMinor = cmVersion::GetMinorVersion();
-    if((this->CMakeInstance->GetIsInTryCompile() ||
-        (selfMajor == cacheMajor && selfMinor == cacheMinor))
-       && !mf->GetDefinition(loadedLang.c_str()))
+    if(!mf->GetDefinition(loadedLang.c_str()))
       {
       fpath = rootBin;
       fpath += "/CMake";
       fpath += lang;
       fpath += "Compiler.cmake";
+
+      // If the existing build tree was already configured with this
+      // version of CMake then try to load the configured file first
+      // to avoid duplicate compiler tests.
       if(cmSystemTools::FileExists(fpath.c_str()))
         {
         if(!mf->ReadListFile(0,fpath.c_str()))
@@ -586,6 +583,16 @@ cmGlobalGenerator::EnableLanguage(std::vector<std::string>const& languages,
           }
         } // end if in try compile
       } // end need test language
+    // Store the shared library flags so that we can satisfy CMP0018
+    std::string sharedLibFlagsVar = "CMAKE_SHARED_LIBRARY_";
+    sharedLibFlagsVar += lang;
+    sharedLibFlagsVar += "_FLAGS";
+    const char* sharedLibFlags =
+      mf->GetSafeDefinition(sharedLibFlagsVar.c_str());
+    if (sharedLibFlags)
+      {
+      this->LanguageToOriginalSharedLibFlags[lang] = sharedLibFlags;
+      }
     } // end for each language
 
   // Now load files that can override any settings on the platform or for
@@ -2092,6 +2099,32 @@ cmTarget cmGlobalGenerator::CreateGlobalTarget(
 }
 
 //----------------------------------------------------------------------------
+std::string
+cmGlobalGenerator::GenerateRuleFile(std::string const& output) const
+{
+  std::string ruleFile = output;
+  ruleFile += ".rule";
+  const char* dir = this->GetCMakeCFGIntDir();
+  if(dir && dir[0] == '$')
+    {
+    cmSystemTools::ReplaceString(ruleFile, dir,
+                                 cmake::GetCMakeFilesDirectory());
+    }
+  return ruleFile;
+}
+
+//----------------------------------------------------------------------------
+std::string cmGlobalGenerator::GetSharedLibFlagsForLanguage(
+                                                        std::string const& l)
+{
+  if(this->LanguageToOriginalSharedLibFlags.count(l) > 0)
+    {
+    return this->LanguageToOriginalSharedLibFlags[l];
+    }
+  return "";
+}
+
+//----------------------------------------------------------------------------
 void cmGlobalGenerator::AppendDirectoryForConfig(const char*, const char*,
                                                  const char*, std::string&)
 {
@@ -2458,4 +2491,17 @@ void cmGlobalGenerator::WriteSummary(cmTarget* target)
     {
     cmSystemTools::RemoveFile(file.c_str());
     }
+}
+
+//----------------------------------------------------------------------------
+// static
+std::string cmGlobalGenerator::EscapeJSON(const std::string& s) {
+  std::string result;
+  for (std::string::size_type i = 0; i < s.size(); ++i) {
+    if (s[i] == '"' || s[i] == '\\') {
+      result += '\\';
+    }
+    result += s[i];
+  }
+  return result;
 }

@@ -28,26 +28,34 @@ class cmVisualStudioGeneratorOptions;
 class cmVisualStudio10TargetGenerator
 {
 public:
-  cmVisualStudio10TargetGenerator(cmTarget* target, 
+  cmVisualStudio10TargetGenerator(cmTarget* target,
                                   cmGlobalVisualStudio10Generator* gg);
   ~cmVisualStudio10TargetGenerator();
   void Generate();
-  // used by cmVisualStudioGeneratorOptions 
-  void WritePlatformConfigTag( 
+  // used by cmVisualStudioGeneratorOptions
+  void WritePlatformConfigTag(
     const char* tag,
-    const char* config, 
+    const char* config,
     int indentLevel,
     const char* attribute = 0,
     const char* end = 0,
     std::ostream* strm = 0
     );
-  
+
 private:
+  struct ToolSource
+  {
+    cmSourceFile* SourceFile;
+    bool RelativePath;
+  };
+  struct ToolSources: public std::vector<ToolSource> {};
+
+  std::string ConvertPath(std::string const& path, bool forceRelative);
   void ConvertToWindowsSlash(std::string& s);
   void WriteString(const char* line, int indentLevel);
   void WriteProjectConfigurations();
   void WriteProjectConfigurationValues();
-  void WriteSource(const char* tool, cmSourceFile* sf, bool end = true);
+  void WriteSource(const char* tool, cmSourceFile* sf, const char* end = 0);
   void WriteSources(const char* tool, std::vector<cmSourceFile*> const&);
   void WriteAllSources();
   void WriteDotNetReferences();
@@ -77,8 +85,7 @@ private:
   void WriteEvents(std::string const& configName);
   void WriteEvent(const char* name, std::vector<cmCustomCommand> & commands,
                   std::string const& configName);
-  void WriteGroupSources(const char* name,
-                         std::vector<cmSourceFile*> const& sources,
+  void WriteGroupSources(const char* name, ToolSources const& sources,
                          std::vector<cmSourceGroup>& );
   void AddMissingSourceGroups(std::set<cmSourceGroup*>& groupsUsed,
                               const std::vector<cmSourceGroup>& allGroups);
@@ -99,6 +106,9 @@ private:
   cmGeneratedFileStream* BuildFileStream;
   cmLocalVisualStudio7Generator* LocalGenerator;
   std::set<cmSourceFile*> SourcesVisited;
+
+  typedef std::map<cmStdString, ToolSources> ToolSourceMap;
+  ToolSourceMap Tools;
 };
 
 #endif

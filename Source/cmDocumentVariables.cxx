@@ -218,7 +218,7 @@ void cmDocumentVariables::DefineVariables(cmake* cm)
      "Full path to ctest command installed with cmake.",
      "This is the full path to the CTest executable ctest "
      "which is useful from custom commands that want "
-     " to use the cmake -E option for portable system "
+     "to use the cmake -E option for portable system "
      "commands.",false,
      "Variables that Provide Information");
 
@@ -281,6 +281,16 @@ void cmDocumentVariables::DefineVariables(cmake* cm)
      "See CMAKE_BUILD_TOOL.",
      "This variable is around for backwards compatibility, "
      "see CMAKE_BUILD_TOOL.",false,
+     "Variables that Provide Information");
+  cm->DefineProperty
+    ("CMAKE_VS_PLATFORM_TOOLSET", cmProperty::VARIABLE,
+     "Visual Studio Platform Toolset name.",
+     "VS 10 and above use MSBuild under the hood and support multiple "
+     "compiler toolchains.  "
+     "CMake may specify a toolset explicitly, such as \"v110\" for "
+     "VS 11 or \"Windows7.1SDK\" for 64-bit support in VS 10 Express.  "
+     "CMake provides the name of the chosen toolset in this variable."
+     ,false,
      "Variables that Provide Information");
   cm->DefineProperty
     ("CMAKE_MINOR_VERSION", cmProperty::VARIABLE,
@@ -355,7 +365,7 @@ void cmDocumentVariables::DefineVariables(cmake* cm)
      "If this is set to TRUE, then the rpath information "
      "is not added to compiled executables.  The default "
      "is to add rpath information if the platform supports it.  "
-     "This allows for easy running from the build tree.  To omit RPATH"
+     "This allows for easy running from the build tree.  To omit RPATH "
      "in the install step, but not the build step, use "
      "CMAKE_SKIP_INSTALL_RPATH instead.",false,
      "Variables that Provide Information");
@@ -371,12 +381,6 @@ void cmDocumentVariables::DefineVariables(cmake* cm)
      "Libraries linked into every executable and shared library.",
      "This is the list of libraries that are linked "
      "into all executables and libraries.",false,
-     "Variables that Provide Information");
-  cm->DefineProperty
-    ("CMAKE_USING_VC_FREE_TOOLS", cmProperty::VARIABLE,
-     "True if free visual studio tools being used.",
-     "This is set to true if the compiler is Visual "
-     "Studio free tools.",false,
      "Variables that Provide Information");
   cm->DefineProperty
     ("CMAKE_VERBOSE_MAKEFILE", cmProperty::VARIABLE,
@@ -523,6 +527,16 @@ void cmDocumentVariables::DefineVariables(cmake* cm)
      "Variables That Change Behavior");
 
     cm->DefineProperty
+    ("CMAKE_INSTALL_DEFAULT_COMPONENT_NAME",  cmProperty::VARIABLE,
+     "Default component used in install() commands.",
+     "If an install() command is used without the COMPONENT argument, "
+     "these files will be grouped into a default component. The name of this "
+     "default install component will be taken from this variable.  "
+     "It defaults to \"Unspecified\". ",
+     false,
+     "Variables That Change Behavior");
+
+    cm->DefineProperty
     ("CMAKE_FIND_LIBRARY_PREFIXES",  cmProperty::VARIABLE,
      "Prefixes to prepend when looking for libraries.",
      "This specifies what prefixes to add to library names when "
@@ -585,7 +599,21 @@ void cmDocumentVariables::DefineVariables(cmake* cm)
      "If \"make install\" is invoked or INSTALL is built"
      ", this directory is pre-pended onto all install "
      "directories. This variable defaults to /usr/local"
-     " on UNIX and c:/Program Files on Windows.",false,
+     " on UNIX and c:/Program Files on Windows.\n"
+     "On UNIX one can use the DESTDIR mechanism in order"
+     " to relocate the whole installation. "
+     "DESTDIR means DESTination DIRectory. It is "
+     "commonly used by makefile users "
+     "in order to install software at non-default location. "
+     "It is usually invoked like this:\n"
+     " make DESTDIR=/home/john install\n"
+     "which will install the concerned software using the"
+     " installation prefix, e.g. \"/usr/local\" pre-pended with "
+     "the DESTDIR value which finally gives \"/home/john/usr/local\".\n"
+     "WARNING: DESTDIR may not be used on Windows because installation"
+     " prefix usually contains a drive letter like in \"C:/Program Files\""
+     " which cannot be pre-pended with some other prefix."
+     ,false,
      "Variables That Change Behavior");
 
   cm->DefineProperty
@@ -817,13 +845,13 @@ void cmDocumentVariables::DefineVariables(cmake* cm)
      "Tell cmake to use MFC for an executable or dll.",
      "This can be set in a CMakeLists.txt file and will "
      "enable MFC in the application.  It should be set "
-     "to 1 for static the static MFC library, and 2 for "
-     "the shared MFC library.  This is used in visual "
-     "studio 6 and 7 project files.   The CMakeSetup "
+     "to 1 for the static MFC library, and 2 for "
+     "the shared MFC library.  This is used in Visual "
+     "Studio 6 and 7 project files.   The CMakeSetup "
      "dialog used MFC and the CMakeLists.txt looks like this:\n"
-     "add_definitions(-D_AFXDLL)\n"
-     "set(CMAKE_MFC_FLAG 2)\n"
-     "add_executable(CMakeSetup WIN32 ${SRCS})\n",false,
+     "  add_definitions(-D_AFXDLL)\n"
+     "  set(CMAKE_MFC_FLAG 2)\n"
+     "  add_executable(CMakeSetup WIN32 ${SRCS})\n",false,
      "Variables That Change Behavior");
 
   cm->DefineProperty
@@ -833,6 +861,36 @@ void cmDocumentVariables::DefineVariables(cmake* cm)
      "Default is ON.",false,
      "Variables That Change Behavior");
 
+  cm->DefineProperty
+    ("CMAKE_ABSOLUTE_DESTINATION_FILES", cmProperty::VARIABLE,
+      "List of files which have been installed using "
+      " an ABSOLUTE DESTINATION path.",
+      "This variable is defined by CMake-generated cmake_install.cmake "
+      "scripts."
+      " It can be used (read-only) by program or script that source those"
+      " install scripts. This is used by some CPack generators (e.g. RPM).",
+      false,
+      "Variables That Change Behavior");
+
+  cm->DefineProperty
+    ("CMAKE_WARN_ON_ABSOLUTE_INSTALL_DESTINATION", cmProperty::VARIABLE,
+      "Ask cmake_install.cmake script to warn each time a file with "
+      "absolute INSTALL DESTINATION is encountered.",
+      "This variable is used by CMake-generated cmake_install.cmake"
+      " scripts. If ones set this variable to ON while running the"
+      " script, it may get warning messages from the script.", false,
+      "Variables That Change Behavior");
+
+  cm->DefineProperty
+    ("CMAKE_ERROR_ON_ABSOLUTE_INSTALL_DESTINATION", cmProperty::VARIABLE,
+      "Ask cmake_install.cmake script to error out as soon as "
+      "a file with absolute INSTALL DESTINATION is encountered.",
+      "The fatal error is emitted before the installation of "
+      "the offending file takes place."
+      " This variable is used by CMake-generated cmake_install.cmake"
+      " scripts. If ones set this variable to ON while running the"
+      " script, it may get fatal error messages from the script.",false,
+      "Variables That Change Behavior");
 
   // Variables defined by CMake that describe the system
 
@@ -1310,6 +1368,14 @@ void cmDocumentVariables::DefineVariables(cmake* cm)
      "See that target property for additional information.",
      false,
      "Variables that Control the Build");
+  cm->DefineProperty
+    ("CMAKE_POSITION_INDEPENDENT_CODE", cmProperty::VARIABLE,
+     "Default value for POSITION_INDEPENDENT_CODE of targets.",
+     "This variable is used to initialize the "
+     "POSITION_INDEPENDENT_CODE property on all the targets. "
+     "See that target property for additional information.",
+     false,
+     "Variables that Control the Build");
 
 //   Variables defined when the a language is enabled These variables will
 // also be defined whenever CMake has loaded its support for compiling (LANG)
@@ -1333,8 +1399,30 @@ void cmDocumentVariables::DefineVariables(cmake* cm)
 
   cm->DefineProperty
     ("CMAKE_<LANG>_COMPILER_ID", cmProperty::VARIABLE,
-     "An internal variable subject to change.",
-     "This is used in determining the compiler and is subject to change.",
+     "Compiler identification string.",
+     "A short string unique to the compiler vendor.  "
+     "Possible values include:\n"
+     "  Absoft = Absoft Fortran (absoft.com)\n"
+     "  ADSP = Analog VisualDSP++ (analog.com)\n"
+     "  Clang = LLVM Clang (clang.llvm.org)\n"
+     "  Cray = Cray Compiler (cray.com)\n"
+     "  Embarcadero, Borland = Embarcadero (embarcadero.com)\n"
+     "  G95 = G95 Fortran (g95.org)\n"
+     "  GNU = GNU Compiler Collection (gcc.gnu.org)\n"
+     "  HP = Hewlett-Packard Compiler (hp.com)\n"
+     "  Intel = Intel Compiler (intel.com)\n"
+     "  MIPSpro = SGI MIPSpro (sgi.com)\n"
+     "  MSVC = Microsoft Visual Studio (microsoft.com)\n"
+     "  PGI = The Portland Group (pgroup.com)\n"
+     "  PathScale = PathScale (pathscale.com)\n"
+     "  SDCC = Small Device C Compiler (sdcc.sourceforge.net)\n"
+     "  SunPro = Oracle Solaris Studio (oracle.com)\n"
+     "  TI_DSP = Texas Instruments (ti.com)\n"
+     "  TinyCC = Tiny C Compiler (tinycc.org)\n"
+     "  Watcom = Open Watcom (openwatcom.org)\n"
+     "  XL, VisualAge, zOS = IBM XL (ibm.com)\n"
+     "This variable is not guaranteed to be defined for all "
+     "compilers or languages.",
      false,
      "Variables for Languages");
 
@@ -1354,10 +1442,10 @@ void cmDocumentVariables::DefineVariables(cmake* cm)
 
   cm->DefineProperty
     ("CMAKE_<LANG>_COMPILER_VERSION", cmProperty::VARIABLE,
-     "An internal variable subject to change.",
+     "Compiler version string.",
      "Compiler version in major[.minor[.patch[.tweak]]] format.  "
-     "This variable is reserved for internal use by CMake and is not "
-     "guaranteed to be set.",
+     "This variable is not guaranteed to be defined for all "
+     "compilers or languages.",
      false,
      "Variables for Languages");
 

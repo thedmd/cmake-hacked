@@ -17,15 +17,15 @@ StartCompilerSetup::StartCompilerSetup(QWidget* p)
   l->addWidget(this->GeneratorOptions);
   l->addSpacing(6);
 
-  this->CompilerSetupOptions[0] = new QRadioButton("Use default native compilers", this);
-  this->CompilerSetupOptions[1] = new QRadioButton("Specify native compilers", this);
-  this->CompilerSetupOptions[2] = new QRadioButton("Specify toolchain file for cross-compiling", this);
-  this->CompilerSetupOptions[3] = new QRadioButton("Specify options for cross-compiling", this);
+  this->CompilerSetupOptions[0] = new QRadioButton(tr("Use default native compilers"), this);
+  this->CompilerSetupOptions[1] = new QRadioButton(tr("Specify native compilers"), this);
+  this->CompilerSetupOptions[2] = new QRadioButton(tr("Specify toolchain file for cross-compiling"), this);
+  this->CompilerSetupOptions[3] = new QRadioButton(tr("Specify options for cross-compiling"), this);
   l->addWidget(this->CompilerSetupOptions[0]);
   l->addWidget(this->CompilerSetupOptions[1]);
   l->addWidget(this->CompilerSetupOptions[2]);
   l->addWidget(this->CompilerSetupOptions[3]);
-  
+
   this->CompilerSetupOptions[0]->setChecked(true);
 
   QObject::connect(this->CompilerSetupOptions[0], SIGNAL(toggled(bool)),
@@ -47,7 +47,7 @@ void StartCompilerSetup::setGenerators(const QStringList& gens)
   this->GeneratorOptions->clear();
   this->GeneratorOptions->addItems(gens);
 };
-    
+
 void StartCompilerSetup::setCurrentGenerator(const QString& gen)
 {
   int idx = this->GeneratorOptions->findText(gen);
@@ -159,9 +159,9 @@ CrossCompilerSetup::CrossCompilerSetup(QWidget* p)
 
   // fill in combo boxes
   QStringList modes;
-  modes << "Search in Target Root, then native system";
-  modes << "Search only in Target Root";
-  modes << "Search only in native system";
+  modes << tr("Search in Target Root, then native system");
+  modes << tr("Search only in Target Root");
+  modes << tr("Search only in native system");
   crossProgramMode->addItems(modes);
   crossLibraryMode->addItems(modes);
   crossIncludeMode->addItems(modes);
@@ -237,7 +237,7 @@ void CrossCompilerSetup::setProcessor(const QString& t)
 {
   this->systemProcessor->setText(t);
 }
-    
+
 QString CrossCompilerSetup::getFindRoot() const
 {
   return this->crossFindRoot->text();
@@ -313,10 +313,10 @@ FirstConfigure::FirstConfigure()
 
   this->mNativeCompilerSetupPage = new NativeCompilerSetup(this);
   this->setPage(NativeSetup, this->mNativeCompilerSetupPage);
-  
+
   this->mCrossCompilerSetupPage = new CrossCompilerSetup(this);
   this->setPage(CrossSetup, this->mCrossCompilerSetupPage);
-  
+
   this->mToolchainCompilerSetupPage = new ToolchainCompilerSetup(this);
   this->setPage(ToolchainSetup, this->mToolchainCompilerSetupPage);
 }
@@ -370,14 +370,14 @@ void FirstConfigure::loadFromSettings()
 void FirstConfigure::saveToSettings()
 {
   QSettings settings;
-  
+
   // save generator
   settings.beginGroup("Settings/StartPath");
   QString lastGen = this->mStartCompilerSetupPage->getGenerator();
   settings.setValue("LastGenerator", lastGen);
   settings.endGroup();
 
-  // save compiler setup 
+  // save compiler setup
   settings.beginGroup("Settings/Compiler");
   settings.setValue("CCompiler", this->mNativeCompilerSetupPage->getCCompiler());
   settings.setValue("CXXCompiler", this->mNativeCompilerSetupPage->getCXXCompiler());
@@ -419,7 +419,7 @@ bool FirstConfigure::crossCompilerToolChainFile() const
 {
   return this->mStartCompilerSetupPage->crossCompilerToolChainFile();
 }
-  
+
 QString FirstConfigure::getCrossCompilerToolChainFile() const
 {
   return this->mToolchainCompilerSetupPage->toolchainFile();

@@ -21,6 +21,10 @@ set(__COMPILER_GNU 1)
 macro(__compiler_gnu lang)
   # Feature flags.
   set(CMAKE_${lang}_VERBOSE_FLAG "-v")
+  set(CMAKE_${lang}_COMPILE_OPTIONS_PIC "-fPIC")
+  if(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 3.4)
+    set(CMAKE_${lang}_COMPILE_OPTIONS_PIE "-fPIE")
+  endif()
   set(CMAKE_SHARED_LIBRARY_${lang}_FLAGS "-fPIC")
   set(CMAKE_SHARED_LIBRARY_CREATE_${lang}_FLAGS "-shared")
 
@@ -28,7 +32,7 @@ macro(__compiler_gnu lang)
   # header file as a warning if depfiles are enabled, causing check_header_file
   # tests to always succeed.  Work around this by disabling dependency tracking
   # in try_compile mode.
-  GET_PROPERTY(_IN_TC GLOBAL PROPERTY IN_TRY_COMPILE)
+  get_property(_IN_TC GLOBAL PROPERTY IN_TRY_COMPILE)
   if(NOT _IN_TC OR CMAKE_FORCE_DEPFILES)
     # distcc does not transform -o to -MT when invoking the preprocessor
     # internally, as it ought to.  Work around this bug by setting -MT here
@@ -41,10 +45,10 @@ macro(__compiler_gnu lang)
   set(CMAKE_${lang}_FLAGS_DEBUG_INIT "-g")
   set(CMAKE_${lang}_FLAGS_MINSIZEREL_INIT "-Os -DNDEBUG")
   set(CMAKE_${lang}_FLAGS_RELEASE_INIT "-O3 -DNDEBUG")
-  set(CMAKE_${lang}_FLAGS_RELWITHDEBINFO_INIT "-O2 -g")
+  set(CMAKE_${lang}_FLAGS_RELWITHDEBINFO_INIT "-O2 -g -DNDEBUG")
   set(CMAKE_${lang}_CREATE_PREPROCESSED_SOURCE "<CMAKE_${lang}_COMPILER> <DEFINES> <FLAGS> -E <SOURCE> > <PREPROCESSED_SOURCE>")
   set(CMAKE_${lang}_CREATE_ASSEMBLY_SOURCE "<CMAKE_${lang}_COMPILER> <DEFINES> <FLAGS> -S <SOURCE> -o <ASSEMBLY_SOURCE>")
   if(NOT APPLE)
     set(CMAKE_INCLUDE_SYSTEM_FLAG_${lang} "-isystem ")
-  endif(NOT APPLE)
+  endif()
 endmacro()
