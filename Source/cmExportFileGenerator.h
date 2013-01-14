@@ -13,6 +13,7 @@
 #define cmExportFileGenerator_h
 
 #include "cmCommand.h"
+#include "cmGeneratorExpression.h"
 
 /** \class cmExportFileGenerator
  * \brief Generate a file exporting targets from a build or install tree.
@@ -60,17 +61,23 @@ protected:
                                       ImportPropertyMap const& properties,
                                const std::set<std::string>& importedLocations);
   void GenerateImportedFileCheckLoop(std::ostream& os);
+  void GenerateMissingTargetsCheckCode(std::ostream& os,
+                               const std::vector<std::string>& missingTargets);
 
+  void GenerateExpectedTargetsCode(std::ostream& os,
+                                          const std::string &expectedTargets);
 
   // Collect properties with detailed information about targets beyond
   // their location on disk.
   void SetImportDetailProperties(const char* config,
                                  std::string const& suffix, cmTarget* target,
-                                 ImportPropertyMap& properties);
+                                 ImportPropertyMap& properties,
+                                 std::vector<std::string>& missingTargets);
   void SetImportLinkProperty(std::string const& suffix,
                              cmTarget* target, const char* propName,
                              std::vector<std::string> const& libs,
-                             ImportPropertyMap& properties);
+                             ImportPropertyMap& properties,
+                             std::vector<std::string>& missingTargets);
 
   /** Each subclass knows how to generate its kind of export file.  */
   virtual bool GenerateMainFile(std::ostream& os) = 0;
@@ -80,10 +87,35 @@ protected:
                                            const char* config,
                                            std::string const& suffix) = 0;
 
-  /** Each subclass knows how to complain about a target that is
-      missing from an export set.  */
-  virtual void ComplainAboutMissingTarget(cmTarget* depender,
-                                          cmTarget* dependee) = 0;
+  /** Each subclass knows how to deal with a target that is  missing from an
+   *  export set.  */
+  virtual void HandleMissingTarget(std::string& link_libs,
+                                   std::vector<std::string>& missingTargets,
+                                   cmMakefile* mf,
+                                   cmTarget* depender,
+                                   cmTarget* dependee) = 0;
+  void PopulateInterfaceProperty(const char *,
+                                 cmTarget *target,
+                                 cmGeneratorExpression::PreprocessContext,
+                                 ImportPropertyMap &properties,
+                                 std::vector<std::string> &missingTargets);
+  void GenerateInterfaceProperties(cmTarget *target, std::ostream& os,
+                                   const ImportPropertyMap &properties);
+
+  void SetImportLinkInterface(const char* config, std::string const& suffix,
+                    cmGeneratorExpression::PreprocessContext preprocessRule,
+                    cmTarget* target, ImportPropertyMap& properties,
+                    std::vector<std::string>& missingTargets);
+
+  enum FreeTargetsReplace {
+    ReplaceFreeTargets,
+    NoReplaceFreeTargets
+  };
+
+  void ResolveTargetsInGeneratorExpressions(std::string &input,
+                          cmTarget* target,
+                          std::vector<std::string> &missingTargets,
+                          FreeTargetsReplace replace = NoReplaceFreeTargets);
 
   // The namespace in which the exports are placed in the generated file.
   std::string Namespace;
@@ -100,6 +132,20 @@ protected:
 
   // The set of targets included in the export.
   std::set<cmTarget*> ExportedTargets;
+
+private:
+  void PopulateInterfaceProperty(const char *, const char *,
+                                 cmTarget *target,
+                                 cmGeneratorExpression::PreprocessContext,
+                                 ImportPropertyMap &properties,
+                                 std::vector<std::string> &missingTargets);
+
+  bool AddTargetNamespace(std::string &input, cmTarget* target,
+                          std::vector<std::string> &missingTargets);
+
+  void ResolveTargetsInGeneratorExpression(std::string &input,
+                                    cmTarget* target,
+                                    std::vector<std::string> &missingTargets);
 };
 
 #endif

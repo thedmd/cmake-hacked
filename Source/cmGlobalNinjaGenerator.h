@@ -14,6 +14,7 @@
 #  define cmGlobalNinjaGenerator_h
 
 #  include "cmGlobalGenerator.h"
+#  include "cmGlobalGeneratorFactory.h"
 #  include "cmNinjaTypes.h"
 
 //#define NINJA_GEN_VERBOSE_FILES
@@ -84,6 +85,7 @@ public:
                          const cmNinjaDeps& implicitDeps,
                          const cmNinjaDeps& orderOnlyDeps,
                          const cmNinjaVars& variables,
+                         const std::string& rspfile = std::string(),
                          int cmdLineLimit = -1);
 
   /**
@@ -159,8 +161,8 @@ public:
   cmGlobalNinjaGenerator();
 
   /// Convenience method for creating an instance of this class.
-  static cmGlobalGenerator* New() {
-    return new cmGlobalNinjaGenerator; }
+  static cmGlobalGeneratorFactory* NewFactory() {
+    return new cmGlobalGeneratorSimpleFactory<cmGlobalNinjaGenerator>(); }
 
   /// Destructor.
   virtual ~cmGlobalNinjaGenerator() { }
@@ -176,7 +178,7 @@ public:
   static const char* GetActualName() { return "Ninja"; }
 
   /// Overloaded methods. @see cmGlobalGenerator::GetDocumentation()
-  virtual void GetDocumentation(cmDocumentationEntry& entry) const;
+  static void GetDocumentation(cmDocumentationEntry& entry);
 
   /// Overloaded methods. @see cmGlobalGenerator::Generate()
   virtual void Generate();

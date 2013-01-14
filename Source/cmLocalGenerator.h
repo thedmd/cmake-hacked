@@ -16,6 +16,7 @@
 
 class cmMakefile;
 class cmGlobalGenerator;
+class cmGeneratorTarget;
 class cmTarget;
 class cmTargetManifest;
 class cmSourceFile;
@@ -135,13 +136,13 @@ public:
   std::vector<cmLocalGenerator*>& GetChildren() { return this->Children; };
 
 
-  void AddArchitectureFlags(std::string& flags, cmTarget* target,
+  void AddArchitectureFlags(std::string& flags, cmGeneratorTarget* target,
                             const char *lang, const char* config);
 
   void AddLanguageFlags(std::string& flags, const char* lang,
                         const char* config);
   void AddCMP0018Flags(std::string &flags, cmTarget* target,
-                       std::string const& lang);
+                       std::string const& lang, const char *config);
   void AddConfigVariableFlags(std::string& flags, const char* var,
                               const char* config);
   ///! Append flags to a string.
@@ -156,6 +157,11 @@ public:
    */
   void AppendDefines(std::set<std::string>& defines,
                      const char* defines_list);
+  void AppendDefines(std::set<std::string>& defines,
+                     std::string defines_list)
+  {
+    this->AppendDefines(defines, defines_list.c_str());
+  }
   /**
    * Join a set of defines into a definesString with a space separator.
    */
@@ -205,8 +211,9 @@ public:
 
   /** Get the include flags for the current makefile and language.  */
   void GetIncludeDirectories(std::vector<std::string>& dirs,
-                             cmTarget* target,
-                             const char* lang = "C");
+                             cmGeneratorTarget* target,
+                             const char* lang = "C", const char *config = 0,
+                             bool stripImplicitInclDirs = true);
 
   /** Compute the language used to compile the given source file.  */
   const char* GetSourceFileLanguage(const cmSourceFile& source);
@@ -334,11 +341,17 @@ public:
   void GetTargetFlags(std::string& linkLibs,
                       std::string& flags,
                       std::string& linkFlags,
-                      cmTarget&target);
+                      std::string& frameworkPath,
+                      std::string& linkPath,
+                      cmGeneratorTarget* target);
 
 protected:
   ///! put all the libraries for a target on into the given stream
-  virtual void OutputLinkLibraries(std::ostream&, cmTarget&, bool relink);
+  virtual void OutputLinkLibraries(std::string& linkLibraries,
+                                   std::string& frameworkPath,
+                                   std::string& linkPath,
+                                   cmGeneratorTarget &,
+                                   bool relink);
 
   // Expand rule variables in CMake of the type found in language rules
   void ExpandRuleVariables(std::string& string,
@@ -354,12 +367,12 @@ protected:
 
   /** Convert a target to a utility target for unsupported
    *  languages of a generator */
-  void AddBuildTargetRule(const char* llang, cmTarget& target);
+  void AddBuildTargetRule(const char* llang, cmGeneratorTarget& target);
   ///! add a custom command to build a .o file that is part of a target
   void AddCustomCommandToCreateObject(const char* ofname,
                                       const char* lang,
                                       cmSourceFile& source,
-                                      cmTarget& target);
+                                      cmGeneratorTarget& target);
   // Create Custom Targets and commands for unsupported languages
   // The set passed in should contain the languages supported by the
   // generator directly.  Any targets containing files that are not

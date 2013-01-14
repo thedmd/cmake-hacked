@@ -19,8 +19,6 @@
 #include "cmTarget.h"
 #include "cmake.h"
 
-#include <memory> // auto_ptr
-
 //----------------------------------------------------------------------------
 cmMakefileLibraryTargetGenerator
 ::cmMakefileLibraryTargetGenerator(cmTarget* target):
@@ -328,8 +326,12 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules
       }
     }
 
+  std::string pdbOutputPath = this->Target->GetPDBDirectory();
+  cmSystemTools::MakeDirectory(pdbOutputPath.c_str());
+  pdbOutputPath += "/";
+
   std::string targetFullPath = outpath + targetName;
-  std::string targetFullPathPDB = outpath + targetNamePDB;
+  std::string targetFullPathPDB = pdbOutputPath + targetNamePDB;
   std::string targetFullPathSO = outpath + targetNameSO;
   std::string targetFullPathReal = outpath + targetNameReal;
   std::string targetFullPathImport = outpathImp + targetNameImport;
@@ -542,11 +544,15 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules
   this->LocalGenerator->SetLinkScriptShell(useLinkScript);
 
   // Collect up flags to link in needed libraries.
-  cmOStringStream linklibs;
+  std::string linkLibs;
   if(this->Target->GetType() != cmTarget::STATIC_LIBRARY)
     {
+    std::string frameworkPath;
+    std::string linkPath;
     this->LocalGenerator
-      ->OutputLinkLibraries(linklibs, *this->Target, relink);
+      ->OutputLinkLibraries(linkLibs, frameworkPath, linkPath,
+                            *this->GeneratorTarget, relink);
+    linkLibs = frameworkPath + linkPath + linkLibs;
     }
 
   // Construct object file lists that may be needed to expand the
@@ -587,8 +593,7 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules
                          cmLocalGenerator::SHELL);
   vars.ObjectDir = objdir.c_str();
   vars.Target = targetOutPathReal.c_str();
-  std::string linkString = linklibs.str();
-  vars.LinkLibraries = linkString.c_str();
+  vars.LinkLibraries = linkLibs.c_str();
   vars.ObjectsQuoted = buildObjs.c_str();
   if (this->Target->HasSOName(this->ConfigName))
     {
@@ -625,7 +630,7 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules
   std::string langFlags;
   this->AddFeatureFlags(langFlags, linkLanguage);
 
-  this->LocalGenerator->AddArchitectureFlags(langFlags, this->Target,
+  this->LocalGenerator->AddArchitectureFlags(langFlags, this->GeneratorTarget,
                                              linkLanguage, this->ConfigName);
 
   // remove any language flags that might not work with the

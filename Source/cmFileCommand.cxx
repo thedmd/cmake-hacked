@@ -17,11 +17,14 @@
 #include "cmFileTimeComparison.h"
 #include "cmCryptoHash.h"
 
+#include "cmTimestamp.h"
+
 #if defined(CMAKE_BUILD_WITH_CMAKE)
 #include "cm_curl.h"
 #endif
 
 #undef GetCurrentDirectory
+#include <assert.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -159,6 +162,10 @@ bool cmFileCommand
   else if ( subCommand == "TO_NATIVE_PATH" )
     {
     return this->HandleCMakePathCommand(args, true);
+    }
+  else if ( subCommand == "TIMESTAMP" )
+    {
+    return this->HandleTimestampCommand(args);
     }
 
   std::string e = "does not recognize sub-command "+subCommand;
@@ -705,11 +712,8 @@ bool cmFileCommand::HandleStringsCommand(std::vector<std::string> const& args)
 bool cmFileCommand::HandleGlobCommand(std::vector<std::string> const& args,
   bool recurse)
 {
-  if ( args.size() < 2 )
-    {
-    this->SetError("GLOB requires at least a variable name");
-    return false;
-    }
+  // File commands has at least one argument
+  assert(args.size() > 1);
 
   std::vector<std::string>::const_iterator i = args.begin();
 
@@ -843,11 +847,8 @@ bool cmFileCommand::HandleGlobCommand(std::vector<std::string> const& args,
 bool cmFileCommand::HandleMakeDirectoryCommand(
   std::vector<std::string> const& args)
 {
-  if(args.size() < 2 )
-    {
-    this->SetError("called with incorrect number of arguments");
-    return false;
-    }
+  // File command has at least one argument
+  assert(args.size() > 1);
 
   std::vector<std::string>::const_iterator i = args.begin();
 
@@ -2667,9 +2668,8 @@ cmFileCommand::HandleDownloadCommand(std::vector<std::string> const& args)
   long inactivity_timeout = 0;
   std::string verboseLog;
   std::string statusVar;
-  std::string caFile;
-  bool checkSSL = false;
-  bool verifySSL = false;
+  bool tls_verify = this->Makefile->IsOn("CMAKE_TLS_VERIFY");
+  const char* cainfo = this->Makefile->GetDefinition("CMAKE_TLS_CAINFO");
   std::string expectedHash;
   std::string hashMatchMSG;
   cmsys::auto_ptr<cmCryptoHash> hash;
@@ -2723,30 +2723,29 @@ cmFileCommand::HandleDownloadCommand(std::vector<std::string> const& args)
         }
       statusVar = *i;
       }
-    else if(*i == "SSL_VERIFY")
+    else if(*i == "TLS_VERIFY")
       {
       ++i;
       if(i != args.end())
         {
-        verifySSL = cmSystemTools::IsOn(i->c_str());
-        checkSSL = true;
+        tls_verify = cmSystemTools::IsOn(i->c_str());
         }
       else
         {
-        this->SetError("SSL_VERIFY missing bool value.");
+        this->SetError("TLS_VERIFY missing bool value.");
         return false;
         }
       }
-    else if(*i == "SSL_CAINFO_FILE")
+    else if(*i == "TLS_CAINFO")
       {
       ++i;
       if(i != args.end())
         {
-        caFile = *i;
+        cainfo = i->c_str();
         }
       else
         {
-        this->SetError("SSL_CAFILE missing file value.");
+        this->SetError("TLS_CAFILE missing file value.");
         return false;
         }
       }
@@ -2769,30 +2768,31 @@ cmFileCommand::HandleDownloadCommand(std::vector<std::string> const& args)
     else if(*i == "EXPECTED_HASH")
       {
       ++i;
-      if(i != args.end())
+      if(i == args.end())
         {
-        hash = cmsys::auto_ptr<cmCryptoHash>(cmCryptoHash::New(i->c_str()));
-        if(!hash.get())
-          {
-          std::string err = "DOWNLOAD bad SHA type: ";
-          err += *i;
-          this->SetError(err.c_str());
-          return false;
-          }
-        hashMatchMSG = *i;
-        hashMatchMSG += " hash";
-
-        ++i;
-        }
-      if(i != args.end())
-        {
-        expectedHash = cmSystemTools::LowerCase(*i);
-        }
-      else
-        {
-        this->SetError("DOWNLOAD missing time for EXPECTED_HASH.");
+        this->SetError("DOWNLOAD missing ALGO=value for EXPECTED_HASH.");
         return false;
         }
+      std::string::size_type pos = i->find("=");
+      if(pos == std::string::npos)
+        {
+        std::string err =
+          "DOWNLOAD EXPECTED_HASH expects ALGO=value but got: ";
+        err += *i;
+        this->SetError(err.c_str());
+        return false;
+        }
+      std::string algo = i->substr(0, pos);
+      expectedHash = cmSystemTools::LowerCase(i->substr(pos+1));
+      hash = cmsys::auto_ptr<cmCryptoHash>(cmCryptoHash::New(algo.c_str()));
+      if(!hash.get())
+        {
+        std::string err = "DOWNLOAD EXPECTED_HASH given unknown ALGO: ";
+        err += algo;
+        this->SetError(err.c_str());
+        return false;
+        }
+      hashMatchMSG = algo + " hash";
       }
     ++i;
     }
@@ -2857,6 +2857,9 @@ cmFileCommand::HandleDownloadCommand(std::vector<std::string> const& args)
   res = ::curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1);
   check_curl_result(res, "DOWNLOAD cannot set http failure option: ");
 
+  res = ::curl_easy_setopt(curl, CURLOPT_USERAGENT, "curl/" LIBCURL_VERSION);
+  check_curl_result(res, "DOWNLOAD cannot set user agent option: ");
+
   res = ::curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
                            cmWriteToFileCallback);
   check_curl_result(res, "DOWNLOAD cannot set write function: ");
@@ -2865,41 +2868,23 @@ cmFileCommand::HandleDownloadCommand(std::vector<std::string> const& args)
                            cmFileCommandCurlDebugCallback);
   check_curl_result(res, "DOWNLOAD cannot set debug function: ");
 
-  // check to see if SSL verification is requested
-  const char* verifyValue =
-    this->Makefile->GetDefinition("CMAKE_CURLOPT_SSL_VERIFYPEER");
-  // if there is a cmake variable or if the command has SSL_VERIFY requested
-  if(verifyValue || checkSSL)
+  // check to see if TLS verification is requested
+  if(tls_verify)
     {
-    // the args to the command come first
-    bool verify = verifySSL;
-    if(!verify && verifyValue)
-      {
-      verify = cmSystemTools::IsOn(verifyValue);
-      }
-    if(verify)
-      {
-      res = ::curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1);
-      check_curl_result(res, "Unable to set SSL Verify on: ");
-      }
-    else
-      {
-      res = ::curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
-      check_curl_result(res, "Unable to set SSL Verify off: ");
-      }
+    res = ::curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1);
+    check_curl_result(res, "Unable to set TLS/SSL Verify on: ");
+    }
+  else
+    {
+    res = ::curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
+    check_curl_result(res, "Unable to set TLS/SSL Verify off: ");
     }
   // check to see if a CAINFO file has been specified
-  const char* cainfo =
-    this->Makefile->GetDefinition("CMAKE_CURLOPT_CAINFO_FILE");
   // command arg comes first
-  if(caFile.size())
-    {
-    cainfo = caFile.c_str();
-    }
-  if(cainfo)
+  if(cainfo && *cainfo)
     {
     res = ::curl_easy_setopt(curl, CURLOPT_CAINFO, cainfo);
-    check_curl_result(res, "Unable to set SSL Verify CAINFO: ");
+    check_curl_result(res, "Unable to set TLS/SSL Verify CAINFO: ");
     }
 
   cmFileCommandVectorOfChar chunkDebug;
@@ -3261,4 +3246,55 @@ cmFileCommand::HandleUploadCommand(std::vector<std::string> const& args)
   this->SetError("UPLOAD not supported by bootstrap cmake.");
   return false;
 #endif
+}
+
+//----------------------------------------------------------------------------
+bool cmFileCommand::HandleTimestampCommand(
+  std::vector<std::string> const& args)
+{
+  if(args.size() < 3)
+    {
+    this->SetError("sub-command TIMESTAMP requires at least two arguments.");
+    return false;
+    }
+  else if(args.size() > 5)
+    {
+    this->SetError("sub-command TIMESTAMP takes at most four arguments.");
+    return false;
+    }
+
+  unsigned int argsIndex = 1;
+
+  const std::string& filename = args[argsIndex++];
+
+  const std::string& outputVariable = args[argsIndex++];
+
+  std::string formatString;
+  if(args.size() > argsIndex && args[argsIndex] != "UTC")
+    {
+    formatString = args[argsIndex++];
+    }
+
+  bool utcFlag = false;
+  if(args.size() > argsIndex)
+    {
+    if(args[argsIndex] == "UTC")
+      {
+      utcFlag = true;
+      }
+    else
+      {
+      std::string e = " TIMESTAMP sub-command does not recognize option " +
+          args[argsIndex] + ".";
+      this->SetError(e.c_str());
+      return false;
+      }
+    }
+
+  cmTimestamp timestamp;
+  std::string result = timestamp.FileModificationTime(
+    filename.c_str(), formatString, utcFlag);
+  this->Makefile->AddDefinition(outputVariable.c_str(), result.c_str());
+
+  return true;
 }

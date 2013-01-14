@@ -229,6 +229,9 @@ void cmLocalVisualStudio7Generator
   this->FortranProject =
     static_cast<cmGlobalVisualStudioGenerator*>(this->GlobalGenerator)
     ->TargetIsFortranOnly(target);
+  this->WindowsCEProject =
+    static_cast<cmGlobalVisualStudioGenerator*>(this->GlobalGenerator)
+    ->TargetsWindowsCE();
 
   // Intel Fortran for VS10 uses VS9 format ".vfproj" files.
   VSVersion realVersion = this->Version;
@@ -724,10 +727,6 @@ void cmLocalVisualStudio7Generator::WriteConfiguration(std::ostream& fout,
     flags += targetFlags;
     }
 
-  std::string configUpper = cmSystemTools::UpperCase(configName);
-  std::string defPropName = "COMPILE_DEFINITIONS_";
-  defPropName += configUpper;
-
   // Get preprocessor definitions for this directory.
   std::string defineFlags = this->Makefile->GetDefineFlags();
   Options::Tool t = Options::Compiler;
@@ -744,11 +743,10 @@ void cmLocalVisualStudio7Generator::WriteConfiguration(std::ostream& fout,
   targetOptions.Parse(flags.c_str());
   targetOptions.Parse(defineFlags.c_str());
   targetOptions.ParseFinish();
-  targetOptions.AddDefines
-    (this->Makefile->GetProperty("COMPILE_DEFINITIONS"));
-  targetOptions.AddDefines(target.GetProperty("COMPILE_DEFINITIONS"));
-  targetOptions.AddDefines(this->Makefile->GetProperty(defPropName.c_str()));
-  targetOptions.AddDefines(target.GetProperty(defPropName.c_str()));
+  cmGeneratorTarget* gt =
+    this->GlobalGenerator->GetGeneratorTarget(&target);
+  targetOptions.AddDefines(gt->GetCompileDefinitions().c_str());
+  targetOptions.AddDefines(gt->GetCompileDefinitions(configName).c_str());
   targetOptions.SetVerboseMakefile(
     this->Makefile->IsOn("CMAKE_VERBOSE_MAKEFILE"));
 
@@ -819,7 +817,7 @@ void cmLocalVisualStudio7Generator::WriteConfiguration(std::ostream& fout,
   targetOptions.OutputAdditionalOptions(fout, "\t\t\t\t", "\n");
   fout << "\t\t\t\tAdditionalIncludeDirectories=\"";
   std::vector<std::string> includes;
-  this->GetIncludeDirectories(includes, &target);
+  this->GetIncludeDirectories(includes, gt, "C", configName);
   std::vector<std::string>::iterator i = includes.begin();
   for(;i != includes.end(); ++i)
     {
@@ -847,7 +845,7 @@ void cmLocalVisualStudio7Generator::WriteConfiguration(std::ostream& fout,
     // non-debug configurations because VS still creates .idb files.
     fout <<  "\t\t\t\tProgramDataBaseFileName=\""
          << this->ConvertToXMLOutputPathSingle(
-              target.GetDirectory(configName).c_str())
+              target.GetPDBDirectory(configName).c_str())
          << "/"
          << target.GetPDBName(configName) << "\"\n";
     }
@@ -919,12 +917,12 @@ void cmLocalVisualStudio7Generator::WriteConfiguration(std::ostream& fout,
       // for FAT32 file systems, which can cause an empty manifest
       // to be embedded into the resulting executable.  See CMake
       // bug #2617.
-      const char* tool  = "VCManifestTool";
+      const char* manifestTool  = "VCManifestTool";
       if(this->FortranProject)
         {
-        tool = "VFManifestTool";
+        manifestTool = "VFManifestTool";
         }
-      fout << "\t\t\t<Tool\n\t\t\t\tName=\"" << tool << "\"\n"
+      fout << "\t\t\t<Tool\n\t\t\t\tName=\"" << manifestTool << "\"\n"
            << "\t\t\t\tUseFAT32Workaround=\"true\"\n"
            << "\t\t\t/>\n";
       }
@@ -1008,6 +1006,8 @@ void cmLocalVisualStudio7Generator::OutputBuildTool(std::ostream& fout,
     }
   switch(target.GetType())
     {
+    case cmTarget::UNKNOWN_LIBRARY:
+      break;
     case cmTarget::OBJECT_LIBRARY:
       {
       std::string libpath = this->GetTargetDirectory(target);
@@ -1125,7 +1125,7 @@ void cmLocalVisualStudio7Generator::OutputBuildTool(std::ostream& fout,
     fout << "\t\t\t\tAdditionalLibraryDirectories=\"";
     this->OutputLibraryDirectories(fout, cli.GetDirectories());
     fout << "\"\n";
-    temp = target.GetDirectory(configName);
+    temp = target.GetPDBDirectory(configName);
     temp += "/";
     temp += targetNamePDB;
     fout << "\t\t\t\tProgramDatabaseFile=\"" <<
@@ -1172,6 +1172,8 @@ void cmLocalVisualStudio7Generator::OutputBuildTool(std::ostream& fout,
     cmComputeLinkInformation& cli = *pcli;
     const char* linkLanguage = cli.GetLinkLanguage();
 
+    bool isWin32Executable = target.GetPropertyAsBool("WIN32_EXECUTABLE");
+
     // Compute the variable name to lookup standard libraries for this
     // language.
     std::string standardLibsVar = "CMAKE_";
@@ -1211,7 +1213,7 @@ void cmLocalVisualStudio7Generator::OutputBuildTool(std::ostream& fout,
     this->OutputLibraryDirectories(fout, cli.GetDirectories());
     fout << "\"\n";
     std::string path = this->ConvertToXMLOutputPathSingle(
-      target.GetDirectory(configName).c_str());
+      target.GetPDBDirectory(configName).c_str());
     fout << "\t\t\t\tProgramDatabaseFile=\""
          << path << "/" << targetNamePDB
          << "\"\n";
@@ -1219,15 +1221,24 @@ void cmLocalVisualStudio7Generator::OutputBuildTool(std::ostream& fout,
       {
       fout << "\t\t\t\tGenerateDebugInformation=\"TRUE\"\n";
       }
-    if ( target.GetPropertyAsBool("WIN32_EXECUTABLE") )
+    if ( this->WindowsCEProject )
+      {
+      fout << "\t\t\t\tSubSystem=\"9\"\n"
+           << "\t\t\t\tEntryPointSymbol=\""
+           << (isWin32Executable ? "WinMainCRTStartup" : "mainACRTStartup")
+           << "\"\n";
+      }
+    else if ( this->FortranProject )
       {
       fout << "\t\t\t\tSubSystem=\""
-           << (this->FortranProject? "subSystemWindows" : "2") << "\"\n";
+           << (isWin32Executable ? "subSystemWindows" : "subSystemConsole")
+           << "\"\n";
       }
     else
       {
       fout << "\t\t\t\tSubSystem=\""
-           << (this->FortranProject? "subSystemConsole" : "1") << "\"\n";
+           << (isWin32Executable ? "2" : "1")
+           << "\"\n";
       }
     std::string stackVar = "CMAKE_";
     stackVar += linkLanguage;

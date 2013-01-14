@@ -131,9 +131,14 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
       outpathImp += "/";
       }
     }
+
+  std::string pdbOutputPath = this->Target->GetPDBDirectory();
+  cmSystemTools::MakeDirectory(pdbOutputPath.c_str());
+  pdbOutputPath += "/";
+
   std::string targetFullPath = outpath + targetName;
   std::string targetFullPathReal = outpath + targetNameReal;
-  std::string targetFullPathPDB = outpath + targetNamePDB;
+  std::string targetFullPathPDB =  pdbOutputPath + targetNamePDB;
   std::string targetFullPathImport = outpathImp + targetNameImport;
   std::string targetOutPathPDB =
     this->Convert(targetFullPathPDB.c_str(),
@@ -210,7 +215,7 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
   // Add language feature flags.
   this->AddFeatureFlags(flags, linkLanguage);
 
-  this->LocalGenerator->AddArchitectureFlags(flags, this->Target,
+  this->LocalGenerator->AddArchitectureFlags(flags, this->GeneratorTarget,
                                              linkLanguage, this->ConfigName);
 
   // Add target-specific linker flags.
@@ -318,9 +323,13 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
   this->LocalGenerator->SetLinkScriptShell(useLinkScript);
 
   // Collect up flags to link in needed libraries.
-  cmOStringStream linklibs;
-  this->LocalGenerator->OutputLinkLibraries(linklibs, *this->Target, relink);
-
+  std::string linkLibs;
+  std::string frameworkPath;
+  std::string linkPath;
+  this->LocalGenerator->OutputLinkLibraries(linkLibs, frameworkPath, linkPath,
+                                            *this->GeneratorTarget,
+                                            relink);
+  linkLibs = frameworkPath + linkPath + linkLibs;
   // Construct object file lists that may be needed to expand the
   // rule.
   std::string buildObjs;
@@ -359,8 +368,7 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
   vars.TargetVersionMajor = targetVersionMajor.c_str();
   vars.TargetVersionMinor = targetVersionMinor.c_str();
 
-  std::string linkString = linklibs.str();
-  vars.LinkLibraries = linkString.c_str();
+  vars.LinkLibraries = linkLibs.c_str();
   vars.Flags = flags.c_str();
   vars.LinkFlags = linkFlags.c_str();
   // Expand placeholders in the commands.

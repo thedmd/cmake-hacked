@@ -4,6 +4,10 @@ include(${Import_BINARY_DIR}/../Export/ExportBuildTree.cmake)
 # Import targets from the exported install tree.
 include(${CMAKE_INSTALL_PREFIX}/lib/exp/exp.cmake)
 
+# Import two exports, where the Depends one depends on an exported target from the Required one:
+include(${CMAKE_INSTALL_PREFIX}/lib/cmake/testLibRequired/testLibRequiredConfig.cmake)
+include(${CMAKE_INSTALL_PREFIX}/lib/cmake/testLibDepends/testLibDependsConfig.cmake)
+
 # Try referencing an executable imported from the install tree.
 add_custom_command(
   OUTPUT ${Import_BINARY_DIR}/exp_generated.c
@@ -148,3 +152,29 @@ check_function_exists(testLib1 HAVE_TESTLIB1_FUNCTION)
 if (NOT HAVE_TESTLIB1_FUNCTION)
   message(SEND_ERROR "Using imported target testLib2 in check_function_exists() failed !")
 endif()
+
+#-----------------------------------------------------------------------------
+# Test that dependent imported targets have usable
+# INTERFACE_COMPILE_DEFINITIONS and INTERFACE_INCLUDE_DIRECTORIES
+
+add_executable(deps_iface deps_iface.c)
+target_link_libraries(deps_iface testLibDepends)
+set_property(TARGET deps_iface APPEND PROPERTY
+  COMPILE_DEFINITIONS
+    $<TARGET_PROPERTY:testLibDepends,INTERFACE_COMPILE_DEFINITIONS>
+)
+set_property(TARGET deps_iface APPEND PROPERTY
+  INCLUDE_DIRECTORIES
+    $<TARGET_PROPERTY:testLibDepends,INTERFACE_INCLUDE_DIRECTORIES>
+)
+
+add_executable(deps_shared_iface deps_shared_iface.cpp)
+target_link_libraries(deps_shared_iface testSharedLibDepends)
+set_property(TARGET deps_shared_iface APPEND PROPERTY
+  COMPILE_DEFINITIONS
+    $<TARGET_PROPERTY:testSharedLibDepends,INTERFACE_COMPILE_DEFINITIONS>
+)
+set_property(TARGET deps_shared_iface APPEND PROPERTY
+  INCLUDE_DIRECTORIES
+    $<TARGET_PROPERTY:testSharedLibDepends,INTERFACE_INCLUDE_DIRECTORIES>
+)

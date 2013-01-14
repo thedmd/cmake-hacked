@@ -326,18 +326,18 @@ void cmLocalVisualStudio6Generator::WriteDSPFile(std::ostream& fout,
         {
         cmSystemTools::ReplaceString(source, "$(IntDir)/", "");
 #if defined(_WIN32) || defined(__CYGWIN__)
-        std::ofstream fout(source.c_str(),
+        std::ofstream sourceFout(source.c_str(),
                            std::ios::binary | std::ios::out
                            | std::ios::trunc);
 #else
-        std::ofstream fout(source.c_str(),
+        std::ofstream sourceFout(source.c_str(),
                            std::ios::out | std::ios::trunc);
 #endif
-        if(fout)
+        if(sourceFout)
           {
-          fout.write("# generated from CMake",22);
-          fout.flush();
-          fout.close();
+          sourceFout.write("# generated from CMake",22);
+          sourceFout.flush();
+          sourceFout.close();
           }
         }
       }
@@ -710,6 +710,8 @@ void cmLocalVisualStudio6Generator::SetBuildType(BuildType b,
 
   switch(b)
     {
+    case WIN32_EXECUTABLE:
+      break;
     case STATIC_LIBRARY:
       this->DSPHeaderTemplate = root;
       this->DSPHeaderTemplate += "/staticLibHeader.dsptemplate";
@@ -853,7 +855,8 @@ inline std::string removeQuotes(const std::string& s)
 
 
 std::string
-cmLocalVisualStudio6Generator::GetTargetIncludeOptions(cmTarget &target)
+cmLocalVisualStudio6Generator::GetTargetIncludeOptions(cmTarget &target,
+                                                       const char *config)
 {
   std::string includeOptions;
 
@@ -862,10 +865,13 @@ cmLocalVisualStudio6Generator::GetTargetIncludeOptions(cmTarget &target)
   // the length threatens this problem.
   unsigned int maxIncludeLength = 3000;
   bool useShortPath = false;
+
+  cmGeneratorTarget* gt =
+    this->GlobalGenerator->GetGeneratorTarget(&target);
   for(int j=0; j < 2; ++j)
     {
     std::vector<std::string> includes;
-    this->GetIncludeDirectories(includes, &target);
+    this->GetIncludeDirectories(includes, gt, "C", config);
 
     std::vector<std::string>::iterator i;
     for(i = includes.begin(); i != includes.end(); ++i)
@@ -1144,7 +1150,15 @@ void cmLocalVisualStudio6Generator
 #endif
 
   // Get include options for this target.
-  std::string includeOptions = this->GetTargetIncludeOptions(target);
+  std::string includeOptionsDebug = this->GetTargetIncludeOptions(target,
+                                                                  "DEBUG");
+  std::string includeOptionsRelease = this->GetTargetIncludeOptions(target,
+                                                                  "RELEASE");
+  std::string includeOptionsRelWithDebInfo = this->GetTargetIncludeOptions(
+                                                            target,
+                                                            "RELWITHDEBINFO");
+  std::string includeOptionsMinSizeRel = this->GetTargetIncludeOptions(target,
+                                                                "MINSIZEREL");
 
   // Get extra linker options for this target type.
   std::string extraLinkOptions;
@@ -1557,8 +1571,15 @@ void cmLocalVisualStudio6Generator
     cmSystemTools::ReplaceString(line, "CM_MULTILINE_OPTIONS_RELWITHDEBINFO",
                                  optionsRelWithDebInfo.c_str());
 
-    cmSystemTools::ReplaceString(line, "BUILD_INCLUDES",
-                                 includeOptions.c_str());
+    cmSystemTools::ReplaceString(line, "BUILD_INCLUDES_DEBUG",
+                                 includeOptionsDebug.c_str());
+    cmSystemTools::ReplaceString(line, "BUILD_INCLUDES_RELEASE",
+                                 includeOptionsRelease.c_str());
+    cmSystemTools::ReplaceString(line, "BUILD_INCLUDES_MINSIZEREL",
+                                 includeOptionsMinSizeRel.c_str());
+    cmSystemTools::ReplaceString(line, "BUILD_INCLUDES_RELWITHDEBINFO",
+                                 includeOptionsRelWithDebInfo.c_str());
+
     cmSystemTools::ReplaceString(line, "TARGET_VERSION_FLAG",
                                  targetVersionFlag.c_str());
     cmSystemTools::ReplaceString(line, "TARGET_IMPLIB_FLAG_DEBUG",
@@ -1676,37 +1697,25 @@ void cmLocalVisualStudio6Generator
     std::set<std::string> minsizeDefinesSet;
     std::set<std::string> debugrelDefinesSet;
 
-    this->AppendDefines(
-      definesSet,
-      this->Makefile->GetProperty("COMPILE_DEFINITIONS"));
-    this->AppendDefines(
-      debugDefinesSet,
-      this->Makefile->GetProperty("COMPILE_DEFINITIONS_DEBUG"));
-    this->AppendDefines(
-      releaseDefinesSet,
-      this->Makefile->GetProperty("COMPILE_DEFINITIONS_RELEASE"));
-    this->AppendDefines(
-      minsizeDefinesSet,
-      this->Makefile->GetProperty("COMPILE_DEFINITIONS_MINSIZEREL"));
-    this->AppendDefines(
-      debugrelDefinesSet,
-      this->Makefile->GetProperty("COMPILE_DEFINITIONS_RELWITHDEBINFO"));
+
+    cmGeneratorTarget* gt =
+      this->GlobalGenerator->GetGeneratorTarget(&target);
 
     this->AppendDefines(
       definesSet,
-      target.GetProperty("COMPILE_DEFINITIONS"));
+      gt->GetCompileDefinitions());
     this->AppendDefines(
       debugDefinesSet,
-      target.GetProperty("COMPILE_DEFINITIONS_DEBUG"));
+      gt->GetCompileDefinitions("DEBUG"));
     this->AppendDefines(
       releaseDefinesSet,
-      target.GetProperty("COMPILE_DEFINITIONS_RELEASE"));
+      gt->GetCompileDefinitions("RELEASE"));
     this->AppendDefines(
       minsizeDefinesSet,
-      target.GetProperty("COMPILE_DEFINITIONS_MINSIZEREL"));
+      gt->GetCompileDefinitions("MINSIZEREL"));
     this->AppendDefines(
       debugrelDefinesSet,
-      target.GetProperty("COMPILE_DEFINITIONS_RELWITHDEBINFO"));
+      gt->GetCompileDefinitions("RELWITHDEBINFO"));
 
     std::string defines = " ";
     std::string debugDefines = " ";

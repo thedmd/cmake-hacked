@@ -78,7 +78,7 @@
 
 # include this to handle the QUIETLY and REQUIRED arguments
 include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
-include(GetPrerequisites)
+include(${CMAKE_CURRENT_LIST_DIR}/GetPrerequisites.cmake)
 
 #
 # This part detects MPI compilers, attempting to wade through the mess of compiler names in
@@ -575,6 +575,11 @@ foreach (lang C CXX Fortran)
     if (NOT MPI_${lang}_LIBRARIES OR NOT MPI_${lang}_INCLUDE_PATH)
       try_regular_compiler(${lang} regular_compiler_worked)
     endif()
+
+    set(MPI_${lang}_FIND_QUIETLY ${MPI_FIND_QUIETLY})
+    set(MPI_${lang}_FIND_REQUIRED ${MPI_FIND_REQUIRED})
+    set(MPI_${lang}_FIND_VERSION ${MPI_FIND_VERSION})
+    set(MPI_${lang}_FIND_VERSION_EXACT ${MPI_FIND_VERSION_EXACT})
 
     if (regular_compiler_worked)
       find_package_handle_standard_args(MPI_${lang} DEFAULT_MSG MPI_${lang}_COMPILER)

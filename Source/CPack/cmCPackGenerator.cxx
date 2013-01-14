@@ -23,7 +23,6 @@
 
 #include <cmsys/SystemTools.hxx>
 #include <cmsys/Glob.hxx>
-#include <memory> // auto_ptr
 #include <algorithm>
 
 #if defined(__HAIKU__)
@@ -97,7 +96,6 @@ int cmCPackGenerator::PrepareNames()
     }
   tempDirectory += this->GetOption("CPACK_GENERATOR");
   std::string topDirectory = tempDirectory;
-  this->GetOption("CPACK_PACKAGE_FILE_NAME");
   const char* pfname = this->GetOption("CPACK_PACKAGE_FILE_NAME");
   if(!pfname)
     {
@@ -208,7 +206,7 @@ int cmCPackGenerator::InstallProject()
     {
     cmCPackLogger(cmCPackLog::LOG_ERROR,
       "Problem creating temporary directory: "
-                  << (tempInstallDirectory ? tempInstallDirectory : "(NULL}")
+                  << (tempInstallDirectory ? tempInstallDirectory : "(NULL)")
                   << std::endl);
     return 0;
     }
@@ -697,7 +695,7 @@ int cmCPackGenerator::InstallProjectViaInstallCMakeProjects(
         cm.SetProgressCallback(cmCPackGeneratorProgress, this);
         cmGlobalGenerator gg;
         gg.SetCMakeInstance(&cm);
-        std::auto_ptr<cmLocalGenerator> lg(gg.CreateLocalGenerator());
+        cmsys::auto_ptr<cmLocalGenerator> lg(gg.CreateLocalGenerator());
         cmMakefile *mf = lg->GetMakefile();
         std::string realInstallDirectory = tempInstallDirectory;
         if ( !installSubDirectory.empty() && installSubDirectory != "/" )
@@ -855,7 +853,7 @@ int cmCPackGenerator::InstallProjectViaInstallCMakeProjects(
 
         // If CPack was asked to warn on ABSOLUTE INSTALL DESTINATION
         // then forward request to cmake_install.cmake script
-        if (this->GetOption("CPACK_WARN_ON_ABSOLUTE_INSTALL_DESTINATION"))
+        if (this->IsOn("CPACK_WARN_ON_ABSOLUTE_INSTALL_DESTINATION"))
           {
             mf->AddDefinition("CMAKE_WARN_ON_ABSOLUTE_INSTALL_DESTINATION",
                               "1");
@@ -865,7 +863,7 @@ int cmCPackGenerator::InstallProjectViaInstallCMakeProjects(
         // then ask cmake_install.cmake script to error out
         // as soon as it occurs (before installing file)
         if (!SupportsAbsoluteDestination() ||
-            this->GetOption("CPACK_ERROR_ON_ABSOLUTE_INSTALL_DESTINATION"))
+            this->IsOn("CPACK_ERROR_ON_ABSOLUTE_INSTALL_DESTINATION"))
           {
             mf->AddDefinition("CMAKE_ERROR_ON_ABSOLUTE_INSTALL_DESTINATION",
                               "1");
@@ -905,7 +903,7 @@ int cmCPackGenerator::InstallProjectViaInstallCMakeProjects(
             localFileName =
                 cmSystemTools::RelativePath(InstallPrefix, fit->c_str());
             localFileName =
-                localFileName.substr(localFileName.find('/')+1,
+                localFileName.substr(localFileName.find_first_not_of('/'),
                                      std::string::npos);
             Components[installComponent].Files.push_back(localFileName);
             cmCPackLogger(cmCPackLog::LOG_DEBUG, "Adding file <"

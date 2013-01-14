@@ -14,6 +14,7 @@
 
 #include "cmInstallGenerator.h"
 #include "cmTarget.h"
+#include "cmGeneratorTarget.h"
 
 /** \class cmInstallTargetGenerator
  * \brief Generate target installation rules.
@@ -97,6 +98,7 @@ protected:
   std::string FilePermissions;
   bool Optional;
   NamelinkModeType NamelinkMode;
+  cmGeneratorTarget* GeneratorTarget;
 };
 
 #endif

@@ -32,7 +32,6 @@
 #include <math.h>
 #include <float.h>
 
-#include <memory> // auto_ptr
 #include <set>
 
 //----------------------------------------------------------------------
@@ -1304,9 +1303,10 @@ int cmCTestTestHandler::ExecuteCommands(std::vector<cmStdString>& vec)
   for ( it = vec.begin(); it != vec.end(); ++it )
     {
     int retVal = 0;
-    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, "Run command: " << *it
+    std::string cmd = cmSystemTools::ConvertToOutputPath(it->c_str());
+    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, "Run command: " << cmd
       << std::endl);
-    if ( !cmSystemTools::RunSingleCommand(it->c_str(), 0, &retVal, 0,
+    if ( !cmSystemTools::RunSingleCommand(cmd.c_str(), 0, &retVal, 0,
                                           cmSystemTools::OUTPUT_MERGE
         /*this->Verbose*/) || retVal != 0 )
       {
@@ -1546,7 +1546,7 @@ void cmCTestTestHandler::GetListOfTests()
   cmake cm;
   cmGlobalGenerator gg;
   gg.SetCMakeInstance(&cm);
-  std::auto_ptr<cmLocalGenerator> lg(gg.CreateLocalGenerator());
+  cmsys::auto_ptr<cmLocalGenerator> lg(gg.CreateLocalGenerator());
   cmMakefile *mf = lg->GetMakefile();
   mf->AddDefinition("CTEST_CONFIGURATION_TYPE",
     this->CTest->GetConfigType().c_str());

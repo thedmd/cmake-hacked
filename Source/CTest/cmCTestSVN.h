@@ -33,6 +33,9 @@ private:
   virtual void NoteNewRevision();
   virtual bool UpdateImpl();
 
+  bool RunSVNCommand(std::vector<char const*> const& parameters,
+    OutputParser* out, OutputParser* err);
+
   // Information about an SVN repository (root repository or external)
   struct SVNInfo {
 
@@ -60,6 +63,7 @@ private:
 
   // Extended revision structure to include info about external it refers to.
   struct Revision;
+  friend struct Revision;
 
   // Info of all the repositories (root, externals and nested ones).
   std::list<SVNInfo> Repositories;

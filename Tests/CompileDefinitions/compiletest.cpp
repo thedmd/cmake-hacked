@@ -27,6 +27,24 @@ enum {
 #endif
 };
 
+#ifdef TEST_GENERATOR_EXPRESSIONS
+#ifndef CMAKE_IS_DECLARATIVE
+#error Expect declarative definition
+#endif
+#ifdef GE_NOT_DEFINED
+#error Expect not defined generator expression
+#endif
+
+#ifndef ARGUMENT
+#error Expected define expanded from list
+#endif
+#ifndef LIST
+#error Expected define expanded from list
+#endif
+
+// TEST_GENERATOR_EXPRESSIONS
+#endif
+
 int main(int argc, char **argv)
 {
   return 0;

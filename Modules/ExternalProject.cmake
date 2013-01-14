@@ -9,6 +9,7 @@
 #    [TMP_DIR dir]               # Directory to store temporary files
 #    [STAMP_DIR dir]             # Directory to store step timestamps
 #   #--Download step--------------
+#    [DOWNLOAD_NAME fname]       # File name to store (if not end of URL)
 #    [DOWNLOAD_DIR dir]          # Directory to store downloaded files
 #    [DOWNLOAD_COMMAND cmd...]   # Command to download source tree
 #    [CVS_REPOSITORY cvsroot]    # CVSROOT of CVS repository
@@ -24,7 +25,10 @@
 #    [HG_REPOSITORY url]         # URL of mercurial repo
 #    [HG_TAG tag]                # Mercurial branch name, commit id or tag
 #    [URL /.../src.tgz]          # Full path or URL of source
-#    [URL_MD5 md5]               # MD5 checksum of file at URL
+#    [URL_HASH ALGO=value]       # Hash of file at URL
+#    [URL_MD5 md5]               # Equivalent to URL_HASH MD5=md5
+#    [TLS_VERIFY bool]           # Should certificate for https be checked
+#    [TLS_CAINFO file]           # Path to a certificate authority file
 #    [TIMEOUT seconds]           # Time allowed for file download operations
 #   #--Update/Patch step----------
 #    [UPDATE_COMMAND cmd...]     # Source work-tree update command
@@ -184,6 +188,9 @@ if(_ep_func)
   set(_ep_keywords_${_ep_func} "${_ep_keywords_${_ep_func}})$")
 endif()
 
+# Save regex matching supported hash algorithm names.
+set(_ep_hash_algos "MD5|SHA1|SHA224|SHA256|SHA384|SHA512")
+set(_ep_hash_regex "^(${_ep_hash_algos})=([0-9A-Fa-f]+)$")
 
 function(_ep_parse_arguments f name ns args)
   # Transfer the arguments to this function into target properties for the
@@ -395,7 +402,80 @@ endif()
 endfunction()
 
 
-function(_ep_write_downloadfile_script script_filename remote local timeout md5)
+function(_ep_write_gitupdate_script script_filename git_EXECUTABLE git_tag git_repository work_dir)
+  file(WRITE ${script_filename}
+"if(\"${git_tag}\" STREQUAL \"\")
+  message(FATAL_ERROR \"Tag for git checkout should not be empty.\")
+endif()
+
+execute_process(
+  COMMAND \"${git_EXECUTABLE}\" rev-list --max-count=1 HEAD
+  WORKING_DIRECTORY \"${work_dir}\"
+  RESULT_VARIABLE error_code
+  OUTPUT_VARIABLE head_sha
+  )
+if(error_code)
+  message(FATAL_ERROR \"Failed to get the hash for HEAD\")
+endif()
+
+execute_process(
+  COMMAND \"${git_EXECUTABLE}\" show-ref ${git_tag}
+  WORKING_DIRECTORY \"${work_dir}\"
+  OUTPUT_VARIABLE show_ref_output
+  )
+# If a remote ref is asked for, which can possibly move around,
+# we must always do a fetch and checkout.
+if(\"\${show_ref_output}\" MATCHES \"remotes\")
+  set(is_remote_ref 1)
+else()
+  set(is_remote_ref 0)
+endif()
+
+# This will fail if the tag does not exist (it probably has not been fetched
+# yet).
+execute_process(
+  COMMAND \"${git_EXECUTABLE}\" rev-list --max-count=1 ${git_tag}
+  WORKING_DIRECTORY \"${work_dir}\"
+  RESULT_VARIABLE error_code
+  OUTPUT_VARIABLE tag_sha
+  )
+
+# Is the hash checkout out that we want?
+if(error_code OR is_remote_ref OR NOT (\"\${tag_sha}\" STREQUAL \"\${head_sha}\"))
+  execute_process(
+    COMMAND \"${git_EXECUTABLE}\" fetch
+    WORKING_DIRECTORY \"${work_dir}\"
+    RESULT_VARIABLE error_code
+    )
+  if(error_code)
+    message(FATAL_ERROR \"Failed to fetch repository '${git_repository}'\")
+  endif()
+
+  execute_process(
+    COMMAND \"${git_EXECUTABLE}\" checkout ${git_tag}
+    WORKING_DIRECTORY \"${work_dir}\"
+    RESULT_VARIABLE error_code
+    )
+  if(error_code)
+    message(FATAL_ERROR \"Failed to checkout tag: '${git_tag}'\")
+  endif()
+
+  execute_process(
+    COMMAND \"${git_EXECUTABLE}\" submodule update --recursive
+    WORKING_DIRECTORY \"${work_dir}/${src_name}\"
+    RESULT_VARIABLE error_code
+    )
+  if(error_code)
+    message(FATAL_ERROR \"Failed to update submodules in: '${work_dir}/${src_name}'\")
+  endif()
+endif()
+
+"
+)
+
+endfunction(_ep_write_gitupdate_script)
+
+function(_ep_write_downloadfile_script script_filename remote local timeout hash tls_verify tls_cainfo)
   if(timeout)
     set(timeout_args TIMEOUT ${timeout})
     set(timeout_msg "${timeout} seconds")
@@ -404,10 +484,31 @@ function(_ep_write_downloadfile_script script_filename remote local timeout md5)
     set(timeout_msg "none")
   endif()
 
-  if(md5)
-    set(md5_args EXPECTED_MD5 ${md5})
+  if("${hash}" MATCHES "${_ep_hash_regex}")
+    set(hash_args EXPECTED_HASH ${CMAKE_MATCH_1}=${CMAKE_MATCH_2})
   else()
-    set(md5_args "# no EXPECTED_MD5")
+    set(hash_args "# no EXPECTED_HASH")
+  endif()
+  # check for curl globals in the project
+  if(DEFINED CMAKE_TLS_VERIFY)
+    set(tls_verify "set(CMAKE_TLS_VERIFY ${CMAKE_TLS_VERIFY})")
+  endif()
+  if(DEFINED CMAKE_TLS_CAINFO)
+    set(tls_cainfo "set(CMAKE_TLS_CAINFO \"${CMAKE_TLS_CAINFO}\")")
+  endif()
+
+  # now check for curl locals so that the local values
+  # will override the globals
+
+  # check for tls_verify argument
+  string(LENGTH "${tls_verify}" tls_verify_len)
+  if(tls_verify_len GREATER 0)
+    set(tls_verify "set(CMAKE_TLS_VERIFY ${tls_verify})")
+  endif()
+  # check for tls_cainfo argument
+  string(LENGTH "${tls_cainfo}" tls_cainfo_len)
+  if(tls_cainfo_len GREATER 0)
+    set(tls_cainfo "set(CMAKE_TLS_CAINFO \"${tls_cainfo}\")")
   endif()
 
   file(WRITE ${script_filename}
@@ -416,11 +517,14 @@ function(_ep_write_downloadfile_script script_filename remote local timeout md5)
      dst='${local}'
      timeout='${timeout_msg}'\")
 
+${tls_verify}
+${tls_cainfo}
+
 file(DOWNLOAD
   \"${remote}\"
   \"${local}\"
   SHOW_PROGRESS
-  ${md5_args}
+  ${hash_args}
   ${timeout_args}
   STATUS status
   LOG log)
@@ -443,48 +547,30 @@ message(STATUS \"downloading... done\")
 endfunction()
 
 
-function(_ep_write_verifyfile_script script_filename local md5)
-  file(WRITE ${script_filename}
-"message(STATUS \"verifying file...
-     file='${local}'\")
-
-set(verified 0)
-
-# If an expected md5 checksum exists, compare against it:
-#
-if(NOT \"${md5}\" STREQUAL \"\")
-  execute_process(COMMAND \${CMAKE_COMMAND} -E md5sum \"${local}\"
-    OUTPUT_VARIABLE ov
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    RESULT_VARIABLE rv)
-
-  if(NOT rv EQUAL 0)
-    message(FATAL_ERROR \"error: computing md5sum of '${local}' failed\")
-  endif()
-
-  string(REGEX MATCH \"^([0-9A-Fa-f]+)\" md5_actual \"\${ov}\")
-
-  string(TOLOWER \"\${md5_actual}\" md5_actual)
-  string(TOLOWER \"${md5}\" md5)
-
-  if(NOT \"\${md5}\" STREQUAL \"\${md5_actual}\")
-    message(FATAL_ERROR \"error: md5sum of '${local}' does not match expected value
-  md5_expected: \${md5}
-    md5_actual: \${md5_actual}
-\")
-  endif()
-
-  set(verified 1)
-endif()
-
-if(verified)
+function(_ep_write_verifyfile_script script_filename local hash)
+  if("${hash}" MATCHES "${_ep_hash_regex}")
+    set(algo "${CMAKE_MATCH_1}")
+    string(TOLOWER "${CMAKE_MATCH_2}" expect_value)
+    set(script_content "set(expect_value \"${expect_value}\")
+file(${algo} \"\${file}\" actual_value)
+if(\"\${actual_value}\" STREQUAL \"\${expect_value}\")
   message(STATUS \"verifying file... done\")
 else()
-  message(STATUS \"verifying file... warning: did not verify file - no URL_MD5 checksum argument? corrupt file?\")
-endif()
-"
-)
-
+  message(FATAL_ERROR \"error: ${algo} hash of
+  \${file}
+does not match expected value
+  expected: \${expect_value}
+    actual: \${actual_value}
+\")
+endif()")
+  else()
+    set(script_content "message(STATUS \"verifying file... warning: did not verify file - no URL_HASH specified?\")")
+  endif()
+  file(WRITE ${script_filename} "set(file \"${local}\")
+message(STATUS \"verifying file...
+     file='\${file}'\")
+${script_content}
+")
 endfunction()
 
 
@@ -1092,6 +1178,7 @@ function(_ep_add_download_command name)
   get_property(git_repository TARGET ${name} PROPERTY _EP_GIT_REPOSITORY)
   get_property(hg_repository  TARGET ${name} PROPERTY _EP_HG_REPOSITORY )
   get_property(url TARGET ${name} PROPERTY _EP_URL)
+  get_property(fname TARGET ${name} PROPERTY _EP_DOWNLOAD_NAME)
 
   # TODO: Perhaps file:// should be copied to download dir before extraction.
   string(REGEX REPLACE "^file://" "" url "${url}")
@@ -1254,10 +1341,22 @@ function(_ep_add_download_command name)
     list(APPEND depends ${stamp_dir}/${name}-hginfo.txt)
   elseif(url)
     get_filename_component(work_dir "${source_dir}" PATH)
+    get_property(hash TARGET ${name} PROPERTY _EP_URL_HASH)
+    if(hash AND NOT "${hash}" MATCHES "${_ep_hash_regex}")
+      message(FATAL_ERROR "URL_HASH is set to\n  ${hash}\n"
+        "but must be ALGO=value where ALGO is\n  ${_ep_hash_algos}\n"
+        "and value is a hex string.")
+    endif()
     get_property(md5 TARGET ${name} PROPERTY _EP_URL_MD5)
+    if(md5 AND NOT "MD5=${md5}" MATCHES "${_ep_hash_regex}")
+      message(FATAL_ERROR "URL_MD5 is set to\n  ${md5}\nbut must be a hex string.")
+    endif()
+    if(md5 AND NOT hash)
+      set(hash "MD5=${md5}")
+    endif()
     set(repository "external project URL")
     set(module "${url}")
-    set(tag "${md5}")
+    set(tag "${hash}")
     configure_file(
       "${CMAKE_ROOT}/Modules/RepositoryInfo.txt.in"
       "${stamp_dir}/${name}-urlinfo.txt"
@@ -1272,7 +1371,9 @@ function(_ep_add_download_command name)
     else()
       if("${url}" MATCHES "^[a-z]+://")
         # TODO: Should download and extraction be different steps?
-        string(REGEX MATCH "[^/\\?]*$" fname "${url}")
+        if("x${fname}" STREQUAL "x")
+          string(REGEX MATCH "[^/\\?]*$" fname "${url}")
+        endif()
         if(NOT "${fname}" MATCHES "(\\.|=)(bz2|tar|tgz|tar\\.gz|zip)$")
           string(REGEX MATCH "([^/\\?]+(\\.|=)(bz2|tar|tgz|tar\\.gz|zip))/.*$" match_result "${url}")
           set(fname "${CMAKE_MATCH_1}")
@@ -1283,7 +1384,10 @@ function(_ep_add_download_command name)
         string(REPLACE ";" "-" fname "${fname}")
         set(file ${download_dir}/${fname})
         get_property(timeout TARGET ${name} PROPERTY _EP_TIMEOUT)
-        _ep_write_downloadfile_script("${stamp_dir}/download-${name}.cmake" "${url}" "${file}" "${timeout}" "${md5}")
+        get_property(tls_verify TARGET ${name} PROPERTY _EP_TLS_VERIFY)
+        get_property(tls_cainfo TARGET ${name} PROPERTY _EP_TLS_CAINFO)
+        _ep_write_downloadfile_script("${stamp_dir}/download-${name}.cmake"
+          "${url}" "${file}" "${timeout}" "${hash}" "${tls_verify}" "${tls_cainfo}")
         set(cmd ${CMAKE_COMMAND} -P ${stamp_dir}/download-${name}.cmake
           COMMAND)
         set(comment "Performing download step (download, verify and extract) for '${name}'")
@@ -1291,7 +1395,7 @@ function(_ep_add_download_command name)
         set(file "${url}")
         set(comment "Performing download step (verify and extract) for '${name}'")
       endif()
-      _ep_write_verifyfile_script("${stamp_dir}/verify-${name}.cmake" "${file}" "${md5}")
+      _ep_write_verifyfile_script("${stamp_dir}/verify-${name}.cmake" "${file}" "${hash}")
       list(APPEND cmd ${CMAKE_COMMAND} -P ${stamp_dir}/verify-${name}.cmake
         COMMAND)
       _ep_write_extractfile_script("${stamp_dir}/extract-${name}.cmake" "${name}" "${file}" "${source_dir}")
@@ -1323,7 +1427,7 @@ endfunction()
 
 
 function(_ep_add_update_command name)
-  ExternalProject_Get_Property(${name} source_dir)
+  ExternalProject_Get_Property(${name} source_dir tmp_dir)
 
   get_property(cmd_set TARGET ${name} PROPERTY _EP_UPDATE_COMMAND SET)
   get_property(cmd TARGET ${name} PROPERTY _EP_UPDATE_COMMAND)
@@ -1375,15 +1479,15 @@ function(_ep_add_update_command name)
       message(FATAL_ERROR "error: could not find git for fetch of ${name}")
     endif()
     set(work_dir ${source_dir})
-    set(comment "Performing update step (git fetch) for '${name}'")
+    set(comment "Performing update step for '${name}'")
     get_property(git_tag TARGET ${name} PROPERTY _EP_GIT_TAG)
     if(NOT git_tag)
       set(git_tag "master")
     endif()
-    set(cmd ${GIT_EXECUTABLE} fetch
-      COMMAND ${GIT_EXECUTABLE} checkout ${git_tag}
-      COMMAND ${GIT_EXECUTABLE} submodule update --recursive
+    _ep_write_gitupdate_script(${tmp_dir}/${name}-gitupdate.cmake
+      ${GIT_EXECUTABLE} ${git_tag} ${git_repository} ${work_dir}
       )
+    set(cmd ${CMAKE_COMMAND} -P ${tmp_dir}/${name}-gitupdate.cmake)
     set(always 1)
   elseif(hg_repository)
     if(NOT HG_EXECUTABLE)

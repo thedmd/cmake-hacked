@@ -134,7 +134,7 @@ cmNinjaTargetGenerator::ComputeFlagsForObject(cmSourceFile *source,
   this->AddFeatureFlags(flags, language.c_str());
 
   this->GetLocalGenerator()->AddArchitectureFlags(flags,
-                                                  this->GetTarget(),
+                                                  this->GeneratorTarget,
                                                   language.c_str(),
                                                   this->GetConfigName());
 
@@ -147,13 +147,16 @@ cmNinjaTargetGenerator::ComputeFlagsForObject(cmSourceFile *source,
 
   // Add shared-library flags if needed.
   this->LocalGenerator->AddCMP0018Flags(flags, this->Target,
-                                        language.c_str());
+                                        language.c_str(),
+                                        this->GetConfigName());
 
   // Add include directory flags.
   {
   std::vector<std::string> includes;
-  this->LocalGenerator->GetIncludeDirectories(includes, this->Target,
-                                              language.c_str());
+  const char *config = this->Makefile->GetDefinition("CMAKE_BUILD_TYPE");
+  this->LocalGenerator->GetIncludeDirectories(includes,
+                                              this->GeneratorTarget,
+                                              language.c_str(), config);
   std::string includeFlags =
     this->LocalGenerator->GetIncludeFlags(includes, language.c_str(),
     language == "RC" ? true : false); // full include paths for RC
@@ -167,11 +170,41 @@ cmNinjaTargetGenerator::ComputeFlagsForObject(cmSourceFile *source,
   // Append old-style preprocessor definition flags.
   this->LocalGenerator->AppendFlags(flags, this->Makefile->GetDefineFlags());
 
-  // Add target-specific and source-specific flags.
-  this->LocalGenerator->AppendFlags(flags,
-                                   this->Target->GetProperty("COMPILE_FLAGS"));
-  this->LocalGenerator->AppendFlags(flags,
-                                    source->GetProperty("COMPILE_FLAGS"));
+  // Add target-specific flags.
+  if(this->Target->GetProperty("COMPILE_FLAGS"))
+    {
+    std::string langIncludeExpr = "CMAKE_";
+    langIncludeExpr += language;
+    langIncludeExpr += "_FLAG_REGEX";
+    const char* regex = this->Makefile->
+      GetDefinition(langIncludeExpr.c_str());
+    if(regex)
+      {
+      cmsys::RegularExpression r(regex);
+      std::vector<std::string> args;
+      cmSystemTools::ParseWindowsCommandLine(
+        this->Target->GetProperty("COMPILE_FLAGS"),
+        args);
+      for(std::vector<std::string>::iterator i = args.begin();
+          i != args.end(); ++i)
+        {
+        if(r.find(i->c_str()))
+          {
+          this->LocalGenerator->AppendFlags
+            (flags, i->c_str());
+          }
+        }
+      }
+    else
+      {
+      this->LocalGenerator->AppendFlags
+        (flags, this->Target->GetProperty("COMPILE_FLAGS"));
+      }
+    }
+
+    // Add source file specific flags.
+    this->LocalGenerator->AppendFlags(flags,
+      source->GetProperty("COMPILE_FLAGS"));
 
   // TODO: Handle Apple frameworks.
 
@@ -195,10 +228,7 @@ ComputeDefines(cmSourceFile *source, const std::string& language)
   // Add preprocessor definitions for this target and configuration.
   this->LocalGenerator->AppendDefines
     (defines,
-     this->Makefile->GetProperty("COMPILE_DEFINITIONS"));
-  this->LocalGenerator->AppendDefines
-    (defines,
-     this->Target->GetProperty("COMPILE_DEFINITIONS"));
+     this->GeneratorTarget->GetCompileDefinitions());
   this->LocalGenerator->AppendDefines
     (defines,
      source->GetProperty("COMPILE_DEFINITIONS"));
@@ -207,10 +237,7 @@ ComputeDefines(cmSourceFile *source, const std::string& language)
   defPropName += cmSystemTools::UpperCase(this->GetConfigName());
   this->LocalGenerator->AppendDefines
     (defines,
-     this->Makefile->GetProperty(defPropName.c_str()));
-  this->LocalGenerator->AppendDefines
-    (defines,
-     this->Target->GetProperty(defPropName.c_str()));
+     this->GeneratorTarget->GetCompileDefinitions(this->GetConfigName()));
   this->LocalGenerator->AppendDefines
     (defines,
      source->GetProperty(defPropName.c_str()));
@@ -305,10 +332,10 @@ bool cmNinjaTargetGenerator::SetMsvcTargetPdbVariable(cmNinjaVars& vars) const
        this->Target->GetType() == cmTarget::SHARED_LIBRARY ||
        this->Target->GetType() == cmTarget::MODULE_LIBRARY)
       {
-      pdbPath = this->Target->GetDirectory(this->GetConfigName());
+      pdbPath = this->Target->GetPDBDirectory(this->GetConfigName());
       pdbPath += "/";
       pdbPath += this->Target->GetPDBName(this->GetConfigName());
-    }
+      }
 
     vars["TARGET_PDB"] = this->GetLocalGenerator()->ConvertToOutputFormat(
                           ConvertToNinjaPath(pdbPath.c_str()).c_str(),
@@ -344,7 +371,7 @@ cmNinjaTargetGenerator
   std::string flags = "$FLAGS";
   vars.Defines = "$DEFINES";
   vars.TargetPDB = "$TARGET_PDB";
-
+  vars.ObjectDir = "$OBJECT_DIR";
 
   cmMakefile* mf = this->GetMakefile();
 
@@ -397,17 +424,19 @@ cmNinjaTargetGenerator
   std::vector<std::string> compileCmds;
   cmSystemTools::ExpandListArgument(compileCmd, compileCmds);
 
+  if(useClDeps)
+    {
+    std::string cmdPrefix = clDepsBinary + lang + " $in \"$DEP_FILE\" $out " +
+                            clShowPrefix + clBinary;
+    compileCmds.front().insert(0, cmdPrefix);
+    }
+
   for (std::vector<std::string>::iterator i = compileCmds.begin();
        i != compileCmds.end(); ++i)
     this->GetLocalGenerator()->ExpandRuleVariables(*i, vars);
 
-  std::string cmdLine;
-  if(useClDeps)
-    {
-    cmdLine = clDepsBinary + lang + " $in \"$DEP_FILE\" $out " +
-              clShowPrefix + clBinary;
-    }
-  cmdLine += this->GetLocalGenerator()->BuildCommandLine(compileCmds);
+  std::string cmdLine =
+    this->GetLocalGenerator()->BuildCommandLine(compileCmds);
 
 
   // Write the rule for compiling file of the given language.
@@ -484,8 +513,6 @@ void
 cmNinjaTargetGenerator
 ::WriteObjectBuildStatement(cmSourceFile* source)
 {
-  cmNinjaDeps emptyDeps;
-
   std::string comment;
   const std::string language = source->GetLanguage();
   std::string rule = this->LanguageCompilerRule(language);
@@ -509,11 +536,12 @@ cmNinjaTargetGenerator
   cmNinjaDeps orderOnlyDeps;
   this->GetLocalGenerator()->AppendTargetDepends(this->Target, orderOnlyDeps);
 
+  cmNinjaDeps implicitDeps;
   if(const char* objectDeps = source->GetProperty("OBJECT_DEPENDS")) {
     std::vector<std::string> depList;
     cmSystemTools::ExpandListArgument(objectDeps, depList);
     std::transform(depList.begin(), depList.end(),
-                   std::back_inserter(orderOnlyDeps), MapToNinjaPath());
+                   std::back_inserter(implicitDeps), MapToNinjaPath());
   }
 
   // Add order-only dependencies on custom command outputs.
@@ -524,7 +552,7 @@ cmNinjaTargetGenerator
     cmCustomCommand const* cc = (*si)->GetCustomCommand();
     const std::vector<std::string>& ccoutputs = cc->GetOutputs();
     std::transform(ccoutputs.begin(), ccoutputs.end(),
-                   std::back_inserter(orderOnlyDeps), MapToNinjaPath());
+                   std::back_inserter(implicitDeps), MapToNinjaPath());
     }
 
   // If the source file is GENERATED and does not have a custom command
@@ -542,6 +570,13 @@ cmNinjaTargetGenerator
   vars["DEFINES"] = this->ComputeDefines(source, language);
   vars["DEP_FILE"] = objectFileName + ".d";;
   EnsureParentDirectoryExists(objectFileName);
+
+  std::string objectDir = cmSystemTools::GetFilenamePath(objectFileName);
+  objectDir = this->GetLocalGenerator()->Convert(objectDir.c_str(),
+                            cmLocalGenerator::START_OUTPUT,
+                            cmLocalGenerator::SHELL);
+  vars["OBJECT_DIR"] = objectDir;
+
 
   this->SetMsvcTargetPdbVariable(vars);
 
@@ -567,6 +602,7 @@ cmNinjaTargetGenerator
 
     compileObjectVars.Source = escapedSourceFileName.c_str();
     compileObjectVars.Object = objectFileName.c_str();
+    compileObjectVars.ObjectDir = objectDir.c_str();
     compileObjectVars.Flags = vars["FLAGS"].c_str();
     compileObjectVars.Defines = vars["DEFINES"].c_str();
 
@@ -595,7 +631,7 @@ cmNinjaTargetGenerator
                                      rule,
                                      outputs,
                                      explicitDeps,
-                                     emptyDeps,
+                                     implicitDeps,
                                      orderOnlyDeps,
                                      vars);
 
@@ -639,9 +675,19 @@ cmNinjaTargetGenerator
 
 void
 cmNinjaTargetGenerator
-::EnsureDirectoryExists(const std::string& dir) const
+::EnsureDirectoryExists(const std::string& path) const
 {
-  cmSystemTools::MakeDirectory(dir.c_str());
+  if (cmSystemTools::FileIsFullPath(path.c_str()))
+    {
+    cmSystemTools::MakeDirectory(path.c_str());
+    }
+  else
+    {
+    const std::string fullPath = std::string(this->GetGlobalGenerator()->
+                                 GetCMakeInstance()->GetHomeOutputDirectory())
+                                   + "/" + path;
+    cmSystemTools::MakeDirectory(fullPath.c_str());
+    }
 }
 
 void

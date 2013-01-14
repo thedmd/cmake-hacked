@@ -63,10 +63,6 @@ do.
 #include <dirent.h>    /* DIR, dirent */
 #include <ctype.h>     /* isspace */
 
-#ifdef __HAIKU__
-#undef __BEOS__
-#endif
-
 #if defined(__VMS)
 # define KWSYSPE_VMS_NONBLOCK , O_NONBLOCK
 #else
@@ -2732,6 +2728,7 @@ static void kwsysProcessesSignalHandler(int signum
     kwsysProcess* cp = kwsysProcesses.Processes[i];
     kwsysProcess_ssize_t status=
       read(cp->PipeReadEnds[KWSYSPE_PIPE_SIGNAL], &buf, 1);
+    (void)status;
     status=write(cp->SignalPipe, &buf, 1);
     (void)status;
     }

@@ -35,6 +35,10 @@ bool cmTargetLinkLibrariesCommand
     ->GetGlobalGenerator()->FindTarget(0, args[0].c_str());
   if(!this->Target)
     {
+    this->Target = this->Makefile->FindTargetToUse(args[0].c_str());
+    }
+  if(!this->Target)
+    {
     cmake::MessageType t = cmake::FATAL_ERROR;  // fail by default
     cmOStringStream e;
     e << "Cannot specify link libraries for target \"" << args[0] << "\" "
@@ -108,8 +112,8 @@ bool cmTargetLinkLibrariesCommand
   // specification if the keyword is encountered as the first argument.
   this->CurrentProcessingState = ProcessingLinkLibraries;
 
-  // add libraries, nothe that there is an optional prefix
-  // of debug and optimized than can be used
+  // add libraries, note that there is an optional prefix
+  // of debug and optimized that can be used
   for(unsigned int i=1; i < args.size(); ++i)
     {
     if(args[i] == "LINK_INTERFACE_LIBRARIES")
@@ -257,6 +261,16 @@ cmTargetLinkLibrariesCommand::HandleLibrary(const char* lib,
   // Handle normal case first.
   if(this->CurrentProcessingState != ProcessingLinkInterface)
     {
+    if (this->Target->IsImported())
+      {
+      cmOStringStream e;
+      e << "Imported targets may only be used with the "
+          "LINK_INTERFACE_LIBRARIES specifier to target_link_libraries.";
+      this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
+      return;
+      }
+
+
     this->Makefile
       ->AddLinkLibraryForTarget(this->Target->GetName(), lib, llt);
     if (this->CurrentProcessingState != ProcessingPublicInterface)

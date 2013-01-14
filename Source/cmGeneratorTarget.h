@@ -26,6 +26,12 @@ class cmGeneratorTarget
 public:
   cmGeneratorTarget(cmTarget*);
 
+  int GetType() const;
+  const char *GetName() const;
+  const char *GetProperty(const char *prop);
+  bool GetPropertyAsBool(const char *prop);
+  std::vector<cmSourceFile*> const& GetSourceFiles();
+
   cmTarget* Target;
   cmMakefile* Makefile;
   cmLocalGenerator* LocalGenerator;
@@ -52,6 +58,18 @@ public:
 
   void UseObjectLibraries(std::vector<std::string>& objs);
 
+  void GetAppleArchs(const char* config,
+                     std::vector<std::string>& archVec);
+
+  ///! Return the rule variable used to create this type of target,
+  //  need to add CMAKE_(LANG) for full name.
+  const char* GetCreateRuleVariable();
+
+  /** Get the include directories for this target.  */
+  std::vector<std::string> GetIncludeDirectories(const char *config);
+
+  std::string GetCompileDefinitions(const char *config = 0);
+
 private:
   void ClassifySources();
   void LookupObjectLibraries();
@@ -59,5 +77,7 @@ private:
   cmGeneratorTarget(cmGeneratorTarget const&);
   void operator=(cmGeneratorTarget const&);
 };
+
+typedef std::map<cmTarget*, cmGeneratorTarget*> cmGeneratorTargetsType;
 
 #endif
