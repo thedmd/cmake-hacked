@@ -11,6 +11,7 @@
 ============================================================================*/
 #include "cmOutputRequiredFilesCommand.h"
 #include "cmMakeDepend.h"
+#include <cmsys/FStream.hxx>
 
 class cmLBDepend : public cmMakeDepend
 {
@@ -22,7 +23,7 @@ class cmLBDepend : public cmMakeDepend
 
 void cmLBDepend::DependWalk(cmDependInformation* info)
 {
-  std::ifstream fin(info->FullPath.c_str());
+  cmsys::ifstream fin(info->FullPath.c_str());
   if(!fin)
     {
     cmSystemTools::Error("error can not open ", info->FullPath.c_str());
@@ -32,7 +33,7 @@ void cmLBDepend::DependWalk(cmDependInformation* info)
   std::string line;
   while(cmSystemTools::GetLineFromStream(fin, line))
     {
-    if(!strncmp(line.c_str(), "#include", 8))
+    if(cmHasLiteralPrefix(line.c_str(), "#include"))
       {
       // if it is an include line then create a string class
       std::string currentline = line;
@@ -174,6 +175,9 @@ void cmLBDepend::DependWalk(cmDependInformation* info)
 bool cmOutputRequiredFilesCommand
 ::InitialPass(std::vector<std::string> const& args, cmExecutionStatus &)
 {
+  if(this->Disallowed(cmPolicies::CMP0032,
+      "The output_required_files command should not be called; see CMP0032."))
+    { return true; }
   if(args.size() != 2 )
     {
     this->SetError("called with incorrect number of arguments");
@@ -193,12 +197,12 @@ bool cmOutputRequiredFilesCommand
   if (info)
     {
     // write them out
-    FILE *fout = fopen(this->OutputFile.c_str(),"w");
+    FILE *fout = cmsys::SystemTools::Fopen(this->OutputFile.c_str(),"w");
     if(!fout)
       {
       std::string err = "Can not open output file: ";
       err += this->OutputFile;
-      this->SetError(err.c_str());
+      this->SetError(err);
       return false;
       }
     std::set<cmDependInformation const*> visited;

@@ -1,17 +1,32 @@
-# - Check if the variable exists.
-#  CHECK_VARIABLE_EXISTS(VAR VARIABLE)
+#.rst:
+# CheckVariableExists
+# -------------------
 #
-#  VAR      - the name of the variable
-#  VARIABLE - variable to store the result
+# Check if the variable exists.
+#
+# ::
+#
+#   CHECK_VARIABLE_EXISTS(VAR VARIABLE)
+#
+#
+#
+# ::
+#
+#   VAR      - the name of the variable
+#   VARIABLE - variable to store the result
+#
+#
 #
 # This macro is only for C variables.
 #
-# The following variables may be set before calling this macro to
-# modify the way the check is run:
+# The following variables may be set before calling this macro to modify
+# the way the check is run:
 #
-#  CMAKE_REQUIRED_FLAGS = string of compile command line flags
-#  CMAKE_REQUIRED_DEFINITIONS = list of macros to define (-DFOO=bar)
-#  CMAKE_REQUIRED_LIBRARIES = list of libraries to link
+# ::
+#
+#   CMAKE_REQUIRED_FLAGS = string of compile command line flags
+#   CMAKE_REQUIRED_DEFINITIONS = list of macros to define (-DFOO=bar)
+#   CMAKE_REQUIRED_LIBRARIES = list of libraries to link
 
 #=============================================================================
 # Copyright 2002-2009 Kitware, Inc.
@@ -26,7 +41,6 @@
 # (To distribute this file outside of CMake, substitute the full
 #  License text for the above reference.)
 
-include("${CMAKE_CURRENT_LIST_DIR}/CMakeExpandImportedTargets.cmake")
 
 
 macro(CHECK_VARIABLE_EXISTS VAR VARIABLE)
@@ -35,10 +49,8 @@ macro(CHECK_VARIABLE_EXISTS VAR VARIABLE)
       "-DCHECK_VARIABLE_EXISTS=${VAR} ${CMAKE_REQUIRED_FLAGS}")
     message(STATUS "Looking for ${VAR}")
     if(CMAKE_REQUIRED_LIBRARIES)
-      # this one translates potentially used imported library targets to their files on disk
-      CMAKE_EXPAND_IMPORTED_TARGETS(_ADJUSTED_CMAKE_REQUIRED_LIBRARIES  LIBRARIES  ${CMAKE_REQUIRED_LIBRARIES} CONFIGURATION "${CMAKE_TRY_COMPILE_CONFIGURATION}")
       set(CHECK_VARIABLE_EXISTS_ADD_LIBRARIES
-        "-DLINK_LIBRARIES:STRING=${_ADJUSTED_CMAKE_REQUIRED_LIBRARIES}")
+        LINK_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES})
     else()
       set(CHECK_VARIABLE_EXISTS_ADD_LIBRARIES)
     endif()
@@ -46,8 +58,8 @@ macro(CHECK_VARIABLE_EXISTS VAR VARIABLE)
       ${CMAKE_BINARY_DIR}
       ${CMAKE_ROOT}/Modules/CheckVariableExists.c
       COMPILE_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS}
+      ${CHECK_VARIABLE_EXISTS_ADD_LIBRARIES}
       CMAKE_FLAGS -DCOMPILE_DEFINITIONS:STRING=${MACRO_CHECK_VARIABLE_DEFINITIONS}
-      "${CHECK_VARIABLE_EXISTS_ADD_LIBRARIES}"
       OUTPUT_VARIABLE OUTPUT)
     if(${VARIABLE})
       set(${VARIABLE} 1 CACHE INTERNAL "Have variable ${VAR}")

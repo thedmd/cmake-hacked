@@ -73,6 +73,10 @@ bool cmStringCommand
     {
     return this->HandleLengthCommand(args);
     }
+  else if(subCommand == "CONCAT")
+    {
+    return this->HandleConcatCommand(args);
+    }
   else if(subCommand == "SUBSTRING")
     {
     return this->HandleSubstringCommand(args);
@@ -93,9 +97,13 @@ bool cmStringCommand
     {
     return this->HandleTimestampCommand(args);
     }
+  else if(subCommand == "MAKE_C_IDENTIFIER")
+    {
+    return this->HandleMakeCIdentifierCommand(args);
+    }
 
   std::string e = "does not recognize sub-command "+subCommand;
-  this->SetError(e.c_str());
+  this->SetError(e);
   return false;
 }
 
@@ -107,15 +115,15 @@ bool cmStringCommand::HandleHashCommand(std::vector<std::string> const& args)
     {
     cmOStringStream e;
     e << args[0] << " requires an output variable and an input string";
-    this->SetError(e.str().c_str());
+    this->SetError(e.str());
     return false;
     }
 
   cmsys::auto_ptr<cmCryptoHash> hash(cmCryptoHash::New(args[0].c_str()));
   if(hash.get())
     {
-    std::string out = hash->HashString(args[2].c_str());
-    this->Makefile->AddDefinition(args[1].c_str(), out.c_str());
+    std::string out = hash->HashString(args[2]);
+    this->Makefile->AddDefinition(args[1], out.c_str());
     return true;
     }
   return false;
@@ -150,7 +158,7 @@ bool cmStringCommand::HandleToUpperLowerCommand(
     }
 
   // Store the output in the provided variable.
-  this->Makefile->AddDefinition(outvar.c_str(), output.c_str());
+  this->Makefile->AddDefinition(outvar, output.c_str());
   return true;
 }
 
@@ -177,12 +185,12 @@ bool cmStringCommand::HandleAsciiCommand(std::vector<std::string> const& args)
       std::string error = "Character with code ";
       error += args[cc];
       error += " does not exist.";
-      this->SetError(error.c_str());
+      this->SetError(error);
       return false;
       }
     }
   // Store the output in the provided variable.
-  this->Makefile->AddDefinition(outvar.c_str(), output.c_str());
+  this->Makefile->AddDefinition(outvar, output.c_str());
   return true;
 }
 
@@ -218,7 +226,7 @@ bool cmStringCommand::HandleConfigureCommand(
       {
       cmOStringStream err;
       err << "Unrecognized argument \"" << args[i] << "\"";
-      this->SetError(err.str().c_str());
+      this->SetError(err.str());
       return false;
       }
     }
@@ -228,7 +236,7 @@ bool cmStringCommand::HandleConfigureCommand(
   this->Makefile->ConfigureString(args[1], output, atOnly, escapeQuotes);
 
   // Store the output in the provided variable.
-  this->Makefile->AddDefinition(args[2].c_str(), output.c_str());
+  this->Makefile->AddDefinition(args[2], output.c_str());
 
   return true;
 }
@@ -274,7 +282,7 @@ bool cmStringCommand::HandleRegexCommand(std::vector<std::string> const& args)
     }
 
   std::string e = "sub-command REGEX does not recognize mode "+mode;
-  this->SetError(e.c_str());
+  this->SetError(e);
   return false;
 }
 
@@ -300,7 +308,7 @@ bool cmStringCommand::RegexMatch(std::vector<std::string> const& args)
     {
     std::string e =
       "sub-command REGEX, mode MATCH failed to compile regex \""+regex+"\".";
-    this->SetError(e.c_str());
+    this->SetError(e);
     return false;
     }
 
@@ -316,14 +324,14 @@ bool cmStringCommand::RegexMatch(std::vector<std::string> const& args)
       std::string e =
         "sub-command REGEX, mode MATCH regex \""+regex+
         "\" matched an empty string.";
-      this->SetError(e.c_str());
+      this->SetError(e);
       return false;
       }
     output = input.substr(l, r-l);
     }
 
   // Store the output in the provided variable.
-  this->Makefile->AddDefinition(outvar.c_str(), output.c_str());
+  this->Makefile->AddDefinition(outvar, output.c_str());
   return true;
 }
 
@@ -350,7 +358,7 @@ bool cmStringCommand::RegexMatchAll(std::vector<std::string> const& args)
     std::string e =
       "sub-command REGEX, mode MATCHALL failed to compile regex \""+
       regex+"\".";
-    this->SetError(e.c_str());
+    this->SetError(e);
     return false;
     }
 
@@ -366,7 +374,7 @@ bool cmStringCommand::RegexMatchAll(std::vector<std::string> const& args)
       {
       std::string e = "sub-command REGEX, mode MATCHALL regex \""+
         regex+"\" matched an empty string.";
-      this->SetError(e.c_str());
+      this->SetError(e);
       return false;
       }
     if(output.length() > 0)
@@ -378,7 +386,7 @@ bool cmStringCommand::RegexMatchAll(std::vector<std::string> const& args)
     }
 
   // Store the output in the provided variable.
-  this->Makefile->AddDefinition(outvar.c_str(), output.c_str());
+  this->Makefile->AddDefinition(outvar, output.c_str());
   return true;
 }
 
@@ -431,7 +439,7 @@ bool cmStringCommand::RegexReplace(std::vector<std::string> const& args)
         std::string e = "sub-command REGEX, mode REPLACE: Unknown escape \"";
         e += replace.substr(r, 2);
         e += "\" in replace-expression.";
-        this->SetError(e.c_str());
+        this->SetError(e);
         return false;
         }
       r += 2;
@@ -454,7 +462,7 @@ bool cmStringCommand::RegexReplace(std::vector<std::string> const& args)
     std::string e =
       "sub-command REGEX, mode REPLACE failed to compile regex \""+
       regex+"\".";
-    this->SetError(e.c_str());
+    this->SetError(e);
     return false;
     }
 
@@ -475,7 +483,7 @@ bool cmStringCommand::RegexReplace(std::vector<std::string> const& args)
       {
       std::string e = "sub-command REGEX, mode REPLACE regex \""+
         regex+"\" matched an empty string.";
-      this->SetError(e.c_str());
+      this->SetError(e);
       return false;
       }
 
@@ -505,7 +513,7 @@ bool cmStringCommand::RegexReplace(std::vector<std::string> const& args)
             "sub-command REGEX, mode REPLACE: replace expression \""+
             replace+"\" contains an out-of-range escape for regex \""+
             regex+"\".";
-          this->SetError(e.c_str());
+          this->SetError(e);
           return false;
           }
         }
@@ -519,7 +527,7 @@ bool cmStringCommand::RegexReplace(std::vector<std::string> const& args)
   output += input.substr(base, input.length()-base);
 
   // Store the output in the provided variable.
-  this->Makefile->AddDefinition(outvar.c_str(), output.c_str());
+  this->Makefile->AddDefinition(outvar, output.c_str());
   return true;
 }
 
@@ -530,8 +538,12 @@ void cmStringCommand::ClearMatches(cmMakefile* mf)
     {
     char name[128];
     sprintf(name, "CMAKE_MATCH_%d", i);
-    mf->AddDefinition(name, "");
-    mf->MarkVariableAsUsed(name);
+    const char* s = mf->GetDefinition(name);
+    if(s && *s != 0)
+      {
+      mf->AddDefinition(name, "");
+      mf->MarkVariableAsUsed(name);
+      }
     }
 }
 
@@ -540,10 +552,14 @@ void cmStringCommand::StoreMatches(cmMakefile* mf,cmsys::RegularExpression& re)
 {
   for (unsigned int i=0; i<10; i++)
     {
-    char name[128];
-    sprintf(name, "CMAKE_MATCH_%d", i);
-    mf->AddDefinition(name, re.match(i).c_str());
-    mf->MarkVariableAsUsed(name);
+    std::string m = re.match(i);
+    if(m.size() > 0)
+      {
+      char name[128];
+      sprintf(name, "CMAKE_MATCH_%d", i);
+      mf->AddDefinition(name, re.match(i).c_str());
+      mf->MarkVariableAsUsed(name);
+      }
     }
 }
 
@@ -600,12 +616,12 @@ bool cmStringCommand::HandleFindCommand(std::vector<std::string> const&
     {
     cmOStringStream s;
     s << pos;
-    this->Makefile->AddDefinition(outvar.c_str(), s.str().c_str());
+    this->Makefile->AddDefinition(outvar, s.str().c_str());
     return true;
     }
 
   // the character was not found, but this is not really an error
-  this->Makefile->AddDefinition(outvar.c_str(), "-1");
+  this->Makefile->AddDefinition(outvar, "-1");
   return true;
 }
 
@@ -627,7 +643,7 @@ bool cmStringCommand::HandleCompareCommand(std::vector<std::string> const&
       std::string e = "sub-command COMPARE, mode ";
       e += mode;
       e += " needs at least 5 arguments total to command.";
-      this->SetError(e.c_str());
+      this->SetError(e);
       return false;
       }
 
@@ -653,16 +669,16 @@ bool cmStringCommand::HandleCompareCommand(std::vector<std::string> const&
       }
     if(result)
       {
-      this->Makefile->AddDefinition(outvar.c_str(), "1");
+      this->Makefile->AddDefinition(outvar, "1");
       }
     else
       {
-      this->Makefile->AddDefinition(outvar.c_str(), "0");
+      this->Makefile->AddDefinition(outvar, "0");
       }
     return true;
     }
   std::string e = "sub-command COMPARE does not recognize mode "+mode;
-  this->SetError(e.c_str());
+  this->SetError(e);
   return false;
 }
 
@@ -689,7 +705,7 @@ bool cmStringCommand::HandleReplaceCommand(std::vector<std::string> const&
   cmsys::SystemTools::ReplaceString(input, matchExpression.c_str(),
                                     replaceExpression.c_str());
 
-  this->Makefile->AddDefinition(variableName.c_str(), input.c_str());
+  this->Makefile->AddDefinition(variableName, input.c_str());
   return true;
 }
 
@@ -715,7 +731,7 @@ bool cmStringCommand::HandleSubstringCommand(std::vector<std::string> const&
     cmOStringStream ostr;
     ostr << "begin index: " << begin << " is out of range 0 - "
          << stringLength;
-    this->SetError(ostr.str().c_str());
+    this->SetError(ostr.str());
     return false;
     }
   int leftOverLength = intStringLength - begin;
@@ -724,11 +740,11 @@ bool cmStringCommand::HandleSubstringCommand(std::vector<std::string> const&
     cmOStringStream ostr;
     ostr << "end index: " << end << " is out of range -1 - "
          << leftOverLength;
-    this->SetError(ostr.str().c_str());
+    this->SetError(ostr.str());
     return false;
     }
 
-  this->Makefile->AddDefinition(variableName.c_str(),
+  this->Makefile->AddDefinition(variableName,
                                 stringValue.substr(begin, end).c_str());
   return true;
 }
@@ -750,7 +766,46 @@ bool cmStringCommand
   char buffer[1024];
   sprintf(buffer, "%d", static_cast<int>(length));
 
-  this->Makefile->AddDefinition(variableName.c_str(), buffer);
+  this->Makefile->AddDefinition(variableName, buffer);
+  return true;
+}
+
+//----------------------------------------------------------------------------
+bool cmStringCommand
+::HandleConcatCommand(std::vector<std::string> const& args)
+{
+  if(args.size() < 2)
+    {
+    this->SetError("sub-command CONCAT requires at least one argument.");
+    return false;
+    }
+
+  std::string const& variableName = args[1];
+  std::string value;
+  for(unsigned int i = 2; i < args.size(); ++i)
+    {
+    value += args[i];
+    }
+
+  this->Makefile->AddDefinition(variableName, value.c_str());
+  return true;
+}
+
+//----------------------------------------------------------------------------
+bool cmStringCommand
+::HandleMakeCIdentifierCommand(std::vector<std::string> const& args)
+{
+  if(args.size() != 3)
+    {
+    this->SetError("sub-command MAKE_C_IDENTIFIER requires two arguments.");
+    return false;
+    }
+
+  const std::string& input = args[1];
+  const std::string& variableName = args[2];
+
+  this->Makefile->AddDefinition(variableName,
+                      cmSystemTools::MakeCidentifier(input.c_str()).c_str());
   return true;
 }
 
@@ -798,7 +853,7 @@ bool cmStringCommand::HandleStripCommand(
     outLength=endPos - startPos + 1;
     }
 
-  this->Makefile->AddDefinition(variableName.c_str(),
+  this->Makefile->AddDefinition(variableName,
     stringValue.substr(startPos, outLength).c_str());
   return true;
 }
@@ -882,7 +937,7 @@ bool cmStringCommand
     }
   result.push_back(0);
 
-  this->Makefile->AddDefinition(variableName.c_str(), &*result.begin());
+  this->Makefile->AddDefinition(variableName, &*result.begin());
   return true;
 }
 
@@ -922,14 +977,14 @@ bool cmStringCommand
       {
       std::string e = " TIMESTAMP sub-command does not recognize option " +
           args[argsIndex] + ".";
-      this->SetError(e.c_str());
+      this->SetError(e);
       return false;
       }
     }
 
   cmTimestamp timestamp;
   std::string result = timestamp.CurrentTime(formatString, utcFlag);
-  this->Makefile->AddDefinition(outputVariable.c_str(), result.c_str());
+  this->Makefile->AddDefinition(outputVariable, result.c_str());
 
   return true;
 }

@@ -55,7 +55,7 @@ public:
   void PopulateCustomVectors(cmMakefile *mf);
 
   /** Report coverage only for sources with these labels.  */
-  void SetLabelFilter(std::set<cmStdString> const& labels);
+  void SetLabelFilter(std::set<std::string> const& labels);
 
 private:
   bool ShouldIDoCoverage(const char* file, const char* srcDir,
@@ -70,6 +70,10 @@ private:
 
   //! Handle coverage using xdebug php coverage
   int HandlePHPCoverage(cmCTestCoverageHandlerContainer* cont);
+
+  //! Handle coverage for Python with coverage.py
+  int HandlePythonCoverage(cmCTestCoverageHandlerContainer* cont);
+
   //! Handle coverage for mumps
   int HandleMumpsCoverage(cmCTestCoverageHandlerContainer* cont);
 
@@ -77,7 +81,7 @@ private:
   int HandleBullseyeCoverage(cmCTestCoverageHandlerContainer* cont);
   int RunBullseyeSourceSummary(cmCTestCoverageHandlerContainer* cont);
   int RunBullseyeCoverageBranch(cmCTestCoverageHandlerContainer* cont,
-                                std::set<cmStdString>& coveredFileNames,
+                                std::set<std::string>& coveredFileNames,
                                 std::vector<std::string>& files,
                                 std::vector<std::string>& filesFullPath);
 
@@ -108,19 +112,19 @@ private:
 
   std::set<std::string> FindUncoveredFiles(
     cmCTestCoverageHandlerContainer* cont);
-  std::vector<cmStdString> CustomCoverageExclude;
+  std::vector<std::string> CustomCoverageExclude;
   std::vector<cmsys::RegularExpression> CustomCoverageExcludeRegex;
-  std::vector<cmStdString> ExtraCoverageGlobs;
+  std::vector<std::string> ExtraCoverageGlobs;
 
 
   // Map from source file to label ids.
   class LabelSet: public std::set<int> {};
-  typedef std::map<cmStdString, LabelSet> LabelMapType;
+  typedef std::map<std::string, LabelSet> LabelMapType;
   LabelMapType SourceLabels;
   LabelMapType TargetDirs;
 
   // Map from label name to label id.
-  typedef std::map<cmStdString, int> LabelIdMapType;
+  typedef std::map<std::string, int> LabelIdMapType;
   LabelIdMapType LabelIdMap;
   std::vector<std::string> Labels;
   int GetLabelId(std::string const& label);
@@ -128,7 +132,7 @@ private:
   // Label reading and writing methods.
   void LoadLabels();
   void LoadLabels(const char* dir);
-  void WriteXMLLabels(std::ofstream& os, std::string const& source);
+  void WriteXMLLabels(std::ostream& os, std::string const& source);
 
   // Label-based filtering.
   std::set<int> LabelFilter;

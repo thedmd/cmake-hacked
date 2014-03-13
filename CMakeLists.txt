@@ -9,8 +9,10 @@
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the License for more information.
 #=============================================================================
-cmake_minimum_required(VERSION 2.8.2 FATAL_ERROR)
-set(CMAKE_LEGACY_CYGWIN_WIN32 0) # Remove when CMake >= 2.8.4 is required
+cmake_minimum_required(VERSION 2.8.4 FATAL_ERROR)
+if(POLICY CMP0025)
+  cmake_policy(SET CMP0025 NEW)
+endif()
 project(CMake)
 
 if(CMAKE_BOOTSTRAP)
@@ -19,7 +21,9 @@ if(CMAKE_BOOTSTRAP)
   unset(CMAKE_BOOTSTRAP CACHE)
 endif()
 
-set(CMake_BIN_DIR ${CMake_BINARY_DIR}/bin)
+if(NOT CMake_TEST_EXTERNAL_CMAKE)
+  set(CMake_BIN_DIR ${CMake_BINARY_DIR}/bin)
+endif()
 
 if("${CMake_SOURCE_DIR}" STREQUAL "${CMAKE_SOURCE_DIR}")
   # Disallow architecture-specific try_run.  It may not run on the host.
@@ -100,9 +104,11 @@ endmacro()
 
 
 
-set(CMAKE_BUILD_ON_VISUAL_STUDIO 0)
-if(WIN32 AND NOT UNIX AND NOT BORLAND AND NOT MINGW )
-  set(CMAKE_BUILD_ON_VISUAL_STUDIO 1)
+if(NOT CMake_TEST_EXTERNAL_CMAKE)
+  set(CMAKE_BUILD_ON_VISUAL_STUDIO 0)
+  if(WIN32 AND NOT UNIX AND NOT BORLAND AND NOT MINGW )
+    set(CMAKE_BUILD_ON_VISUAL_STUDIO 1)
+  endif()
 endif()
 
 
@@ -111,33 +117,7 @@ endif()
 # for testing. Simply to improve readability of the main script.
 #-----------------------------------------------------------------------
 macro(CMAKE_SETUP_TESTING)
-  if (NOT DART_ROOT)
-    set(MAKEPROGRAM ${CMAKE_MAKE_PROGRAM})
-  endif ()
-
   if(BUILD_TESTING)
-    set(CMAKE_TEST_GENERATOR "" CACHE STRING
-      "Generator used when running tests")
-    set(CMAKE_TEST_MAKEPROGRAM "" CACHE FILEPATH
-      "Generator used when running tests")
-    if(NOT CMAKE_TEST_GENERATOR)
-      set(CMAKE_TEST_GENERATOR "${CMAKE_GENERATOR}")
-      set(CMAKE_TEST_MAKEPROGRAM "${MAKEPROGRAM}")
-    else()
-      set(CMAKE_TEST_DIFFERENT_GENERATOR TRUE)
-    endif()
-
-    # Are we testing with the MSVC compiler?
-    set(CMAKE_TEST_MSVC 0)
-    if(MSVC AND NOT CMAKE_TEST_DIFFERENT_GENERATOR)
-      set(CMAKE_TEST_MSVC 1)
-    else()
-      if("${CMAKE_TEST_GENERATOR}" MATCHES "NMake" OR
-          "${CMAKE_TEST_GENERATOR}" MATCHES "Visual Studio")
-        set(CMAKE_TEST_MSVC 1)
-      endif()
-    endif()
-
     set(CMAKE_TEST_SYSTEM_LIBRARIES 0)
     foreach(util CURL EXPAT XMLRPC ZLIB)
       if(CMAKE_USE_SYSTEM_${util})
@@ -150,9 +130,19 @@ macro(CMAKE_SETUP_TESTING)
     # the ctest from this cmake is used for testing
     # and not the ctest from the cmake building and testing
     # cmake.
-    set(CMAKE_CTEST_COMMAND "${CMake_BIN_DIR}/ctest")
-    set(CMAKE_CMAKE_COMMAND "${CMake_BIN_DIR}/cmake")
-    set(CMAKE_CPACK_COMMAND "${CMake_BIN_DIR}/cpack")
+    if(CMake_TEST_EXTERNAL_CMAKE)
+      set(CMAKE_CTEST_COMMAND "${CMake_TEST_EXTERNAL_CMAKE}/ctest")
+      set(CMAKE_CMAKE_COMMAND "${CMake_TEST_EXTERNAL_CMAKE}/cmake")
+      set(CMAKE_CPACK_COMMAND "${CMake_TEST_EXTERNAL_CMAKE}/cpack")
+      foreach(exe cmake ctest cpack)
+        add_executable(${exe} IMPORTED)
+        set_property(TARGET ${exe} PROPERTY IMPORTED_LOCATION ${CMake_TEST_EXTERNAL_CMAKE}/${exe})
+      endforeach()
+    else()
+      set(CMAKE_CTEST_COMMAND "${CMake_BIN_DIR}/ctest")
+      set(CMAKE_CMAKE_COMMAND "${CMake_BIN_DIR}/cmake")
+      set(CMAKE_CPACK_COMMAND "${CMake_BIN_DIR}/cpack")
+    endif()
   endif()
 
   # configure some files for testing
@@ -165,8 +155,6 @@ macro(CMAKE_SETUP_TESTING)
     ${CMake_BINARY_DIR}/Modules/.NoDartCoverage)
   configure_file(${CMake_SOURCE_DIR}/CTestCustom.cmake.in
     ${CMake_BINARY_DIR}/CTestCustom.cmake @ONLY)
-  configure_file(${CMake_SOURCE_DIR}/CTestCustom.ctest.in
-    ${CMake_BINARY_DIR}/CTestCustom.ctest @ONLY)
   if(BUILD_TESTING AND DART_ROOT)
     configure_file(${CMake_SOURCE_DIR}/CMakeLogo.gif
       ${CMake_BINARY_DIR}/Testing/HTML/TestingResults/Icons/Logo.gif COPYONLY)
@@ -191,15 +179,8 @@ mark_as_advanced(CMAKE_USE_FOLDERS)
 macro(CMAKE_SET_TARGET_FOLDER tgt folder)
   if(CMAKE_USE_FOLDERS)
     set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-
-    # Really, I just want this to be an "if(TARGET ${tgt})" ...
-    # but I'm not sure that our min req'd., CMake 2.4.5 can handle
-    # that... so I'm just activating this for now, with a version
-    # compare, and only for MSVC builds.
-    if(MSVC)
-      if(NOT ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION} LESS 2.8)
-        set_property(TARGET "${tgt}" PROPERTY FOLDER "${folder}")
-      endif()
+    if(MSVC AND TARGET ${tgt})
+      set_property(TARGET "${tgt}" PROPERTY FOLDER "${folder}")
     endif()
   else()
     set_property(GLOBAL PROPERTY USE_FOLDERS OFF)
@@ -229,7 +210,7 @@ macro (CMAKE_BUILD_UTILITIES)
   set(KWSYS_USE_Process 1)
   set(KWSYS_USE_CommandLineArguments 1)
   set(KWSYS_HEADER_ROOT ${CMake_BINARY_DIR}/Source)
-  set(KWSYS_INSTALL_DOC_DIR "${CMake_DOC_DEST}")
+  set(KWSYS_INSTALL_DOC_DIR "${CMAKE_DOC_DIR}")
   add_subdirectory(Source/kwsys)
   set(kwsys_folder "Utilities/KWSys")
   CMAKE_SET_TARGET_FOLDER(${KWSYS_NAMESPACE} "${kwsys_folder}")
@@ -321,11 +302,7 @@ macro (CMAKE_BUILD_UTILITIES)
   #---------------------------------------------------------------------
   # Build or use system libarchive for CMake and CTest.
   if(CMAKE_USE_SYSTEM_LIBARCHIVE)
-    if(EXISTS ${CMAKE_ROOT}/Modules/FindLibArchive.cmake) # added in 2.8.3
-      find_package(LibArchive)
-    else()
-      include(${CMake_SOURCE_DIR}/Modules/FindLibArchive.cmake)
-    endif()
+    find_package(LibArchive)
     if(NOT LibArchive_FOUND)
       message(FATAL_ERROR "CMAKE_USE_SYSTEM_LIBARCHIVE is ON but LibArchive is not found!")
     endif()
@@ -399,18 +376,20 @@ macro (CMAKE_BUILD_UTILITIES)
 endmacro ()
 
 #-----------------------------------------------------------------------
-if(CMAKE_CXX_PLATFORM_ID MATCHES "OpenBSD")
-  execute_process(COMMAND ${CMAKE_CXX_COMPILER}
-    ${CMAKE_CXX_COMPILER_ARG1} -dumpversion
-    OUTPUT_VARIABLE _GXX_VERSION
-  )
-  string(REGEX REPLACE "([0-9])\\.([0-9])(\\.[0-9])?" "\\1\\2"
-    _GXX_VERSION_SHORT ${_GXX_VERSION})
-  if(_GXX_VERSION_SHORT EQUAL 33)
-    message(FATAL_ERROR
-      "GXX 3.3 on OpenBSD is known to cause CPack to Crash.\n"
-      "Please use GXX 4.2 or greater to build CMake on OpenBSD\n"
-      "${CMAKE_CXX_COMPILER} version is: ${_GXX_VERSION}")
+if(NOT CMake_TEST_EXTERNAL_CMAKE)
+  if(CMAKE_CXX_PLATFORM_ID MATCHES "OpenBSD")
+    execute_process(COMMAND ${CMAKE_CXX_COMPILER}
+      ${CMAKE_CXX_COMPILER_ARG1} -dumpversion
+      OUTPUT_VARIABLE _GXX_VERSION
+    )
+    string(REGEX REPLACE "([0-9])\\.([0-9])(\\.[0-9])?" "\\1\\2"
+      _GXX_VERSION_SHORT ${_GXX_VERSION})
+    if(_GXX_VERSION_SHORT EQUAL 33)
+      message(FATAL_ERROR
+        "GXX 3.3 on OpenBSD is known to cause CPack to Crash.\n"
+        "Please use GXX 4.2 or greater to build CMake on OpenBSD\n"
+        "${CMAKE_CXX_COMPILER} version is: ${_GXX_VERSION}")
+    endif()
   endif()
 endif()
 
@@ -418,27 +397,8 @@ endif()
 # The main section of the CMakeLists file
 #
 #-----------------------------------------------------------------------
-include(Source/CMakeVersion.cmake)
-# Releases define a small tweak level.
-if("${CMake_VERSION_TWEAK}" VERSION_LESS 20000000)
-  set(CMake_VERSION_IS_RELEASE 1)
-  set(CMake_VERSION_SOURCE "")
-else()
-  set(CMake_VERSION_IS_RELEASE 0)
-  include(${CMake_SOURCE_DIR}/Source/CMakeVersionSource.cmake)
-endif()
-
-# Compute the full version string.
-set(CMake_VERSION ${CMake_VERSION_MAJOR}.${CMake_VERSION_MINOR}.${CMake_VERSION_PATCH})
-if(${CMake_VERSION_TWEAK} GREATER 0)
-  set(CMake_VERSION ${CMake_VERSION}.${CMake_VERSION_TWEAK})
-endif()
-if(CMake_VERSION_RC)
-  set(CMake_VERSION ${CMake_VERSION}-rc${CMake_VERSION_RC})
-endif()
-if(CMake_VERSION_SOURCE)
-  set(CMake_VERSION ${CMake_VERSION}-${CMake_VERSION_SOURCE})
-endif()
+# Compute CMake_VERSION, etc.
+include(Source/CMakeVersionCompute.cmake)
 
 # Include the standard Dart testing module
 enable_testing()
@@ -448,48 +408,32 @@ include (${CMAKE_ROOT}/Modules/Dart.cmake)
 set_directory_properties(PROPERTIES
   TEST_INCLUDE_FILE "${CMake_BINARY_DIR}/Tests/EnforceConfig.cmake")
 
-# where to write the resulting executables and libraries
-set(BUILD_SHARED_LIBS OFF)
-set(EXECUTABLE_OUTPUT_PATH "" CACHE INTERNAL "No configurable exe dir.")
-set(LIBRARY_OUTPUT_PATH "" CACHE INTERNAL
-  "Where to put the libraries for CMake")
+if(NOT CMake_TEST_EXTERNAL_CMAKE)
+  # where to write the resulting executables and libraries
+  set(BUILD_SHARED_LIBS OFF)
+  set(EXECUTABLE_OUTPUT_PATH "" CACHE INTERNAL "No configurable exe dir.")
+  set(LIBRARY_OUTPUT_PATH "" CACHE INTERNAL
+    "Where to put the libraries for CMake")
 
-# The CMake executables usually do not need any rpath to run in the build or
-# install tree.
-set(CMAKE_SKIP_RPATH ON CACHE INTERNAL "CMake does not need RPATHs.")
+  # The CMake executables usually do not need any rpath to run in the build or
+  # install tree.
+  set(CMAKE_SKIP_RPATH ON CACHE INTERNAL "CMake does not need RPATHs.")
 
-set(CMAKE_DATA_DIR "/share/cmake-${CMake_VERSION_MAJOR}.${CMake_VERSION_MINOR}" CACHE STRING
-  "Install location for data (relative to prefix).")
-set(CMAKE_DOC_DIR "/doc/cmake-${CMake_VERSION_MAJOR}.${CMake_VERSION_MINOR}" CACHE STRING
-  "Install location for documentation (relative to prefix).")
-set(CMAKE_MAN_DIR "/man" CACHE STRING
-  "Install location for man pages (relative to prefix).")
-mark_as_advanced(CMAKE_DATA_DIR CMAKE_DOC_DIR CMAKE_MAN_DIR)
-if(CYGWIN AND EXISTS "${CMAKE_ROOT}/Modules/CPack.cmake")
-  # Force doc, data and man dirs to conform to cygwin layout.
-  set(CMAKE_DOC_DIR  "/share/doc/cmake-${CMake_VERSION}")
-  set(CMAKE_DATA_DIR "/share/cmake-${CMake_VERSION}")
-  set(CMAKE_MAN_DIR  "/share/man")
-  # let the user know we just forced these values
-  message(STATUS "Setup for Cygwin packaging")
-  message(STATUS "Override cache CMAKE_DOC_DIR = ${CMAKE_DOC_DIR}")
-  message(STATUS "Override cache CMAKE_DATA_DIR = ${CMAKE_DATA_DIR}")
-  message(STATUS "Override cache CMAKE_MAN_DIR = ${CMAKE_MAN_DIR}")
+  # Load install destinations.
+  include(Source/CMakeInstallDestinations.cmake)
+
+  if(BUILD_TESTING)
+    include(${CMake_SOURCE_DIR}/Tests/CMakeInstall.cmake)
+  endif()
+
+  # include special compile flags for some compilers
+  include(CompileFlags.cmake)
+
+  # no clue why we are testing for this here
+  include(CheckSymbolExists)
+  CHECK_SYMBOL_EXISTS(unsetenv "stdlib.h" HAVE_UNSETENV)
+  CHECK_SYMBOL_EXISTS(environ "stdlib.h" HAVE_ENVIRON_NOT_REQUIRE_PROTOTYPE)
 endif()
-string(REGEX REPLACE "^/" "" CMake_DATA_DEST "${CMAKE_DATA_DIR}")
-string(REGEX REPLACE "^/" "" CMake_DOC_DEST "${CMAKE_DOC_DIR}")
-
-if(BUILD_TESTING)
-  include(${CMake_SOURCE_DIR}/Tests/CMakeInstall.cmake)
-endif()
-
-# include special compile flags for some compilers
-include(CompileFlags.cmake)
-
-# no clue why we are testing for this here
-include(CheckSymbolExists)
-CHECK_SYMBOL_EXISTS(unsetenv "stdlib.h" HAVE_UNSETENV)
-CHECK_SYMBOL_EXISTS(environ "stdlib.h" HAVE_ENVIRON_NOT_REQUIRE_PROTOTYPE)
 
 # CMAKE_TESTS_CDASH_SERVER: CDash server used by CMake/Tests.
 #
@@ -508,69 +452,72 @@ if("x${CMAKE_TESTS_CDASH_SERVER}" STREQUAL "x")
   set(CMAKE_TESTS_CDASH_SERVER "http://www.cdash.org/CDash")
 endif()
 
-# build the utilities (a macro defined in this file)
-CMAKE_BUILD_UTILITIES()
+if(NOT CMake_TEST_EXTERNAL_CMAKE)
+  # build the utilities (a macro defined in this file)
+  CMAKE_BUILD_UTILITIES()
 
-# On NetBSD ncurses is required, since curses doesn't have the wsyncup()
-# function. ncurses is installed via pkgsrc, so the library is in /usr/pkg/lib,
-# which isn't in the default linker search path. So without RPATH ccmake
-# doesn't run and the build doesn't succeed since ccmake is executed for
-# generating the documentation.
-if(BUILD_CursesDialog)
-  get_filename_component(_CURSES_DIR "${CURSES_LIBRARY}" PATH)
-  set(CURSES_NEED_RPATH FALSE)
-  if(NOT "${_CURSES_DIR}" STREQUAL "/lib" AND NOT "${_CURSES_DIR}" STREQUAL "/usr/lib" AND NOT "${_CURSES_DIR}" STREQUAL "/lib64" AND NOT "${_CURSES_DIR}" STREQUAL "/usr/lib64")
-    set(CURSES_NEED_RPATH TRUE)
-  endif()
-endif()
-
-if(BUILD_QtDialog)
-  if(APPLE)
-    set(CMAKE_BUNDLE_NAME
-      "CMake ${CMake_VERSION_MAJOR}.${CMake_VERSION_MINOR}-${CMake_VERSION_PATCH}")
-    set(CMAKE_BUNDLE_LOCATION "${CMAKE_INSTALL_PREFIX}")
-    # make sure CMAKE_INSTALL_PREFIX ends in /
-    string(LENGTH "${CMAKE_INSTALL_PREFIX}" LEN)
-    math(EXPR LEN "${LEN} -1" )
-    string(SUBSTRING "${CMAKE_INSTALL_PREFIX}" ${LEN} 1 ENDCH)
-    if(NOT "${ENDCH}" STREQUAL "/")
-      set(CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}/")
+  # On NetBSD ncurses is required, since curses doesn't have the wsyncup()
+  # function. ncurses is installed via pkgsrc, so the library is in /usr/pkg/lib,
+  # which isn't in the default linker search path. So without RPATH ccmake
+  # doesn't run and the build doesn't succeed since ccmake is executed for
+  # generating the documentation.
+  if(BUILD_CursesDialog)
+    get_filename_component(_CURSES_DIR "${CURSES_LIBRARY}" PATH)
+    set(CURSES_NEED_RPATH FALSE)
+    if(NOT "${_CURSES_DIR}" STREQUAL "/lib" AND NOT "${_CURSES_DIR}" STREQUAL "/usr/lib" AND NOT "${_CURSES_DIR}" STREQUAL "/lib64" AND NOT "${_CURSES_DIR}" STREQUAL "/usr/lib64")
+      set(CURSES_NEED_RPATH TRUE)
     endif()
-    set(CMAKE_INSTALL_PREFIX
-      "${CMAKE_INSTALL_PREFIX}${CMAKE_BUNDLE_NAME}.app/Contents")
   endif()
 
-  set(QT_NEED_RPATH FALSE)
-  if(NOT "${QT_LIBRARY_DIR}" STREQUAL "/lib" AND NOT "${QT_LIBRARY_DIR}" STREQUAL "/usr/lib" AND NOT "${QT_LIBRARY_DIR}" STREQUAL "/lib64" AND NOT "${QT_LIBRARY_DIR}" STREQUAL "/usr/lib64")
-    set(QT_NEED_RPATH TRUE)
+  if(BUILD_QtDialog)
+    if(APPLE)
+      set(CMAKE_BUNDLE_VERSION
+        "${CMake_VERSION_MAJOR}.${CMake_VERSION_MINOR}.${CMake_VERSION_PATCH}")
+      set(CMAKE_BUNDLE_LOCATION "${CMAKE_INSTALL_PREFIX}")
+      # make sure CMAKE_INSTALL_PREFIX ends in /
+      string(LENGTH "${CMAKE_INSTALL_PREFIX}" LEN)
+      math(EXPR LEN "${LEN} -1" )
+      string(SUBSTRING "${CMAKE_INSTALL_PREFIX}" ${LEN} 1 ENDCH)
+      if(NOT "${ENDCH}" STREQUAL "/")
+        set(CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}/")
+      endif()
+      set(CMAKE_INSTALL_PREFIX
+        "${CMAKE_INSTALL_PREFIX}CMake.app/Contents")
+    endif()
+
+    set(QT_NEED_RPATH FALSE)
+    if(NOT "${QT_LIBRARY_DIR}" STREQUAL "/lib" AND NOT "${QT_LIBRARY_DIR}" STREQUAL "/usr/lib" AND NOT "${QT_LIBRARY_DIR}" STREQUAL "/lib64" AND NOT "${QT_LIBRARY_DIR}" STREQUAL "/usr/lib64")
+      set(QT_NEED_RPATH TRUE)
+    endif()
   endif()
+
+
+  # The same might be true on other systems for other libraries.
+  # Then only enable RPATH if we have are building at least with cmake 2.4,
+  # since this one has much better RPATH features than cmake 2.2.
+  # The executables are then built with the RPATH for the libraries outside
+  # the build tree, which is both the build and the install RPATH.
+  if (UNIX)
+    if(   CMAKE_USE_SYSTEM_CURL   OR  CMAKE_USE_SYSTEM_ZLIB
+          OR  CMAKE_USE_SYSTEM_EXPAT  OR  CTEST_USE_XMLRPC  OR  CURSES_NEED_RPATH  OR  QT_NEED_RPATH)
+      set(CMAKE_SKIP_RPATH OFF CACHE INTERNAL "CMake built with RPATH.")
+      set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+      set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+    endif()
+  endif ()
+
+
+  # add the uninstall support
+  configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
+    @ONLY)
+  add_custom_target(uninstall
+    "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake")
+
+  include (CMakeCPack.cmake)
+
 endif()
-
-
-# The same might be true on other systems for other libraries.
-# Then only enable RPATH if we have are building at least with cmake 2.4,
-# since this one has much better RPATH features than cmake 2.2.
-# The executables are then built with the RPATH for the libraries outside
-# the build tree, which is both the build and the install RPATH.
-if (UNIX)
-  if(   CMAKE_USE_SYSTEM_CURL   OR  CMAKE_USE_SYSTEM_ZLIB
-        OR  CMAKE_USE_SYSTEM_EXPAT  OR  CTEST_USE_XMLRPC  OR  CURSES_NEED_RPATH  OR  QT_NEED_RPATH)
-    set(CMAKE_SKIP_RPATH OFF CACHE INTERNAL "CMake built with RPATH.")
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-    set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
-  endif()
-endif ()
-
-
-# add the uninstall support
-configure_file(
-  "${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
-  @ONLY)
-add_custom_target(uninstall
-  "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake")
-
-include (CMakeCPack.cmake)
 
 # setup some Testing support (a macro defined in this file)
 CMAKE_SETUP_TESTING()
@@ -579,75 +526,69 @@ configure_file(
   "${CMAKE_CURRENT_BINARY_DIR}/DartLocal.conf"
   COPYONLY)
 
-option(CMAKE_STRICT
-  "Perform strict testing to record property and variable access. Can be used to report any undefined properties or variables" OFF)
-mark_as_advanced(CMAKE_STRICT)
+if(NOT CMake_TEST_EXTERNAL_CMAKE)
+  if(NOT CMake_VERSION_IS_RELEASE)
+    if("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU" AND
+        NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS 4.2)
+      set(C_FLAGS_LIST -Wcast-align -Werror-implicit-function-declaration -Wchar-subscripts
+                       -Wall -W -Wpointer-arith -Wwrite-strings -Wformat-security
+                       -Wmissing-format-attribute -fno-common -Wundef
+      )
+      set(CXX_FLAGS_LIST -Wnon-virtual-dtor -Wcast-align -Wchar-subscripts -Wall -W
+                         -Wshadow -Wpointer-arith -Wformat-security -Wundef
+      )
 
-if(NOT CMake_VERSION_IS_RELEASE)
-  if("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU" AND
-      NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS 4.2)
-    set(C_FLAGS_LIST -Wcast-align -Werror-implicit-function-declaration -Wchar-subscripts
-                     -Wall -W -Wpointer-arith -Wwrite-strings -Wformat-security
-                     -Wmissing-format-attribute -fno-common -Wundef
-    )
-    set(CXX_FLAGS_LIST -Wnon-virtual-dtor -Wcast-align -Wchar-subscripts -Wall -W
-                       -Wshadow -Wpointer-arith -Wformat-security -Wundef
-    )
-
-    foreach(FLAG_LANG  C CXX)
-      foreach(FLAG ${${FLAG_LANG}_FLAGS_LIST})
-        if(NOT " ${CMAKE_${FLAG_LANG}_FLAGS} " MATCHES " ${FLAG} ")
-          set(CMAKE_${FLAG_LANG}_FLAGS "${CMAKE_${FLAG_LANG}_FLAGS} ${FLAG}")
-        endif()
+      foreach(FLAG_LANG  C CXX)
+        foreach(FLAG ${${FLAG_LANG}_FLAGS_LIST})
+          if(NOT " ${CMAKE_${FLAG_LANG}_FLAGS} " MATCHES " ${FLAG} ")
+            set(CMAKE_${FLAG_LANG}_FLAGS "${CMAKE_${FLAG_LANG}_FLAGS} ${FLAG}")
+          endif()
+        endforeach()
       endforeach()
-    endforeach()
 
-    unset(C_FLAGS_LIST)
-    unset(CXX_FLAGS_LIST)
+      unset(C_FLAGS_LIST)
+      unset(CXX_FLAGS_LIST)
+    endif()
+  endif()
+
+  # build the remaining subdirectories
+  add_subdirectory(Source)
+  add_subdirectory(Utilities)
+endif()
+
+add_subdirectory(Tests)
+
+if(NOT CMake_TEST_EXTERNAL_CMAKE)
+  if(BUILD_TESTING)
+    CMAKE_SET_TARGET_FOLDER(CMakeLibTests "Tests")
+  endif()
+  CMAKE_SET_TARGET_FOLDER(cmw9xcom "Utilities/Win9xCompat")
+  if(TARGET documentation)
+    CMAKE_SET_TARGET_FOLDER(documentation "Documentation")
   endif()
 endif()
 
-# build the remaining subdirectories
-add_subdirectory(Source)
-add_subdirectory(Utilities)
-add_subdirectory(Tests)
-
-if(BUILD_TESTING)
-  CMAKE_SET_TARGET_FOLDER(CMakeLibTests "Tests")
-endif()
-CMAKE_SET_TARGET_FOLDER(cmw9xcom "Utilities/Win9xCompat")
-CMAKE_SET_TARGET_FOLDER(documentation "Documentation")
-
 # add a test
 add_test(SystemInformationNew "${CMAKE_CMAKE_COMMAND}"
-  --system-information  -G "${CMAKE_TEST_GENERATOR}" )
+  --system-information  -G "${CMAKE_GENERATOR}" )
 
-# Install license file as it requires.
-install(FILES Copyright.txt DESTINATION ${CMake_DOC_DEST})
+if(NOT CMake_TEST_EXTERNAL_CMAKE)
+  # Install license file as it requires.
+  install(FILES Copyright.txt DESTINATION ${CMAKE_DOC_DIR})
 
-# Install script directories.
-install(
-  DIRECTORY Modules Templates
-  DESTINATION "${CMake_DATA_DEST}"
-  FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
-  DIRECTORY_PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE
-                        GROUP_READ GROUP_EXECUTE
-                        WORLD_READ WORLD_EXECUTE
-  PATTERN "*.sh*" PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE
-                              GROUP_READ GROUP_EXECUTE
-                              WORLD_READ WORLD_EXECUTE
-  )
+  # Install script directories.
+  install(
+    DIRECTORY Help Modules Templates
+    DESTINATION ${CMAKE_DATA_DIR}
+    FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
+    DIRECTORY_PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE
+                          GROUP_READ GROUP_EXECUTE
+                          WORLD_READ WORLD_EXECUTE
+    PATTERN "*.sh*" PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE
+                                GROUP_READ GROUP_EXECUTE
+                                WORLD_READ WORLD_EXECUTE
+    )
 
-# process docs related install
-add_subdirectory(Docs)
-
-#-----------------------------------------------------------------------
-# End of the main section of the CMakeLists file
-#-----------------------------------------------------------------------
-
-# As a special case when building CMake itself, CMake 2.8.0 and below
-# look up EXECUTABLE_OUTPUT_PATH in the top-level CMakeLists.txt file
-# to compute the location of the "cmake" executable.  We set it here
-# so that those CMake versions can find it.  We wait until after all
-# the add_subdirectory() calls to avoid affecting the subdirectories.
-set(EXECUTABLE_OUTPUT_PATH ${CMake_BIN_DIR})
+  # Install auxiliary files integrating with other tools.
+  add_subdirectory(Auxiliary)
+endif()

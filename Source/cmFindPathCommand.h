@@ -49,20 +49,10 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const {return "find_path";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Find the directory containing a file.";
-    }
+  virtual std::string GetName() const {return "find_path";}
 
   cmTypeMacro(cmFindPathCommand, cmFindBase);
   bool IncludeFileInPath;
-protected:
-  virtual void GenerateDocumentation();
 private:
   std::string FindHeaderInFramework(std::string const& file,
                                     std::string const& dir);

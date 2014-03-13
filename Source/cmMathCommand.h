@@ -41,29 +41,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "math";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Mathematical expressions.";
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "  math(EXPR <output variable> <math expression>)\n"
-      "EXPR evaluates mathematical expression and returns result in the "
-      "output variable. Example mathematical expression is "
-      "'5 * ( 10 + 13 )'.  Supported operators are "
-      "+ - * / % | & ^ ~ << >> * / %.  They have the same meaning "
-      " as they do in C code.";
-    }
+  virtual std::string GetName() const { return "math";}
 
   cmTypeMacro(cmMathCommand, cmCommand);
 protected:

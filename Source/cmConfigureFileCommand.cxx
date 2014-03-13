@@ -38,7 +38,7 @@ bool cmConfigureFileCommand
     e << "input location\n"
       << "  " << this->InputFile << "\n"
       << "is a directory but a file was expected.";
-    this->SetError(e.str().c_str());
+    this->SetError(e.str());
     return false;
     }
 
@@ -61,22 +61,18 @@ bool cmConfigureFileCommand
     {
     std::string e = "attempted to configure a file: " + this->OutputFile
       + " into a source directory.";
-    this->SetError(e.c_str());
+    this->SetError(e);
     cmSystemTools::SetFatalErrorOccured();
     return false;
     }
   std::string errorMessage;
   if (!this->NewLineStyle.ReadFromArguments(args, errorMessage))
     {
-    this->SetError(errorMessage.c_str());
+    this->SetError(errorMessage);
     return false;
     }
   this->CopyOnly = false;
   this->EscapeQuotes = false;
-
-  // for CMake 2.0 and earlier CONFIGURE_FILE defaults to the FinalPass,
-  // after 2.0 it only does InitialPass
-  this->Immediate = !this->Makefile->NeedBackwardsCompatibility(2,0);
 
   this->AtOnly = false;
   for(unsigned int i=2;i < args.size();++i)
@@ -101,30 +97,17 @@ bool cmConfigureFileCommand
       }
     else if(args[i] == "IMMEDIATE")
       {
-      this->Immediate = true;
+      /* Ignore legacy option.  */
       }
     }
 
-  // If we were told to copy the file immediately, then do it on the
-  // first pass (now).
-  if(this->Immediate)
+  if ( !this->ConfigureFile() )
     {
-    if ( !this->ConfigureFile() )
-      {
-      this->SetError("Problem configuring file");
-      return false;
-      }
+    this->SetError("Problem configuring file");
+    return false;
     }
 
   return true;
-}
-
-void cmConfigureFileCommand::FinalPass()
-{
-  if(!this->Immediate)
-    {
-    this->ConfigureFile();
-    }
 }
 
 int cmConfigureFileCommand::ConfigureFile()

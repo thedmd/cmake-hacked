@@ -45,25 +45,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const {return "break";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Break from an enclosing foreach or while loop.";
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "  break()\n"
-      "Breaks from an enclosing foreach loop or while loop";
-    }
+  virtual std::string GetName() const {return "break";}
 
   cmTypeMacro(cmBreakCommand, cmCommand);
 };

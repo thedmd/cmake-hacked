@@ -31,9 +31,9 @@ public:
       <cmGlobalVisualStudio6Generator>(); }
 
   ///! Get the name for the generator.
-  virtual const char* GetName() const {
+  virtual std::string GetName() const {
     return cmGlobalVisualStudio6Generator::GetActualName();}
-  static const char* GetActualName() {return "Visual Studio 6";}
+  static std::string GetActualName() {return "Visual Studio 6";}
 
   /** Get the documentation entry for this generator.  */
   static void GetDocumentation(cmDocumentationEntry& entry);
@@ -52,13 +52,16 @@ public:
    * Try running cmake and building a file. This is used for dynalically
    * loaded commands, not as part of the usual build process.
    */
-  virtual std::string GenerateBuildCommand(const char* makeProgram,
-                                           const char *projectName,
-                                           const char* additionalOptions,
-                                           const char *targetName,
-                                           const char* config,
-                                           bool ignoreErrors,
-                                           bool fast);
+  virtual void GenerateBuildCommand(
+    std::vector<std::string>& makeCommand,
+    const std::string& makeProgram,
+    const std::string& projectName,
+    const std::string& projectDir,
+    const std::string& targetName,
+    const std::string& config,
+    bool fast,
+    std::vector<std::string> const& makeOptions = std::vector<std::string>()
+    );
 
   /**
    * Generate the all required files for building this project/tree. This
@@ -78,27 +81,35 @@ public:
                             std::vector<cmLocalGenerator*>& generators);
 
   /** Append the subdirectory for the given configuration.  */
-  virtual void AppendDirectoryForConfig(const char* prefix,
-                                        const char* config,
-                                        const char* suffix,
+  virtual void AppendDirectoryForConfig(const std::string& prefix,
+                                        const std::string& config,
+                                        const std::string& suffix,
                                         std::string& dir);
 
   ///! What is the configurations directory variable called?
   virtual const char* GetCMakeCFGIntDir() const { return "$(IntDir)"; }
 
+  virtual void FindMakeProgram(cmMakefile*);
+
 protected:
   virtual const char* GetIDEVersion() { return "6.0"; }
 private:
+  virtual std::string GetVSMakeProgram() { return this->GetMSDevCommand(); }
   void GenerateConfigurations(cmMakefile* mf);
   void WriteDSWFile(std::ostream& fout);
   void WriteDSWHeader(std::ostream& fout);
   void WriteProject(std::ostream& fout,
-                    const char* name, const char* path, cmTarget &t);
+                    const std::string& name, const char* path,
+                    cmTarget const& t);
   void WriteExternalProject(std::ostream& fout,
-                            const char* name, const char* path,
-                            const std::set<cmStdString>& dependencies);
+                            const std::string& name, const char* path,
+                            const std::set<std::string>& dependencies);
   void WriteDSWFooter(std::ostream& fout);
-  virtual std::string WriteUtilityDepend(cmTarget* target);
+  virtual std::string WriteUtilityDepend(cmTarget const* target);
+  std::string MSDevCommand;
+  bool MSDevCommandInitialized;
+  std::string const& GetMSDevCommand();
+  std::string FindMSDevCommand();
 };
 
 #endif

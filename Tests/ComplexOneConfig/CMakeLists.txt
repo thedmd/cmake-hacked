@@ -1,7 +1,7 @@
 #
 # A more complex test case
 #
-set(CMAKE_BACKWARDS_COMPATIBILITY 1.4)
+cmake_minimum_required(VERSION 2.4)
 project (Complex)
 
 # Try setting a new policy.  The IF test is for coverage.
@@ -45,12 +45,12 @@ endmacro()
 TEST_ARGC(-DCMAKE_ARGV1 -DCMAKE_ARGV2 -DCMAKE_ARGV3 -DCMAKE_ARGV4)
 
 macro(TEST_VAR_ARG fa)
-  if("${ARGV}" MATCHES "^1;2;3$")
+  if("${ARGV}" STREQUAL "1;2;3")
     message(STATUS "ARGV works")
   else()
     message(FATAL_ERROR "ARGV does not work; got \"${ARGV}\" instead of \"1;2;3\"")
   endif()
-  if("${ARGN}" MATCHES "^2;3$")
+  if("${ARGN}" STREQUAL "2;3")
     message(STATUS "ARGN works")
   else()
     message(FATAL_ERROR "ARGV does not work; got \"${ARGN}\" instead of \"2;3\"")
@@ -163,7 +163,7 @@ execute_process(
   COMMAND ${CMAKE_COMMAND} -E echo "ABCDEFG"
   OUTPUT_VARIABLE TEST_OUT
   )
-if("${TEST_OUT}" MATCHES "^ABCDEFG\n$")
+if("${TEST_OUT}" STREQUAL "ABCDEFG\n")
 else()
   message(SEND_ERROR "EXECUTE_PROCESS output test failed: [${TEST_OUT}]")
 endif()
@@ -177,7 +177,7 @@ endif()
 #   ERROR_QUIET
 #   RESULT_VARIABLE RESULT
 #   )
-# if("${RESULT}" MATCHES "^0$")
+# if("${RESULT}" STREQUAL "0")
 #   message(SEND_ERROR
 #     "EXECUTE_PROCESS result test failed with RESULT=[${RESULT}]")
 # else()
@@ -198,12 +198,12 @@ make_directory("${Complex_BINARY_DIR}/make_dir")
 configure_file(
   ${Complex_SOURCE_DIR}/Library/dummy
   ${Complex_BINARY_DIR}/Library/dummylib.lib
-  COPYONLY IMMEDIATE)
+  COPYONLY)
 foreach (ext ${CMAKE_SHLIB_SUFFIX};.so;.a;.sl)
   configure_file(
     ${Complex_SOURCE_DIR}/Library/dummy
     ${Complex_BINARY_DIR}/Library/libdummylib${ext}
-    COPYONLY IMMEDIATE)
+    COPYONLY)
 endforeach ()
 
 find_library(FIND_DUMMY_LIB
@@ -251,7 +251,7 @@ if (WIN32)
     configure_file(
       ${Complex_SOURCE_DIR}/Library/dummy
       "${dir}/${file}"
-      COPYONLY IMMEDIATE)
+      COPYONLY)
     exec_program(${CMAKE_COMMAND} ARGS "-E write_regv \"${hkey}\" \"${dir}\"")
     find_path(REGISTRY_TEST_PATH
       ${file}
@@ -357,10 +357,7 @@ if(NOT RESULT)
   message(SEND_ERROR "string(REGEX MATCHALL ... ) test failed.")
 endif()
 string(REGEX REPLACE ".([bd])." "[\\1]" RESULT "a(b)c(d)e")
-if("x${RESULT}" MATCHES "^xa\\[b\\]c\\[d\\]e$")
-  set(STRING_REGEX_PASSED 1)
-endif()
-if(NOT STRING_REGEX_PASSED)
+if(NOT RESULT STREQUAL "a[b]c[d]e")
   message(SEND_ERROR
     "string(REGEX REPLACE ... ) test failed (\"${RESULT}\" v. \"a[b]c[d]e\")")
 endif()

@@ -40,6 +40,9 @@
 #pragma warning ( disable : 1572 ) /* floating-point equality test */
 #endif
 
+// Provide fixed-size integer types.
+#include <cmIML/INT.h>
+
 #include <stdarg.h> // Work-around for SGI MIPSpro 7.4.2m header bug
 
 // This is a hack to prevent warnings about these functions being
@@ -238,7 +241,7 @@ inline bool operator==(std::string const& a, const char* b)
 // std::string is really basic_string<....lots of stuff....>
 // when combined with a map or set, the symbols can be > 2000 chars!
 #include <cmsys/String.hxx>
-typedef cmsys::String cmStdString;
+//typedef cmsys::String std::string;
 
 // Define cmOStringStream and cmIStringStream wrappers to hide
 // differences between std::stringstream and the old strstream.
@@ -321,14 +324,12 @@ struct cmDocumentationEntry
 {
   std::string Name;
   std::string Brief;
-  std::string Full;
   cmDocumentationEntry(){};
-  cmDocumentationEntry(const char *doc[3])
+  cmDocumentationEntry(const char *doc[2])
   { if (doc[0]) this->Name = doc[0];
-  if (doc[1]) this->Brief = doc[1];
-  if (doc[2]) this->Full = doc[2]; };
-  cmDocumentationEntry(const char *n, const char *b, const char *f)
-  { if (n) this->Name = n; if (b) this->Brief = b; if (f) this->Full = f; };
+  if (doc[1]) this->Brief = doc[1];};
+  cmDocumentationEntry(const char *n, const char *b)
+  { if (n) this->Name = n; if (b) this->Brief = b; };
 };
 
 /** Data structure to represent a single command line.  */
@@ -379,6 +380,95 @@ static thisClass* SafeDownCast(cmObject *c) \
   return 0;\
 }
 
+inline bool cmHasLiteralPrefixImpl(const std::string &str1,
+                                 const char *str2,
+                                 size_t N)
+{
+  return strncmp(str1.c_str(), str2, N) == 0;
+}
 
+inline bool cmHasLiteralPrefixImpl(const char* str1,
+                                 const char *str2,
+                                 size_t N)
+{
+  return strncmp(str1, str2, N) == 0;
+}
+
+inline bool cmHasLiteralSuffixImpl(const std::string &str1,
+                                   const char *str2,
+                                   size_t N)
+{
+  size_t len = str1.size();
+  return len >= N && strcmp(str1.c_str() + len - N, str2) == 0;
+}
+
+inline bool cmHasLiteralSuffixImpl(const char* str1,
+                                   const char* str2,
+                                   size_t N)
+{
+  size_t len = strlen(str1);
+  return len >= N && strcmp(str1 + len - N, str2) == 0;
+}
+
+#if defined(_MSC_VER) && _MSC_VER < 1300 \
+  || defined(__GNUC__) && __GNUC__ < 3 \
+  || defined(__BORLANDC__)
+
+#define cmArrayBegin(a) a
+#define cmArraySize(a) (sizeof(a)/sizeof(*a))
+#define cmArrayEnd(a) a + cmArraySize(a)
+
+#define cmHasLiteralPrefix(STR1, STR2) \
+  cmHasLiteralPrefixImpl(STR1, "" STR2 "", sizeof(STR2) - 1)
+
+#define cmHasLiteralSuffix(STR1, STR2) \
+  cmHasLiteralSuffixImpl(STR1, "" STR2 "", sizeof(STR2) - 1)
+
+#else
+
+template<typename T, size_t N>
+const T* cmArrayBegin(const T (&a)[N]) { return a; }
+template<typename T, size_t N>
+const T* cmArrayEnd(const T (&a)[N]) { return a + N; }
+template<typename T, size_t N>
+size_t cmArraySize(const T (&)[N]) { return N; }
+
+template<typename T, size_t N>
+bool cmHasLiteralPrefix(T str1, const char (&str2)[N])
+{
+  return cmHasLiteralPrefixImpl(str1, str2, N - 1);
+}
+
+template<typename T, size_t N>
+bool cmHasLiteralSuffix(T str1, const char (&str2)[N])
+{
+  return cmHasLiteralSuffixImpl(str1, str2, N - 1);
+}
+
+#endif
+
+struct cmStrCmp {
+  cmStrCmp(const char *test) : m_test(test) {}
+  cmStrCmp(const std::string &test) : m_test(test) {}
+
+  bool operator()(const std::string& input) const
+  {
+    return m_test == input;
+  }
+
+  bool operator()(const char * input) const
+  {
+    return strcmp(input, m_test.c_str()) == 0;
+  }
+
+  // For use with binary_search
+  bool operator()(const char *str1, const char *str2) const
+  {
+    return strcmp(str1, str2) < 0;
+  }
+
+private:
+  const std::string m_test;
+};
 
 #endif

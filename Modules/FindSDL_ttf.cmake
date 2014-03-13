@@ -1,20 +1,34 @@
-# - Locate SDL_ttf library
+#.rst:
+# FindSDL_ttf
+# -----------
+#
+# Locate SDL_ttf library
+#
 # This module defines:
-#  SDL_TTF_LIBRARIES, the name of the library to link against
-#  SDL_TTF_INCLUDE_DIRS, where to find the headers
-#  SDL_TTF_FOUND, if false, do not try to link against
-#  SDL_TTF_VERSION_STRING - human-readable string containing the version of SDL_ttf
+#
+# ::
+#
+#   SDL_TTF_LIBRARIES, the name of the library to link against
+#   SDL_TTF_INCLUDE_DIRS, where to find the headers
+#   SDL_TTF_FOUND, if false, do not try to link against
+#   SDL_TTF_VERSION_STRING - human-readable string containing the version of SDL_ttf
+#
+#
 #
 # For backward compatiblity the following variables are also set:
-#  SDLTTF_LIBRARY (same value as SDL_TTF_LIBRARIES)
-#  SDLTTF_INCLUDE_DIR (same value as SDL_TTF_INCLUDE_DIRS)
-#  SDLTTF_FOUND (same value as SDL_TTF_FOUND)
 #
-# $SDLDIR is an environment variable that would
-# correspond to the ./configure --prefix=$SDLDIR
-# used in building SDL.
+# ::
 #
-# Created by Eric Wing. This was influenced by the FindSDL.cmake
+#   SDLTTF_LIBRARY (same value as SDL_TTF_LIBRARIES)
+#   SDLTTF_INCLUDE_DIR (same value as SDL_TTF_INCLUDE_DIRS)
+#   SDLTTF_FOUND (same value as SDL_TTF_FOUND)
+#
+#
+#
+# $SDLDIR is an environment variable that would correspond to the
+# ./configure --prefix=$SDLDIR used in building SDL.
+#
+# Created by Eric Wing.  This was influenced by the FindSDL.cmake
 # module, but with modifications to recognize OS X frameworks and
 # additional Unix paths (FreeBSD, etc).
 
@@ -40,8 +54,16 @@ find_path(SDL_TTF_INCLUDE_DIR SDL_ttf.h
   HINTS
     ENV SDLTTFDIR
     ENV SDLDIR
-  PATH_SUFFIXES include/SDL include/SDL12 include/SDL11 include
+  PATH_SUFFIXES SDL
+                # path suffixes to search inside ENV{SDLDIR}
+                include/SDL include/SDL12 include/SDL11 include
 )
+
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+  set(VC_LIB_PATH_SUFFIX lib/x64)
+else()
+  set(VC_LIB_PATH_SUFFIX lib/x86)
+endif()
 
 if(NOT SDL_TTF_LIBRARY AND SDLTTF_LIBRARY)
   set(SDL_TTF_LIBRARY ${SDLTTF_LIBRARY} CACHE FILEPATH "file cache entry
@@ -52,7 +74,7 @@ find_library(SDL_TTF_LIBRARY
   HINTS
     ENV SDLTTFDIR
     ENV SDLDIR
-  PATH_SUFFIXES lib
+  PATH_SUFFIXES lib ${VC_LIB_PATH_SUFFIX}
 )
 
 if(SDL_TTF_INCLUDE_DIR AND EXISTS "${SDL_TTF_INCLUDE_DIR}/SDL_ttf.h")

@@ -48,21 +48,12 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "find_program";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Find an executable program.";
-    }
+  virtual std::string GetName() const { return "find_program";}
 
   cmTypeMacro(cmFindProgramCommand, cmFindBase);
 
 protected:
   std::string FindProgram(std::vector<std::string> names);
-  virtual void GenerateDocumentation();
 
 private:
   std::string FindAppBundle(std::vector<std::string> names);

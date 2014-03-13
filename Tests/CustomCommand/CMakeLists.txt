@@ -29,9 +29,6 @@ set (EXECUTABLE_OUTPUT_PATH
 # add the executable that will generate the file
 add_executable(generator generator.cxx)
 
-get_target_property(generator_PATH generator LOCATION)
-message("Location ${generator_PATH}")
-
 ################################################################
 #
 #  Test using a wrapper to wrap a header file
@@ -123,6 +120,19 @@ add_custom_command(
   COMMENT "Running TDocument post-build commands"
   )
 
+# Setup a custom target that will fail if the POST_BUILD custom command
+# isn't run before it.
+add_custom_command(
+  OUTPUT doc3post.txt
+  DEPENDS ${PROJECT_BINARY_DIR}/doc2post.txt
+  COMMAND ${CMAKE_COMMAND} -E echo " Copying doc2pre.txt to doc3post.txt."
+  COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/doc2post.txt
+                                   ${PROJECT_BINARY_DIR}/doc3post.txt
+  COMMENT "Running TDocument post-build dependent custom command"
+  )
+add_custom_target(doc3Post ALL DEPENDS doc3post.txt)
+add_dependencies(doc3Post TDocument)
+
 ################################################################
 #
 #  Test using a multistep generated file
@@ -157,7 +167,7 @@ add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/not_included.h
 configure_file(
   ${PROJECT_SOURCE_DIR}/config.h.in
   ${PROJECT_BINARY_DIR}/config.h
-  @ONLY IMMEDIATE
+  @ONLY
   )
 
 # add the executable
@@ -176,7 +186,7 @@ add_executable(CustomCommand
 # generated source in a target.
 add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/generated.c
   DEPENDS generator
-  COMMAND ${generator_PATH}
+  COMMAND generator
   ARGS ${PROJECT_BINARY_DIR}/generated.c
   )
 
@@ -362,7 +372,7 @@ foreach(arg ${CHECK_ARGS} "")
 endforeach()
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/check_command_line.c.in
                ${CMAKE_CURRENT_BINARY_DIR}/check_command_line.c
-               @ONLY IMMEDIATE)
+               @ONLY)
 add_executable(check_command_line
   ${CMAKE_CURRENT_BINARY_DIR}/check_command_line.c)
 set(output_name "check_command_line")
@@ -436,3 +446,10 @@ set_property(SOURCE perconfig.out PROPERTY SYMBOLIC 1)
 add_custom_target(perconfig_target ALL
   COMMAND ${CMAKE_COMMAND} -E echo "perconfig=$<TARGET_FILE:perconfig>" "config=$<CONFIGURATION>"
   DEPENDS perconfig.out)
+
+# Test SOURCES in add_custom_target() with COMPILE_DEFINITIONS
+# which previously caused a crash in the makefile generators.
+add_custom_target(source_in_custom_target SOURCES source_in_custom_target.cpp)
+set_property(SOURCE source_in_custom_target
+  PROPERTY COMPILE_DEFINITIONS "TEST"
+)

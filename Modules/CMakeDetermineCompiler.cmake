@@ -69,4 +69,47 @@ macro(_cmake_find_compiler lang)
   endif()
   unset(_${lang}_COMPILER_HINTS)
   unset(_languages)
+
+  # Look for a make tool provided by Xcode
+  if(CMAKE_${lang}_COMPILER STREQUAL "CMAKE_${lang}_COMPILER-NOTFOUND" AND CMAKE_HOST_APPLE)
+    foreach(comp ${CMAKE_${lang}_COMPILER_LIST})
+      execute_process(COMMAND xcrun --find ${comp}
+        OUTPUT_VARIABLE _xcrun_out OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_VARIABLE _xcrun_err)
+      if(_xcrun_out)
+        set_property(CACHE CMAKE_${lang}_COMPILER PROPERTY VALUE "${_xcrun_out}")
+        break()
+      endif()
+    endforeach()
+  endif()
+endmacro()
+
+macro(_cmake_find_compiler_path lang)
+  if(CMAKE_${lang}_COMPILER)
+    # we only get here if CMAKE_${lang}_COMPILER was specified using -D or a pre-made CMakeCache.txt
+    # (e.g. via ctest) or set in CMAKE_TOOLCHAIN_FILE
+    # if CMAKE_${lang}_COMPILER is a list of length 2, use the first item as
+    # CMAKE_${lang}_COMPILER and the 2nd one as CMAKE_${lang}_COMPILER_ARG1
+    list(LENGTH CMAKE_${lang}_COMPILER _CMAKE_${lang}_COMPILER_LIST_LENGTH)
+    if("${_CMAKE_${lang}_COMPILER_LIST_LENGTH}" EQUAL 2)
+      list(GET CMAKE_${lang}_COMPILER 1 CMAKE_${lang}_COMPILER_ARG1)
+      list(GET CMAKE_${lang}_COMPILER 0 CMAKE_${lang}_COMPILER)
+    endif()
+    unset(_CMAKE_${lang}_COMPILER_LIST_LENGTH)
+
+    # find the compiler in the PATH if necessary
+    get_filename_component(_CMAKE_USER_${lang}_COMPILER_PATH "${CMAKE_${lang}_COMPILER}" PATH)
+    if(NOT _CMAKE_USER_${lang}_COMPILER_PATH)
+      find_program(CMAKE_${lang}_COMPILER_WITH_PATH NAMES ${CMAKE_${lang}_COMPILER})
+      if(CMAKE_${lang}_COMPILER_WITH_PATH)
+        set(CMAKE_${lang}_COMPILER ${CMAKE_${lang}_COMPILER_WITH_PATH})
+        get_property(_CMAKE_${lang}_COMPILER_CACHED CACHE CMAKE_${lang}_COMPILER PROPERTY TYPE)
+        if(_CMAKE_${lang}_COMPILER_CACHED)
+          set(CMAKE_${lang}_COMPILER "${CMAKE_${lang}_COMPILER}" CACHE STRING "${lang} compiler" FORCE)
+        endif()
+        unset(_CMAKE_${lang}_COMPILER_CACHED)
+      endif()
+      unset(CMAKE_${lang}_COMPILER_WITH_PATH CACHE)
+    endif()
+  endif()
 endmacro()

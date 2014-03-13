@@ -69,25 +69,8 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return info.Name; }
+  virtual std::string GetName() const { return info.Name; }
 
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-      if (this->info.GetTerseDocumentation)
-        {
-        cmLoadedCommand::InstallSignalHandlers(info.Name);
-        const char* ret = info.GetTerseDocumentation();
-        cmLoadedCommand::InstallSignalHandlers(info.Name, 1);
-        return ret;
-        }
-      else
-        {
-        return "LoadedCommand without any additional documentation";
-        }
-    }
   static const char* LastName;
   static void TrapsForSignals(int sig)
     {
@@ -117,24 +100,6 @@ public:
         signal(SIGBUS,  0);
 #endif
         signal(SIGILL,  0);
-        }
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-      if (this->info.GetFullDocumentation)
-        {
-        cmLoadedCommand::InstallSignalHandlers(info.Name);
-        const char* ret = info.GetFullDocumentation();
-        cmLoadedCommand::InstallSignalHandlers(info.Name, 1);
-        return ret;
-        }
-      else
-        {
-        return "LoadedCommand without any additional documentation";
         }
     }
 
@@ -224,6 +189,9 @@ cmLoadedCommand::~cmLoadedCommand()
 bool cmLoadCommandCommand
 ::InitialPass(std::vector<std::string> const& args, cmExecutionStatus &)
 {
+  if(this->Disallowed(cmPolicies::CMP0031,
+      "The load_command command should not be called; see CMP0031."))
+    { return true; }
   if(args.size() < 1 )
     {
     return true;
@@ -233,7 +201,7 @@ bool cmLoadCommandCommand
   // Start by removing the definition in case of failure.
   std::string reportVar = "CMAKE_LOADED_COMMAND_";
   reportVar += args[0];
-  this->Makefile->RemoveDefinition(reportVar.c_str());
+  this->Makefile->RemoveDefinition(reportVar);
 
   // the file must exist
   std::string moduleName =
@@ -251,7 +219,7 @@ bool cmLoadCommandCommand
     cmSystemTools::ExpandRegistryValues(exp);
 
     // Glob the entry in case of wildcards.
-    cmSystemTools::GlobDirs(exp.c_str(), path);
+    cmSystemTools::GlobDirs(exp, path);
     }
 
   // Try to find the program.
@@ -261,7 +229,7 @@ bool cmLoadCommandCommand
     cmOStringStream e;
     e << "Attempt to load command failed from file \""
       << moduleName << "\"";
-    this->SetError(e.str().c_str());
+    this->SetError(e.str());
     return false;
     }
 
@@ -278,12 +246,12 @@ bool cmLoadCommandCommand
       err += " Additional error info is:\n";
       err += error;
       }
-    this->SetError(err.c_str());
+    this->SetError(err);
     return false;
     }
 
   // Report what file was loaded for this command.
-  this->Makefile->AddDefinition(reportVar.c_str(), fullPath.c_str());
+  this->Makefile->AddDefinition(reportVar, fullPath.c_str());
 
   // find the init function
   std::string initFuncName = args[0] + "Init";

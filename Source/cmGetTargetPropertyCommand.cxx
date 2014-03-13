@@ -20,20 +20,66 @@ bool cmGetTargetPropertyCommand
     this->SetError("called with incorrect number of arguments");
     return false;
     }
-  std::string var = args[0].c_str();
-  const char* targetName = args[1].c_str();
+  std::string var = args[0];
+  const std::string& targetName = args[1];
+  std::string prop;
 
-  if(cmTarget* tgt = this->Makefile->FindTargetToUse(targetName))
+  if(args[2] == "ALIASED_TARGET")
     {
-    cmTarget& target = *tgt;
-    const char *prop = target.GetProperty(args[2].c_str());
-    if (prop)
+    if(this->Makefile->IsAlias(targetName))
       {
-      this->Makefile->AddDefinition(var.c_str(), prop);
-      return true;
+      if(cmTarget* target =
+                          this->Makefile->FindTargetToUse(targetName))
+        {
+        prop = target->GetName();
+        }
       }
     }
-  this->Makefile->AddDefinition(var.c_str(), (var+"-NOTFOUND").c_str());
+  else if(cmTarget* tgt = this->Makefile->FindTargetToUse(targetName))
+    {
+    cmTarget& target = *tgt;
+    const char* prop_cstr = target.GetProperty(args[2]);
+    if(prop_cstr)
+      {
+      prop = prop_cstr;
+      }
+    }
+  else
+    {
+    bool issueMessage = false;
+    cmOStringStream e;
+    cmake::MessageType messageType = cmake::AUTHOR_WARNING;
+    switch(this->Makefile->GetPolicyStatus(cmPolicies::CMP0045))
+      {
+      case cmPolicies::WARN:
+        issueMessage = true;
+        e << this->Makefile->GetPolicies()
+                          ->GetPolicyWarning(cmPolicies::CMP0045) << "\n";
+      case cmPolicies::OLD:
+        break;
+      case cmPolicies::REQUIRED_IF_USED:
+      case cmPolicies::REQUIRED_ALWAYS:
+      case cmPolicies::NEW:
+        issueMessage = true;
+        messageType = cmake::FATAL_ERROR;
+      }
+    if (issueMessage)
+      {
+      e << "get_target_property() called with non-existent target \""
+        << targetName <<  "\".";
+      this->Makefile->IssueMessage(messageType, e.str());
+      if (messageType == cmake::FATAL_ERROR)
+        {
+        return false;
+        }
+      }
+    }
+  if (!prop.empty())
+    {
+    this->Makefile->AddDefinition(var, prop.c_str());
+    return true;
+    }
+  this->Makefile->AddDefinition(var, (var+"-NOTFOUND").c_str());
   return true;
 }
 

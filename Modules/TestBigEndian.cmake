@@ -1,8 +1,15 @@
-# - Define macro to determine endian type
-# Check if the system is big endian or little endian
-#  TEST_BIG_ENDIAN(VARIABLE)
-#  VARIABLE - variable to store the result to
+#.rst:
+# TestBigEndian
+# -------------
 #
+# Define macro to determine endian type
+#
+# Check if the system is big endian or little endian
+#
+# ::
+#
+#   TEST_BIG_ENDIAN(VARIABLE)
+#   VARIABLE - variable to store the result to
 
 #=============================================================================
 # Copyright 2002-2009 Kitware, Inc.
@@ -51,7 +58,7 @@ macro(TEST_BIG_ENDIAN VARIABLE)
 
     configure_file("${CMAKE_ROOT}/Modules/TestEndianess.c.in"
                    "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/TestEndianess.c"
-                    IMMEDIATE @ONLY)
+                   @ONLY)
 
      file(READ "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/TestEndianess.c"
           TEST_ENDIANESS_FILE_CONTENT)

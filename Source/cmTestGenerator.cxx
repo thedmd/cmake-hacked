@@ -39,29 +39,8 @@ cmTestGenerator
 void cmTestGenerator::GenerateScriptConfigs(std::ostream& os,
                                             Indent const& indent)
 {
-  // First create the tests.
+  // Create the tests.
   this->cmScriptGenerator::GenerateScriptConfigs(os, indent);
-
-  // Now generate the test properties.
-  if(this->TestGenerated)
-    {
-    cmTest* test = this->Test;
-    cmMakefile* mf = test->GetMakefile();
-    cmLocalGenerator* lg = mf->GetLocalGenerator();
-    std::ostream& fout = os;
-    cmPropertyMap::const_iterator pit;
-    cmPropertyMap* mpit = &test->GetProperties();
-    if ( mpit->size() )
-      {
-      fout << "SET_TESTS_PROPERTIES(" << test->GetName() << " PROPERTIES ";
-      for ( pit = mpit->begin(); pit != mpit->end(); ++ pit )
-        {
-        fout << " " << pit->first
-             << " " << lg->EscapeForCMake(pit->second.GetValue());
-        }
-      fout << ")" << std::endl;
-      }
-    }
 }
 
 //----------------------------------------------------------------------------
@@ -85,7 +64,7 @@ void cmTestGenerator::GenerateScriptActions(std::ostream& os,
 
 //----------------------------------------------------------------------------
 void cmTestGenerator::GenerateScriptForConfig(std::ostream& os,
-                                              const char* config,
+                                              const std::string& config,
                                               Indent const& indent)
 {
   this->TestGenerated = true;
@@ -94,7 +73,7 @@ void cmTestGenerator::GenerateScriptForConfig(std::ostream& os,
   cmGeneratorExpression ge(this->Test->GetBacktrace());
 
   // Start the test command.
-  os << indent << "ADD_TEST(" << this->Test->GetName() << " ";
+  os << indent << "add_test(" << this->Test->GetName() << " ";
 
   // Get the test command line to be executed.
   std::vector<std::string> const& command = this->Test->GetCommand();
@@ -103,7 +82,7 @@ void cmTestGenerator::GenerateScriptForConfig(std::ostream& os,
   // be translated.
   std::string exe = command[0];
   cmMakefile* mf = this->Test->GetMakefile();
-  cmTarget* target = mf->FindTargetToUse(exe.c_str());
+  cmTarget* target = mf->FindTargetToUse(exe);
   if(target && target->GetType() == cmTarget::EXECUTABLE)
     {
     // Use the target file on disk.
@@ -118,7 +97,7 @@ void cmTestGenerator::GenerateScriptForConfig(std::ostream& os,
 
   // Generate the command line with full escapes.
   cmLocalGenerator* lg = mf->GetLocalGenerator();
-  os << lg->EscapeForCMake(exe.c_str());
+  os << lg->EscapeForCMake(exe);
   for(std::vector<std::string>::const_iterator ci = command.begin()+1;
       ci != command.end(); ++ci)
     {
@@ -127,13 +106,29 @@ void cmTestGenerator::GenerateScriptForConfig(std::ostream& os,
 
   // Finish the test command.
   os << ")\n";
+
+  // Output properties for the test.
+  cmPropertyMap& pm = this->Test->GetProperties();
+  if(!pm.empty())
+    {
+    os << indent << "set_tests_properties(" << this->Test->GetName()
+       << " PROPERTIES ";
+    for(cmPropertyMap::const_iterator i = pm.begin();
+        i != pm.end(); ++i)
+      {
+      os << " " << i->first
+         << " " << lg->EscapeForCMake(
+           ge.Parse(i->second.GetValue())->Evaluate(mf, config));
+      }
+    os << ")" << std::endl;
+    }
 }
 
 //----------------------------------------------------------------------------
 void cmTestGenerator::GenerateScriptNoConfig(std::ostream& os,
                                              Indent const& indent)
 {
-  os << indent << "ADD_TEST(" << this->Test->GetName() << " NOT_AVAILABLE)\n";
+  os << indent << "add_test(" << this->Test->GetName() << " NOT_AVAILABLE)\n";
 }
 
 //----------------------------------------------------------------------------
@@ -157,7 +152,7 @@ void cmTestGenerator::GenerateOldStyle(std::ostream& fout,
   std::string exe = command[0];
   cmSystemTools::ConvertToUnixSlashes(exe);
   fout << indent;
-  fout << "ADD_TEST(";
+  fout << "add_test(";
   fout << this->Test->GetName() << " \"" << exe << "\"";
 
   for(std::vector<std::string>::const_iterator argit = command.begin()+1;
@@ -181,4 +176,21 @@ void cmTestGenerator::GenerateOldStyle(std::ostream& fout,
     fout << "\"";
     }
   fout << ")" << std::endl;
+
+  // Output properties for the test.
+  cmMakefile* mf = this->Test->GetMakefile();
+  cmLocalGenerator* lg = mf->GetLocalGenerator();
+  cmPropertyMap& pm = this->Test->GetProperties();
+  if(!pm.empty())
+    {
+    fout << indent << "set_tests_properties(" << this->Test->GetName()
+         << " PROPERTIES ";
+    for(cmPropertyMap::const_iterator i = pm.begin();
+        i != pm.end(); ++i)
+      {
+      fout << " " << i->first
+           << " " << lg->EscapeForCMake(i->second.GetValue());
+      }
+    fout << ")" << std::endl;
+    }
 }

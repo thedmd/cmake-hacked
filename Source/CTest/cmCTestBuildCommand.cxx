@@ -101,8 +101,7 @@ cmCTestGenericHandler* cmCTestBuildCommand::InitializeHandler()
         }
       if ( this->GlobalGenerator )
         {
-        if ( strcmp(this->GlobalGenerator->GetName(),
-            cmakeGeneratorName) != 0 )
+        if ( this->GlobalGenerator->GetName() != cmakeGeneratorName )
           {
           delete this->GlobalGenerator;
           this->GlobalGenerator = 0;
@@ -114,9 +113,6 @@ cmCTestGenericHandler* cmCTestBuildCommand::InitializeHandler()
           this->Makefile->GetCMakeInstance()->CreateGlobalGenerator(
             cmakeGeneratorName);
         }
-      this->GlobalGenerator->FindMakeProgram(this->Makefile);
-      const char* cmakeMakeProgram
-        = this->Makefile->GetDefinition("CMAKE_MAKE_PROGRAM");
       if(strlen(cmakeBuildConfiguration) == 0)
         {
         const char* config = 0;
@@ -130,15 +126,15 @@ cmCTestGenericHandler* cmCTestBuildCommand::InitializeHandler()
         cmakeBuildConfiguration = config;
         }
 
+      std::string dir = this->CTest->GetCTestConfiguration("BuildDirectory");
       std::string buildCommand
         = this->GlobalGenerator->
-        GenerateBuildCommand(cmakeMakeProgram,
-                             cmakeProjectName,
-                             cmakeBuildAdditionalFlags, cmakeBuildTarget,
-                             cmakeBuildConfiguration, true, false);
+        GenerateCMakeBuildCommand(cmakeBuildTarget ? cmakeBuildTarget : "",
+          cmakeBuildConfiguration,
+          cmakeBuildAdditionalFlags ? cmakeBuildAdditionalFlags : "", true);
       cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
                  "SetMakeCommand:"
-                 << buildCommand.c_str() << "\n");
+                 << buildCommand << "\n");
       this->CTest->SetCTestConfiguration("MakeCommand", buildCommand.c_str());
       }
     else
@@ -155,7 +151,7 @@ cmCTestGenericHandler* cmCTestBuildCommand::InitializeHandler()
         "\n"
         "Alternatively, set CTEST_BUILD_COMMAND to build the project "
         "with a custom command line.";
-      this->SetError(ostr.str().c_str());
+      this->SetError(ostr.str());
       return 0;
       }
     }

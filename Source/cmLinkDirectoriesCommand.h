@@ -43,36 +43,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "link_directories";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Specify directories in which the linker will look for libraries.";
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "  link_directories(directory1 directory2 ...)\n"
-      "Specify the paths in which the linker should search for libraries. "
-      "The command will apply only to targets created after it is called. "
-      "For historical reasons, relative paths given to this command are "
-      "passed to the linker unchanged "
-      "(unlike many CMake commands which interpret them relative to the "
-      "current source directory).\n"
-      "Note that this command is rarely necessary.  Library locations "
-      "returned by find_package() and find_library() are absolute paths.  "
-      "Pass these absolute library file paths directly to the "
-      "target_link_libraries() command.  CMake will ensure the linker finds "
-      "them."
-      ;
-    }
+  virtual std::string GetName() const { return "link_directories";}
 
   cmTypeMacro(cmLinkDirectoriesCommand, cmCommand);
 private:

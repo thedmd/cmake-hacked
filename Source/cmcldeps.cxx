@@ -23,6 +23,7 @@
 #include <windows.h>
 #include <sstream>
 #include <cmSystemTools.h>
+#include <cmsys/Encoding.hxx>
 
 // We don't want any wildcard expansion.
 // See http://msdn.microsoft.com/en-us/library/zay8tzh6(v=vs.85).aspx
@@ -62,13 +63,17 @@ static std::string trimLeadingSpace(const std::string& cmdline) {
   return cmdline.substr(i);
 }
 
-static void doEscape(std::string& str, const std::string& search,
-                                       const std::string& repl) {
+static void replaceAll(std::string& str, const std::string& search,
+                                         const std::string& repl) {
   std::string::size_type pos = 0;
   while ((pos = str.find(search, pos)) != std::string::npos) {
     str.replace(pos, search.size(), repl);
     pos += repl.size();
   }
+}
+
+bool startsWith(const std::string& str, const std::string& what) {
+  return str.compare(0, what.size(), what) == 0;
 }
 
 // Strips one argument from the cmdline and returns it. "surrounding quotes"
@@ -96,7 +101,7 @@ static std::string getArg(std::string& cmdline) {
   return ret;
 }
 
-static void parseCommandLine(LPTSTR wincmdline,
+static void parseCommandLine(LPWSTR wincmdline,
                              std::string& lang,
                              std::string& srcfile,
                              std::string& dfile,
@@ -105,7 +110,7 @@ static void parseCommandLine(LPTSTR wincmdline,
                              std::string& clpath,
                              std::string& binpath,
                              std::string& rest) {
-  std::string cmdline(wincmdline);
+  std::string cmdline = cmsys::Encoding::ToNarrow(wincmdline);
   /* self */ getArg(cmdline);
   lang = getArg(cmdline);
   srcfile = getArg(cmdline);
@@ -115,6 +120,13 @@ static void parseCommandLine(LPTSTR wincmdline,
   clpath = getArg(cmdline);
   binpath = getArg(cmdline);
   rest = trimLeadingSpace(cmdline);
+}
+
+// Not all backslashes need to be escaped in a depfile, but it's easier that
+// way.  See the re2c grammar in ninja's source code for more info.
+static void escapePath(std::string &path) {
+  replaceAll(path, "\\", "\\\\");
+  replaceAll(path, " ", "\\ ");
 }
 
 static void outputDepFile(const std::string& dfile, const std::string& objfile,
@@ -127,21 +139,29 @@ static void outputDepFile(const std::string& dfile, const std::string& objfile,
   std::sort(incs.begin(), incs.end());
   incs.erase(std::unique(incs.begin(), incs.end()), incs.end());
 
-  FILE* out = fopen(dfile.c_str(), "wb");
+  FILE* out = cmsys::SystemTools::Fopen(dfile.c_str(), "wb");
 
   // FIXME should this be fatal or not? delete obj? delete d?
   if (!out)
     return;
+  std::string cwd = cmSystemTools::GetCurrentWorkingDirectory();
+  replaceAll(cwd, "/", "\\");
+  cwd += "\\";
 
   std::string tmp = objfile;
-  doEscape(tmp, " ", "\\ ");
+  escapePath(tmp);
   fprintf(out, "%s: \\\n", tmp.c_str());
 
   std::vector<std::string>::iterator it = incs.begin();
   for (; it != incs.end(); ++it) {
     tmp = *it;
-    doEscape(tmp, "\\", "/");
-    doEscape(tmp, " ", "\\ ");
+    // The paths need to match the ones used to identify build artifacts in the
+    // build.ninja file.  Therefore we need to canonicalize the path to use
+    // backward slashes and relativize the path to the build directory.
+    replaceAll(tmp, "/", "\\");
+    if (startsWith(tmp, cwd))
+      tmp = tmp.substr(cwd.size());
+    escapePath(tmp);
     fprintf(out, "%s \\\n", tmp.c_str());
   }
 
@@ -149,10 +169,6 @@ static void outputDepFile(const std::string& dfile, const std::string& objfile,
   fclose(out);
 }
 
-
-bool startsWith(const std::string& str, const std::string& what) {
-  return str.compare(0, what.size(), what) == 0;
-}
 
 bool contains(const std::string& str, const std::string& what) {
   return str.find(what) != std::string::npos;
@@ -182,7 +198,7 @@ static int process( const std::string& srcfilename,
   std::vector<std::string> args;
   cmSystemTools::ParseWindowsCommandLine(cmd.c_str(), args);
   // convert to correct vector type for RunSingleCommand
-  std::vector<cmStdString> command;
+  std::vector<std::string> command;
   for(std::vector<std::string>::iterator i = args.begin();
       i != args.end(); ++i)
     {
@@ -225,14 +241,14 @@ static int process( const std::string& srcfilename,
 
 int main() {
 
-  // Use the Win32 api instead of argc/argv so we can avoid interpreting the
+  // Use the Win32 API instead of argc/argv so we can avoid interpreting the
   // rest of command line after the .d and .obj. Custom parsing seemed
   // preferable to the ugliness you get into in trying to re-escape quotes for
   // subprocesses, so by avoiding argc/argv, the subprocess is called with
   // the same command line verbatim.
 
   std::string lang, srcfile, dfile, objfile, prefix, cl, binpath, rest;
-  parseCommandLine(GetCommandLine(), lang, srcfile, dfile, objfile,
+  parseCommandLine(GetCommandLineW(), lang, srcfile, dfile, objfile,
                                      prefix, cl, binpath, rest);
 
   // needed to suppress filename output of msvc tools

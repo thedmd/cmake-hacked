@@ -42,31 +42,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "install_targets";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Deprecated. Use the install(TARGETS )  command instead.";
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "This command has been superceded by the install command.  It "
-      "is provided for compatibility with older CMake code.\n"
-      "  install_targets(<dir> [RUNTIME_DIRECTORY dir] target target)\n"
-      "Create rules to install the listed targets into the given directory.  "
-      "The directory <dir> is relative to the installation prefix, which "
-      "is stored in the variable CMAKE_INSTALL_PREFIX. If RUNTIME_DIRECTORY "
-      "is specified, then on systems with special runtime files "
-      "(Windows DLL), the files will be copied to that directory.";
-    }
+  virtual std::string GetName() const { return "install_targets";}
 
   /** This command is kept for compatibility with older CMake versions. */
   virtual bool IsDiscouraged() const

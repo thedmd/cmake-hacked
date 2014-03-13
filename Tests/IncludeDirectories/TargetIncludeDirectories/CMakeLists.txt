@@ -82,3 +82,89 @@ add_custom_target(test_custom_target
         $<TARGET_PROPERTY:TargetIncludeDirectories,COMPILE_DEFINITIONS>
         WORKING_DIRECTORY
         "${CMAKE_CURRENT_SOURCE_DIR}")
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bad")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/bad/common.h" "#error Should not be included\n")
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/good")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/good/common.h" "#include \"othergood.h\"\n")
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/othergood")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/othergood/othergood.h" "// No error\n")
+
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/libothergood.cpp" "// No content \n")
+add_library(libothergood "${CMAKE_CURRENT_BINARY_DIR}/libothergood.cpp")
+set_property(TARGET libothergood APPEND PROPERTY
+  INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_BINARY_DIR}/othergood"
+)
+
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/libgood.cpp" "// No content \n")
+add_library(libgood "${CMAKE_CURRENT_BINARY_DIR}/libgood.cpp")
+set_property(TARGET libgood APPEND PROPERTY
+  INTERFACE_INCLUDE_DIRECTORIES
+    "${CMAKE_CURRENT_BINARY_DIR}/good;$<TARGET_PROPERTY:libothergood,INTERFACE_INCLUDE_DIRECTORIES>"
+)
+
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/libbad.cpp" "// No content \n")
+add_library(libbad "${CMAKE_CURRENT_BINARY_DIR}/libbad.cpp")
+set_property(TARGET libbad APPEND PROPERTY
+  INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_BINARY_DIR}/bad"
+)
+
+add_library(lib6 SHARED other.cpp)
+add_library(lib7 SHARED other.cpp)
+target_link_libraries(lib7 $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:lib6>)
+target_include_directories(lib7 PUBLIC $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:/lib7/include>)
+add_custom_target(head_target_test "some_bogus_custom_tool \"$<TARGET_PROPERTY:lib7,INCLUDE_DIRECTORIES>$<TARGET_PROPERTY:lib7,INTERFACE_INCLUDE_DIRECTORIES>\"")
+
+add_library(includes_source_good empty.cpp)
+target_include_directories(includes_source_good
+  INTERFACE
+    "${CMAKE_CURRENT_BINARY_DIR}/good"
+    "${CMAKE_CURRENT_BINARY_DIR}/othergood/"
+)
+add_library(includes_source_bad empty.cpp)
+target_include_directories(includes_source_bad
+  INTERFACE
+    "${CMAKE_CURRENT_BINARY_DIR}/bad"
+)
+
+add_library(includes_proxy SHARED empty.cpp)
+target_link_libraries(includes_proxy includes_source_good)
+target_link_libraries(includes_proxy LINK_INTERFACE_LIBRARIES includes_source_bad)
+add_executable(copy_includes copy_includes.cpp)
+target_include_directories(copy_includes PRIVATE $<TARGET_PROPERTY:includes_proxy,INCLUDE_DIRECTORIES>)
+
+
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/lib5.cpp" "#include \"common.h\"\n")
+add_library(lib5 "${CMAKE_CURRENT_BINARY_DIR}/lib5.cpp")
+
+# Assuming the link order must be:
+target_link_libraries(lib5 libbad libgood)
+
+# Oops!.
+# As include directory order and link order are the same when using target_link_libraries, we have to
+# get the libgood includes in before the libbad includes.
+# We do that with this command:
+target_include_directories(lib5
+  BEFORE PRIVATE $<TARGET_PROPERTY:libgood,INTERFACE_INCLUDE_DIRECTORIES>
+)
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/prefix_foo/prefix_bar/prefix_bat")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/prefix_foo/prefix_bar/prefix_bat/prefix_foo_bar_bat.h" "// prefix_foo_bar_bat.h\n")
+
+target_include_directories(TargetIncludeDirectories PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/prefix_$<JOIN:foo;bar;bat,/prefix_>")
+
+# Test that the language generator expressions work
+set_property(TARGET TargetIncludeDirectories
+  APPEND PROPERTY INCLUDE_DIRECTORIES
+  "$<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,C>:${CMAKE_CURRENT_BINARY_DIR}/bad>"
+  "$<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,CXX>:${CMAKE_CURRENT_BINARY_DIR}/good>"
+  "$<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,CXX>:${CMAKE_CURRENT_BINARY_DIR}/othergood/>"
+)
+
+add_executable(TargetIncludeDirectories_C main.c)
+set_property(TARGET TargetIncludeDirectories_C
+  APPEND PROPERTY INCLUDE_DIRECTORIES
+  "$<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,CXX>:${CMAKE_CURRENT_BINARY_DIR}/bad>"
+  "$<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,C>:${CMAKE_CURRENT_BINARY_DIR}/good>"
+  "$<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,C>:${CMAKE_CURRENT_BINARY_DIR}/othergood/>"
+)

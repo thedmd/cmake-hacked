@@ -5,6 +5,7 @@
 #include "cmParseGTMCoverage.h"
 #include <cmsys/Directory.hxx>
 #include <cmsys/Glob.hxx>
+#include <cmsys/FStream.hxx>
 
 
 cmParseGTMCoverage::cmParseGTMCoverage(cmCTestCoverageHandlerContainer& cont,
@@ -48,7 +49,7 @@ bool cmParseGTMCoverage::LoadCoverageData(const char* d)
 
 bool cmParseGTMCoverage::ReadMCovFile(const char* file)
 {
-  std::ifstream in(file);
+  cmsys::ifstream in(file);
   if(!in)
     {
     return false;
@@ -98,7 +99,7 @@ bool cmParseGTMCoverage::ReadMCovFile(const char* file)
     bool found = this->FindMumpsFile(routine, filepath);
     if(found)
       {
-      int lineoffset;
+      int lineoffset = 0;
       if(this->FindFunctionInMumpsFile(filepath,
                                        function,
                                        lineoffset))
@@ -106,8 +107,8 @@ bool cmParseGTMCoverage::ReadMCovFile(const char* file)
         cmCTestCoverageHandlerContainer::SingleFileCoverageVector&
           coverageVector = this->Coverage.TotalCoverage[filepath];
         coverageVector[lineoffset + linenumber] += count;
+        lastoffset = lineoffset;
         }
-      lastoffset = lineoffset;
       }
     else
       {
@@ -127,7 +128,7 @@ bool cmParseGTMCoverage::FindFunctionInMumpsFile(std::string const& filepath,
                                                  std::string const& function,
                                                  int& lineoffset)
 {
-  std::ifstream in(filepath.c_str());
+  cmsys::ifstream in(filepath.c_str());
   if(!in)
     {
     return false;
@@ -181,7 +182,7 @@ bool cmParseGTMCoverage::ParseMCOVLine(std::string const& line,
   //          ( file  , entry ) = "number_executed:timing_info"
   // ^COVERAGE("%RSEL","init",8,"FOR_LOOP",1)=1
   //          ( file  , entry, line, IGNORE ) =number_executed
-  std::vector<cmStdString> args;
+  std::vector<std::string> args;
   std::string::size_type pos = line.find('(', 0);
   // if no ( is found, then return line has no coverage
   if(pos == std::string::npos)

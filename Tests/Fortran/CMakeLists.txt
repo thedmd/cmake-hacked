@@ -1,5 +1,9 @@
 cmake_minimum_required (VERSION 2.6)
 project(testf C CXX Fortran)
+if(NOT DEFINED CMake_TEST_NESTED_MAKE_PROGRAM AND NOT CMAKE_GENERATOR MATCHES "Visual Studio")
+  set(CMake_TEST_NESTED_MAKE_PROGRAM "${CMAKE_MAKE_PROGRAM}")
+endif()
+
 message("CTEST_FULL_OUTPUT ")
 set(CMAKE_VERBOSE_MAKEFILE 1)
 message("ENV_FLAGS = $ENV{FFLAGS}")
@@ -197,15 +201,17 @@ if(TEST_MODULE_DEPENDS)
          --build-two-config
          --build-project ExtFort
          --build-generator ${CMAKE_GENERATOR}
-         --build-makeprogram ${CMAKE_MAKE_PROGRAM}
+         --build-generator-toolset "${CMAKE_GENERATOR_TOOLSET}"
          --build-options -DCMAKE_Fortran_COMPILER:STRING=${CMAKE_Fortran_COMPILER}
                          -DCMAKE_Fortran_FLAGS:STRING=${CMAKE_Fortran_FLAGS}
                          -DCMAKE_Fortran_FLAGS_DEBUG:STRING=${CMAKE_Fortran_FLAGS_DEBUG}
                          -DCMAKE_Fortran_FLAGS_RELEASE:STRING=${CMAKE_Fortran_FLAGS_RELEASE}
                          -DCMAKE_Fortran_FLAGS_MINSIZEREL:STRING=${CMAKE_Fortran_FLAGS_MINSIZEREL}
                          -DCMAKE_Fortran_FLAGS_RELWITHDEBINFO:STRING=${CMAKE_Fortran_FLAGS_RELWITHDEBINFO}
+                         -DCMAKE_MAKE_PROGRAM:FILEPATH=${CMake_TEST_NESTED_MAKE_PROGRAM}
                          ${External_BUILD_TYPE}
-         )
+    VERBATIM
+    )
   add_custom_target(ExternalTarget ALL DEPENDS ${testf_BINARY_DIR}/ExternalProject)
 
   # Test module output directory if available.

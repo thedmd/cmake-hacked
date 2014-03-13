@@ -66,7 +66,7 @@ bool cmAddSubDirectoryCommand::InitialPass
     std::string error = "given source \"";
     error += srcArg;
     error += "\" which is not an existing directory.";
-    this->SetError(error.c_str());
+    this->SetError(error);
     return false;
     }
   srcPath = cmSystemTools::CollapseFullPath(srcPath.c_str());
@@ -78,7 +78,7 @@ bool cmAddSubDirectoryCommand::InitialPass
     // No binary directory was specified.  If the source directory is
     // not a subdirectory of the current directory then it is an
     // error.
-    if(!cmSystemTools::FindLastString(srcPath.c_str(),
+    if(!cmSystemTools::IsSubDirectory(srcPath.c_str(),
                                       this->Makefile->GetCurrentDirectory()))
       {
       cmOStringStream e;
@@ -87,16 +87,21 @@ bool cmAddSubDirectoryCommand::InitialPass
         << this->Makefile->GetCurrentDirectory() << "\".  "
         << "When specifying an out-of-tree source a binary directory "
         << "must be explicitly specified.";
-      this->SetError(e.str().c_str());
+      this->SetError(e.str());
       return false;
       }
 
     // Remove the CurrentDirectory from the srcPath and replace it
     // with the CurrentOutputDirectory.
-    binPath = srcPath;
-    cmSystemTools::ReplaceString(binPath,
-                                 this->Makefile->GetCurrentDirectory(),
-                                 this->Makefile->GetCurrentOutputDirectory());
+    const char* src = this->Makefile->GetCurrentDirectory();
+    const char* bin = this->Makefile->GetCurrentOutputDirectory();
+    size_t srcLen = strlen(src);
+    size_t binLen = strlen(bin);
+    if(srcLen > 0 && src[srcLen-1] == '/')
+      { --srcLen; }
+    if(binLen > 0 && bin[binLen-1] == '/')
+      { --binLen; }
+    binPath = std::string(bin, binLen) + srcPath.substr(srcLen);
     }
   else
     {
@@ -116,7 +121,7 @@ bool cmAddSubDirectoryCommand::InitialPass
   binPath = cmSystemTools::CollapseFullPath(binPath.c_str());
 
   // Add the subdirectory using the computed full paths.
-  this->Makefile->AddSubDirectory(srcPath.c_str(), binPath.c_str(),
+  this->Makefile->AddSubDirectory(srcPath, binPath,
                                   excludeFromAll, false, true);
 
   return true;

@@ -47,15 +47,15 @@ public:
   void SetVerboseMakefile(bool verbose);
 
   // Check for specific options.
-  bool UsingUnicode();
-  bool UsingSBCS();
+  bool UsingUnicode() const;
+  bool UsingSBCS() const;
 
-  bool IsDebug();
+  bool IsDebug() const;
   // Write options to output.
   void OutputPreprocessorDefinitions(std::ostream& fout,
                                      const char* prefix,
                                      const char* suffix,
-                                     const char* lang);
+                                     const std::string& lang);
   void OutputFlagMap(std::ostream& fout, const char* indent);
   void OutputAdditionalOptions(std::ostream& fout,
                                const char* prefix,

@@ -1,27 +1,32 @@
+#.rst:
+# InstallRequiredSystemLibraries
+# ------------------------------
+#
+#
+#
 # By including this file, all library files listed in the variable
 # CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS will be installed with
-# install(PROGRAMS ...) into bin for WIN32 and lib
-# for non-WIN32. If CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP is set to TRUE
-# before including this file, then the INSTALL command is not called.
-# The user can use the variable CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS to use a
-# custom install command and install them however they want.
-# If it is the MSVC compiler, then the microsoft run
-# time libraries will be found and automatically added to the
-# CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS, and installed.
-# If CMAKE_INSTALL_DEBUG_LIBRARIES is set and it is the MSVC
-# compiler, then the debug libraries are installed when available.
-# If CMAKE_INSTALL_DEBUG_LIBRARIES_ONLY is set then only the debug
-# libraries are installed when both debug and release are available.
-# If CMAKE_INSTALL_MFC_LIBRARIES is set then the MFC run time
-# libraries are installed as well as the CRT run time libraries.
-# If CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION is set then the libraries are
-# installed to that directory rather than the default.
-# If CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_NO_WARNINGS is NOT set, then this file
-# warns about required files that do not exist. You can set this variable to
-# ON before including this file to avoid the warning. For example, the Visual
-# Studio Express editions do not include the redistributable files, so if you
-# include this file on a machine with only VS Express installed, you'll get
-# the warning.
+# install(PROGRAMS ...) into bin for WIN32 and lib for non-WIN32.  If
+# CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP is set to TRUE before including
+# this file, then the INSTALL command is not called.  The user can use
+# the variable CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS to use a custom install
+# command and install them however they want.  If it is the MSVC
+# compiler, then the microsoft run time libraries will be found and
+# automatically added to the CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS, and
+# installed.  If CMAKE_INSTALL_DEBUG_LIBRARIES is set and it is the MSVC
+# compiler, then the debug libraries are installed when available.  If
+# CMAKE_INSTALL_DEBUG_LIBRARIES_ONLY is set then only the debug
+# libraries are installed when both debug and release are available.  If
+# CMAKE_INSTALL_MFC_LIBRARIES is set then the MFC run time libraries are
+# installed as well as the CRT run time libraries.  If
+# CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION is set then the libraries are
+# installed to that directory rather than the default.  If
+# CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_NO_WARNINGS is NOT set, then this
+# file warns about required files that do not exist.  You can set this
+# variable to ON before including this file to avoid the warning.  For
+# example, the Visual Studio Express editions do not include the
+# redistributable files, so if you include this file on a machine with
+# only VS Express installed, you'll get the warning.
 
 #=============================================================================
 # Copyright 2006-2009 Kitware, Inc.
@@ -182,6 +187,10 @@ if(MSVC)
     MSVCRT_FILES_FOR_VERSION(11)
   endif()
 
+  if(MSVC12)
+    MSVCRT_FILES_FOR_VERSION(12)
+  endif()
+
   if(CMAKE_INSTALL_MFC_LIBRARIES)
     if(MSVC70)
       set(__install__libs ${__install__libs}
@@ -330,6 +339,10 @@ if(MSVC)
     if(MSVC11)
       MFC_FILES_FOR_VERSION(11)
     endif()
+
+    if(MSVC12)
+      MFC_FILES_FOR_VERSION(12)
+    endif()
   endif()
 
   foreach(lib
@@ -353,18 +366,22 @@ endif()
 
 if(WATCOM)
   get_filename_component( CompilerPath ${CMAKE_C_COMPILER} PATH )
-  if(WATCOM17)
-     set( __install__libs ${CompilerPath}/clbr17.dll
-       ${CompilerPath}/mt7r17.dll ${CompilerPath}/plbr17.dll )
+  if(CMAKE_C_COMPILER_VERSION)
+    set(_compiler_version ${CMAKE_C_COMPILER_VERSION})
+  else()
+    set(_compiler_version ${CMAKE_CXX_COMPILER_VERSION})
   endif()
-  if(WATCOM18)
-     set( __install__libs ${CompilerPath}/clbr18.dll
-       ${CompilerPath}/mt7r18.dll ${CompilerPath}/plbr18.dll )
+  string(REGEX MATCHALL "[0-9]+" _watcom_version_list "${_compiler_version}")
+  list(GET _watcom_version_list 0 _watcom_major)
+  list(GET _watcom_version_list 1 _watcom_minor)
+  if(${_watcom_major} GREATER 11)
+    math(EXPR _watcom_major "${_watcom_major} - 11")
   endif()
-  if(WATCOM19)
-     set( __install__libs ${CompilerPath}/clbr19.dll
-       ${CompilerPath}/mt7r19.dll ${CompilerPath}/plbr19.dll )
-  endif()
+  math(EXPR _watcom_minor "${_watcom_minor} / 10")
+  set( __install__libs
+    ${CompilerPath}/clbr${_watcom_major}${_watcom_minor}.dll
+    ${CompilerPath}/mt7r${_watcom_major}${_watcom_minor}.dll
+    ${CompilerPath}/plbr${_watcom_major}${_watcom_minor}.dll )
   foreach(lib
       ${__install__libs}
       )

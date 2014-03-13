@@ -37,21 +37,14 @@ foreach(f ${TOCLEAN_FILES})
   set(CHECK_FILES "${CHECK_FILES}      \"${f}\",\n")
 endforeach()
 configure_file(${MakeClean_SOURCE_DIR}/check_clean.c.in
-               ${MakeClean_BINARY_DIR}/check_clean.c @ONLY IMMEDIATE)
+               ${MakeClean_BINARY_DIR}/check_clean.c @ONLY)
 add_executable(check_clean ${MakeClean_BINARY_DIR}/check_clean.c)
 
 # After the executable builds, clean the files.
 add_custom_command(
   TARGET check_clean
   POST_BUILD
-  COMMAND ${CMAKE_CTEST_COMMAND}
-  ARGS --build-and-test
-       ${MakeClean_SOURCE_DIR}/ToClean
-       ${MakeClean_BINARY_DIR}/ToClean
-       --build-generator ${CMAKE_GENERATOR}
-       --build-project ToClean
-       --build-makeprogram ${CMAKE_MAKE_PROGRAM}
-       --build-noclean
-       --build-target clean
+  COMMAND ${CMAKE_COMMAND} --build ${MakeClean_BINARY_DIR}/ToClean
+          --target clean
   COMMENT "Clean the ToClean Project"
   )

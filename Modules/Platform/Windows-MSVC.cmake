@@ -22,7 +22,7 @@ set(CMAKE_LIBRARY_PATH_FLAG "-LIBPATH:")
 set(CMAKE_LINK_LIBRARY_FLAG "")
 set(MSVC 1)
 
-# hack: if a new cmake (which uses CMAKE__LINKER) runs on an old build tree
+# hack: if a new cmake (which uses CMAKE_LINKER) runs on an old build tree
 # (where link was hardcoded) and where CMAKE_LINKER isn't in the cache
 # and still cmake didn't fail in CMakeFindBinUtils.cmake (because it isn't rerun)
 # hardcode CMAKE_LINKER here to link, so it behaves as it did before, Alex
@@ -41,6 +41,7 @@ set(WIN32 1)
 if(CMAKE_SYSTEM_NAME MATCHES "WindowsCE")
   set(CMAKE_CREATE_WIN32_EXE "/subsystem:windowsce /entry:WinMainCRTStartup")
   set(CMAKE_CREATE_CONSOLE_EXE "/subsystem:windowsce /entry:mainACRTStartup")
+  set(WINCE 1)
 else()
   set(CMAKE_CREATE_WIN32_EXE "/subsystem:windows")
   set(CMAKE_CREATE_CONSOLE_EXE "/subsystem:console")
@@ -51,9 +52,6 @@ if(CMAKE_GENERATOR MATCHES "Visual Studio 6")
 endif()
 if(NOT CMAKE_NO_BUILD_TYPE AND CMAKE_GENERATOR MATCHES "Visual Studio")
   set (CMAKE_NO_BUILD_TYPE 1)
-  set (CMAKE_CONFIGURATION_TYPES "Debug;Release;MinSizeRel;RelWithDebInfo" CACHE STRING
-     "Semicolon separated list of supported configuration types, only supports Debug, Release, MinSizeRel, and RelWithDebInfo, anything else will be ignored.")
-  mark_as_advanced(CMAKE_CONFIGURATION_TYPES)
 endif()
 
 # make sure to enable languages after setting configuration types
@@ -67,7 +65,13 @@ else()
 endif()
 
 if(NOT MSVC_VERSION)
-  if(CMAKE_C_COMPILER_VERSION)
+  if(CMAKE_C_SIMULATE_VERSION)
+    set(_compiler_version ${CMAKE_C_SIMULATE_VERSION})
+  elseif(CMAKE_CXX_SIMULATE_VERSION)
+    set(_compiler_version ${CMAKE_CXX_SIMULATE_VERSION})
+  elseif(CMAKE_Fortran_SIMULATE_VERSION)
+    set(_compiler_version ${CMAKE_Fortran_SIMULATE_VERSION})
+  elseif(CMAKE_C_COMPILER_VERSION)
     set(_compiler_version ${CMAKE_C_COMPILER_VERSION})
   else()
     set(_compiler_version ${CMAKE_CXX_COMPILER_VERSION})
@@ -80,6 +84,7 @@ if(NOT MSVC_VERSION)
 
   set(MSVC10)
   set(MSVC11)
+  set(MSVC12)
   set(MSVC60)
   set(MSVC70)
   set(MSVC71)
@@ -87,7 +92,9 @@ if(NOT MSVC_VERSION)
   set(MSVC90)
   set(CMAKE_COMPILER_2005)
   set(CMAKE_COMPILER_SUPPORTS_PDBTYPE)
-  if(NOT "${_compiler_version}" VERSION_LESS 17)
+  if(NOT "${_compiler_version}" VERSION_LESS 18)
+    set(MSVC12 1)
+  elseif(NOT "${_compiler_version}" VERSION_LESS 17)
     set(MSVC11 1)
   elseif(NOT  "${_compiler_version}" VERSION_LESS 16)
     set(MSVC10 1)
@@ -106,7 +113,7 @@ if(NOT MSVC_VERSION)
   endif()
 endif()
 
-if(MSVC_C_ARCHITECTURE_ID MATCHES 64)
+if(MSVC_C_ARCHITECTURE_ID MATCHES 64 OR MSVC_CXX_ARCHITECTURE_ID MATCHES 64)
   set(CMAKE_CL_64 1)
 else()
   set(CMAKE_CL_64 0)
@@ -122,9 +129,16 @@ endif()
 # default to Debug builds
 set(CMAKE_BUILD_TYPE_INIT Debug)
 
-if(CMAKE_SYSTEM_NAME MATCHES "WindowsCE")
-  string(TOUPPER "${MSVC_C_ARCHITECTURE_ID}" _MSVC_C_ARCHITECTURE_ID_UPPER)
-  string(TOUPPER "${MSVC_CXX_ARCHITECTURE_ID}" _MSVC_CXX_ARCHITECTURE_ID_UPPER)
+if(WINCE)
+  foreach(lang C CXX)
+    set(_MSVC_${lang}_ARCHITECTURE_FAMILY "${MSVC_${lang}_ARCHITECTURE_ID}")
+    if(_MSVC_${lang}_ARCHITECTURE_FAMILY STREQUAL "THUMB")
+      set(_MSVC_${lang}_ARCHITECTURE_FAMILY "ARM")
+    elseif(_MSVC_${lang}_ARCHITECTURE_FAMILY MATCHES "^SH")
+      set(_MSVC_${lang}_ARCHITECTURE_FAMILY "SHx")
+    endif()
+    string(TOUPPER "${_MSVC_${lang}_ARCHITECTURE_FAMILY}" _MSVC_${lang}_ARCHITECTURE_FAMILY_UPPER)
+  endforeach()
 
   if("${CMAKE_SYSTEM_VERSION}" MATCHES "^([0-9]+)\\.([0-9]+)")
     math(EXPR _CE_VERSION "${CMAKE_MATCH_1}*100 + ${CMAKE_MATCH_2}")
@@ -135,13 +149,17 @@ if(CMAKE_SYSTEM_NAME MATCHES "WindowsCE")
   endif()
 
   set(_PLATFORM_DEFINES "/D_WIN32_WCE=0x${_CE_VERSION} /DUNDER_CE")
-  set(_PLATFORM_DEFINES_C " /D${MSVC_C_ARCHITECTURE_ID} /D_${_MSVC_C_ARCHITECTURE_ID_UPPER}_")
-  set(_PLATFORM_DEFINES_CXX " /D${MSVC_CXX_ARCHITECTURE_ID} /D_${_MSVC_CXX_ARCHITECTURE_ID_UPPER}_")
+  set(_PLATFORM_DEFINES_C " /D${_MSVC_C_ARCHITECTURE_FAMILY} /D_${_MSVC_C_ARCHITECTURE_FAMILY_UPPER}_")
+  set(_PLATFORM_DEFINES_CXX " /D${_MSVC_CXX_ARCHITECTURE_FAMILY} /D_${_MSVC_CXX_ARCHITECTURE_FAMILY_UPPER}_")
 
   set(_RTC1 "")
   set(_FLAGS_CXX " /GR /EHsc")
-  set(CMAKE_C_STANDARD_LIBRARIES_INIT "coredll.lib corelibc.lib ole32.lib oleaut32.lib uuid.lib commctrl.lib")
+  set(CMAKE_C_STANDARD_LIBRARIES_INIT "coredll.lib ole32.lib oleaut32.lib uuid.lib commctrl.lib")
   set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} /NODEFAULTLIB:libc.lib /NODEFAULTLIB:oldnames.lib")
+
+  if (MSVC_VERSION LESS 1600)
+    set(CMAKE_C_STANDARD_LIBRARIES_INIT "${CMAKE_C_STANDARD_LIBRARIES_INIT} corelibc.lib")
+  endif ()
 else()
   set(_PLATFORM_DEFINES "/DWIN32")
 
@@ -166,19 +184,15 @@ set(CMAKE_CXX_STANDARD_LIBRARIES_INIT "${CMAKE_C_STANDARD_LIBRARIES_INIT}")
 # executable linker flags
 set (CMAKE_LINK_DEF_FILE_FLAG "/DEF:")
 # set the machine type
-set(_MACHINE_ARCH_FLAG ${MSVC_C_ARCHITECTURE_ID})
-if(NOT _MACHINE_ARCH_FLAG)
-  set(_MACHINE_ARCH_FLAG ${MSVC_CXX_ARCHITECTURE_ID})
+if(MSVC_C_ARCHITECTURE_ID)
+  set(_MACHINE_ARCH_FLAG "/machine:${MSVC_C_ARCHITECTURE_ID}")
+elseif(MSVC_CXX_ARCHITECTURE_ID)
+  set(_MACHINE_ARCH_FLAG "/machine:${MSVC_CXX_ARCHITECTURE_ID}")
+elseif(MSVC_Fortran_ARCHITECTURE_ID)
+  set(_MACHINE_ARCH_FLAG "/machine:${MSVC_Fortran_ARCHITECTURE_ID}")
 endif()
-if(CMAKE_SYSTEM_NAME MATCHES "WindowsCE")
-  if(_MACHINE_ARCH_FLAG MATCHES "ARM")
-    set(_MACHINE_ARCH_FLAG "THUMB")
-  elseif(_MACHINE_ARCH_FLAG MATCHES "SH")
-    set(_MACHINE_ARCH_FLAG "SH4")
-  endif()
-endif()
-set (CMAKE_EXE_LINKER_FLAGS_INIT
-    "${CMAKE_EXE_LINKER_FLAGS_INIT} /machine:${_MACHINE_ARCH_FLAG}")
+set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} ${_MACHINE_ARCH_FLAG}")
+unset(_MACHINE_ARCH_FLAG)
 
 # add /debug and /INCREMENTAL:YES to DEBUG and RELWITHDEBINFO also add pdbtype
 # on versions that support it
@@ -215,7 +229,7 @@ set (CMAKE_MODULE_LINKER_FLAGS_RELEASE_INIT ${CMAKE_EXE_LINKER_FLAGS_RELEASE_INI
 set (CMAKE_MODULE_LINKER_FLAGS_MINSIZEREL_INIT ${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL_INIT})
 
 macro(__windows_compiler_msvc lang)
-  if(NOT "${CMAKE_${lang}_COMPILER_VERSION}" VERSION_LESS 14)
+  if(NOT MSVC_VERSION LESS 1400)
     # for 2005 make sure the manifest is put in the dll with mt
     set(_CMAKE_VS_LINK_DLL "<CMAKE_COMMAND> -E vs_link_dll ")
     set(_CMAKE_VS_LINK_EXE "<CMAKE_COMMAND> -E vs_link_exe ")
@@ -227,16 +241,15 @@ macro(__windows_compiler_msvc lang)
   set(CMAKE_${lang}_CREATE_STATIC_LIBRARY  "<CMAKE_LINKER> /lib ${CMAKE_CL_NOLOGO} <LINK_FLAGS> /out:<TARGET> <OBJECTS> ")
 
   set(CMAKE_${lang}_COMPILE_OBJECT
-    "<CMAKE_${lang}_COMPILER> ${CMAKE_START_TEMP_FILE} ${CMAKE_CL_NOLOGO}${_COMPILE_${lang}} <FLAGS> <DEFINES> /Fo<OBJECT> /Fd<TARGET_PDB> -c <SOURCE>${CMAKE_END_TEMP_FILE}")
+    "<CMAKE_${lang}_COMPILER> ${CMAKE_START_TEMP_FILE} ${CMAKE_CL_NOLOGO}${_COMPILE_${lang}} <FLAGS> <DEFINES> /Fo<OBJECT> /Fd<TARGET_COMPILE_PDB>${_FS_${lang}} -c <SOURCE>${CMAKE_END_TEMP_FILE}")
   set(CMAKE_${lang}_CREATE_PREPROCESSED_SOURCE
     "<CMAKE_${lang}_COMPILER> > <PREPROCESSED_SOURCE> ${CMAKE_START_TEMP_FILE} ${CMAKE_CL_NOLOGO}${_COMPILE_${lang}} <FLAGS> <DEFINES> -E <SOURCE>${CMAKE_END_TEMP_FILE}")
   set(CMAKE_${lang}_CREATE_ASSEMBLY_SOURCE
     "<CMAKE_${lang}_COMPILER> ${CMAKE_START_TEMP_FILE} ${CMAKE_CL_NOLOGO}${_COMPILE_${lang}} <FLAGS> <DEFINES> /FoNUL /FAs /Fa<ASSEMBLY_SOURCE> /c <SOURCE>${CMAKE_END_TEMP_FILE}")
 
-  set(CMAKE_${lang}_COMPILER_LINKER_OPTION_FLAG_EXECUTABLE "/link")
   set(CMAKE_${lang}_USE_RESPONSE_FILE_FOR_OBJECTS 1)
   set(CMAKE_${lang}_LINK_EXECUTABLE
-    "${_CMAKE_VS_LINK_EXE}<CMAKE_${lang}_COMPILER> ${CMAKE_CL_NOLOGO} ${CMAKE_START_TEMP_FILE} <FLAGS> /Fe<TARGET> /Fd<TARGET_PDB> <OBJECTS> /link /implib:<TARGET_IMPLIB> /version:<TARGET_VERSION_MAJOR>.<TARGET_VERSION_MINOR> <CMAKE_${lang}_LINK_FLAGS> <LINK_FLAGS> <LINK_LIBRARIES>${CMAKE_END_TEMP_FILE}")
+    "${_CMAKE_VS_LINK_EXE}<CMAKE_LINKER> ${CMAKE_CL_NOLOGO} <OBJECTS> ${CMAKE_START_TEMP_FILE} /out:<TARGET> /implib:<TARGET_IMPLIB> /pdb:<TARGET_PDB> /version:<TARGET_VERSION_MAJOR>.<TARGET_VERSION_MINOR> <CMAKE_${lang}_LINK_FLAGS> <LINK_FLAGS> <LINK_LIBRARIES>${CMAKE_END_TEMP_FILE}")
 
   set(CMAKE_${lang}_FLAGS_INIT "${_PLATFORM_DEFINES}${_PLATFORM_DEFINES_${lang}} /D_WINDOWS /W3${_FLAGS_${lang}}")
   set(CMAKE_${lang}_FLAGS_DEBUG_INIT "/D_DEBUG /MDd /Zi /Ob0 /Od ${_RTC1}")

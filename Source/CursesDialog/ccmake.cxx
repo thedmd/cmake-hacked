@@ -19,51 +19,32 @@
 
 #include "cmCursesMainForm.h"
 #include "cmCursesStandardIncludes.h"
+#include <cmsys/Encoding.hxx>
 
 #include <form.h>
 
 //----------------------------------------------------------------------------
-static const char * cmDocumentationName[][3] =
+static const char * cmDocumentationName[][2] =
 {
   {0,
-   "  ccmake - Curses Interface for CMake.", 0},
-  {0,0,0}
+   "  ccmake - Curses Interface for CMake."},
+  {0,0}
 };
 
 //----------------------------------------------------------------------------
-static const char * cmDocumentationUsage[][3] =
+static const char * cmDocumentationUsage[][2] =
 {
   {0,
    "  ccmake <path-to-source>\n"
-   "  ccmake <path-to-existing-build>", 0},
-  {0,0,0}
+   "  ccmake <path-to-existing-build>"},
+  {0,0}
 };
 
 //----------------------------------------------------------------------------
-static const char * cmDocumentationDescription[][3] =
-{
-  {0,
-   "The \"ccmake\" executable is the CMake curses interface.  Project "
-   "configuration settings may be specified interactively through "
-   "this GUI.  Brief instructions are provided at the bottom of the "
-   "terminal when the program is running.", 0},
-  CMAKE_STANDARD_INTRODUCTION,
-  {0,0,0}
-};
-
-//----------------------------------------------------------------------------
-static const char * cmDocumentationOptions[][3] =
+static const char * cmDocumentationOptions[][2] =
 {
   CMAKE_STANDARD_OPTIONS_TABLE,
-  {0,0,0}
-};
-
-//----------------------------------------------------------------------------
-static const char * cmDocumentationSeeAlso[][3] =
-{
-  {0, "cmake", 0},
-  {0, "ctest", 0},
-  {0, 0, 0}
+  {0,0}
 };
 
 cmCursesForm* cmCursesForm::CurrentForm=0;
@@ -98,29 +79,27 @@ void CMakeErrorHandler(const char* message, const char* title, bool&, void* clie
   self->AddError(message, title);
 }
 
-int main(int argc, char** argv)
+int main(int argc, char const* const* argv)
 {
-  cmSystemTools::FindExecutableDirectory(argv[0]);
+  cmsys::Encoding::CommandLineArguments encoding_args =
+    cmsys::Encoding::CommandLineArguments::Main(argc, argv);
+  argc = encoding_args.argc();
+  argv = encoding_args.argv();
+
+  cmSystemTools::FindCMakeResources(argv[0]);
   cmDocumentation doc;
   doc.addCMakeStandardDocSections();
   if(doc.CheckOptions(argc, argv))
     {
     cmake hcm;
-    std::vector<cmDocumentationEntry> commands;
-    std::vector<cmDocumentationEntry> compatCommands;
+    hcm.AddCMakePaths();
     std::vector<cmDocumentationEntry> generators;
-    hcm.GetCommandDocumentation(commands, true, false);
-    hcm.GetCommandDocumentation(compatCommands, false, true);
     hcm.GetGeneratorDocumentation(generators);
     doc.SetName("ccmake");
     doc.SetSection("Name",cmDocumentationName);
     doc.SetSection("Usage",cmDocumentationUsage);
-    doc.SetSection("Description",cmDocumentationDescription);
     doc.SetSection("Generators",generators);
     doc.PrependSection("Options",cmDocumentationOptions);
-    doc.SetSection("Command",commands);
-    doc.SetSection("Compatibility Commands",compatCommands);
-    doc.SetSeeAlsoList(cmDocumentationSeeAlso);
     return doc.PrintRequestedDocumentation(std::cout)? 0:1;
     }
 

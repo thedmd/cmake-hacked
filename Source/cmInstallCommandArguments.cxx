@@ -203,3 +203,32 @@ bool cmInstallCommandArguments::CheckPermissions(
   // This is not a valid permission.
   return false;
 }
+
+cmInstallCommandIncludesArgument::cmInstallCommandIncludesArgument()
+{
+
+}
+
+const std::vector<std::string>&
+cmInstallCommandIncludesArgument::GetIncludeDirs() const
+{
+  return this->IncludeDirs;
+}
+
+void cmInstallCommandIncludesArgument::Parse(
+                                        const std::vector<std::string>* args,
+                                        std::vector<std::string>*)
+{
+  if(args->empty())
+    {
+    return;
+    }
+  std::vector<std::string>::const_iterator it = args->begin();
+  ++it;
+  for ( ; it != args->end(); ++it)
+    {
+    std::string dir = *it;
+    cmSystemTools::ConvertToUnixSlashes(dir);
+    this->IncludeDirs.push_back(dir);
+    }
+}

@@ -64,6 +64,7 @@ public:
   static std::string EncodeIdent(const std::string &ident, std::ostream &vars);
   static std::string EncodeLiteral(const std::string &lit);
   static std::string EncodePath(const std::string &path);
+  static std::string EncodeDepfileSpace(const std::string &path);
 
   /**
    * Write the given @a comment to the output stream @a os. It
@@ -77,34 +78,34 @@ public:
    * It also writes the variables bound to this build statement.
    * @warning no escaping of any kind is done here.
    */
-  static void WriteBuild(std::ostream& os,
-                         const std::string& comment,
-                         const std::string& rule,
-                         const cmNinjaDeps& outputs,
-                         const cmNinjaDeps& explicitDeps,
-                         const cmNinjaDeps& implicitDeps,
-                         const cmNinjaDeps& orderOnlyDeps,
-                         const cmNinjaVars& variables,
-                         const std::string& rspfile = std::string(),
-                         int cmdLineLimit = -1);
+  void WriteBuild(std::ostream& os,
+                  const std::string& comment,
+                  const std::string& rule,
+                  const cmNinjaDeps& outputs,
+                  const cmNinjaDeps& explicitDeps,
+                  const cmNinjaDeps& implicitDeps,
+                  const cmNinjaDeps& orderOnlyDeps,
+                  const cmNinjaVars& variables,
+                  const std::string& rspfile = std::string(),
+                  int cmdLineLimit = -1);
 
   /**
    * Helper to write a build statement with the special 'phony' rule.
    */
-  static void WritePhonyBuild(std::ostream& os,
-                              const std::string& comment,
-                              const cmNinjaDeps& outputs,
-                              const cmNinjaDeps& explicitDeps,
-                              const cmNinjaDeps& implicitDeps = cmNinjaDeps(),
-                              const cmNinjaDeps& orderOnlyDeps = cmNinjaDeps(),
-                              const cmNinjaVars& variables = cmNinjaVars());
+  void WritePhonyBuild(std::ostream& os,
+                       const std::string& comment,
+                       const cmNinjaDeps& outputs,
+                       const cmNinjaDeps& explicitDeps,
+                       const cmNinjaDeps& implicitDeps = cmNinjaDeps(),
+                       const cmNinjaDeps& orderOnlyDeps = cmNinjaDeps(),
+                       const cmNinjaVars& variables = cmNinjaVars());
 
   void WriteCustomCommandBuild(const std::string& command,
                                const std::string& description,
                                const std::string& comment,
                                const cmNinjaDeps& outputs,
                                const cmNinjaDeps& deps = cmNinjaDeps(),
-                             const cmNinjaDeps& orderOnlyDeps = cmNinjaDeps());
+                               const cmNinjaDeps& orderOnly = cmNinjaDeps());
   void WriteMacOSXContentBuild(const std::string& input,
                                const std::string& output);
 
@@ -120,6 +121,7 @@ public:
                         const std::string& description,
                         const std::string& comment,
                         const std::string& depfile,
+                        const std::string& deptype,
                         const std::string& rspfile,
                         const std::string& rspcontent,
                         bool restat,
@@ -171,11 +173,11 @@ public:
   virtual cmLocalGenerator* CreateLocalGenerator();
 
   /// Overloaded methods. @see cmGlobalGenerator::GetName().
-  virtual const char* GetName() const {
+  virtual std::string GetName() const {
     return cmGlobalNinjaGenerator::GetActualName(); }
 
   /// @return the name of this generator.
-  static const char* GetActualName() { return "Ninja"; }
+  static std::string GetActualName() { return "Ninja"; }
 
   /// Overloaded methods. @see cmGlobalGenerator::GetDocumentation()
   static void GetDocumentation(cmDocumentationEntry& entry);
@@ -189,13 +191,16 @@ public:
                               bool optional);
 
   /// Overloaded methods. @see cmGlobalGenerator::GenerateBuildCommand()
-  virtual std::string GenerateBuildCommand(const char* makeProgram,
-                                           const char* projectName,
-                                           const char* additionalOptions,
-                                           const char* targetName,
-                                           const char* config,
-                                           bool ignoreErrors,
-                                           bool fast);
+  virtual void GenerateBuildCommand(
+    std::vector<std::string>& makeCommand,
+    const std::string& makeProgram,
+    const std::string& projectName,
+    const std::string& projectDir,
+    const std::string& targetName,
+    const std::string& config,
+    bool fast,
+    std::vector<std::string> const& makeOptions = std::vector<std::string>()
+    );
 
   // Setup target names
   virtual const char* GetAllTargetName()           const { return "all"; }
@@ -238,11 +243,12 @@ public:
                const std::string& command,
                const std::string& description,
                const std::string& comment,
-               const std::string& depfile = "",
-               const std::string& rspfile = "",
-               const std::string& rspcontent = "",
-               bool restat = false,
-               bool generator = false);
+               const std::string& depfile,
+               const std::string& deptype,
+               const std::string& rspfile,
+               const std::string& rspcontent,
+               bool restat,
+               bool generator);
 
   bool HasRule(const std::string& name);
 
@@ -277,8 +283,8 @@ public:
     ASD.insert(deps.begin(), deps.end());
   }
 
-  void AppendTargetOutputs(cmTarget* target, cmNinjaDeps& outputs);
-  void AppendTargetDepends(cmTarget* target, cmNinjaDeps& outputs);
+  void AppendTargetOutputs(cmTarget const* target, cmNinjaDeps& outputs);
+  void AppendTargetDepends(cmTarget const* target, cmNinjaDeps& outputs);
   void AddDependencyToAll(cmTarget* target);
   void AddDependencyToAll(const std::string& input);
 
@@ -298,10 +304,11 @@ protected:
 
   /// Overloaded methods.
   /// @see cmGlobalGenerator::CheckALLOW_DUPLICATE_CUSTOM_TARGETS()
-  virtual bool CheckALLOW_DUPLICATE_CUSTOM_TARGETS() { return true; }
+  virtual bool CheckALLOW_DUPLICATE_CUSTOM_TARGETS() const { return true; }
 
 
 private:
+  virtual std::string GetEditCacheCommand() const;
 
   /// @see cmGlobalGenerator::ComputeTargetObjects
   virtual void ComputeTargetObjects(cmGeneratorTarget* gt) const;
@@ -320,6 +327,7 @@ private:
   void WriteAssumedSourceDependencies();
 
   void WriteTargetAliases(std::ostream& os);
+  void WriteUnknownExplicitDependencies(std::ostream& os);
 
   void WriteBuiltinTargets(std::ostream& os);
   void WriteTargetAll(std::ostream& os);
@@ -356,6 +364,12 @@ private:
 
   /// The set of custom command outputs we have seen.
   std::set<std::string> CustomCommandOutputs;
+
+  //The combined explicit dependencies of all build commands that the global
+  //generator has issued. When combined with CombinedBuildOutputs it allows
+  //us to detect the set of explicit dependencies that have
+  std::set<std::string> CombinedBuildExplicitDependencies;
+  std::set<std::string> CombinedBuildOutputs;
 
   /// The mapping from source file to assumed dependencies.
   std::map<std::string, std::set<std::string> > AssumedSourceDependencies;

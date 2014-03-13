@@ -13,7 +13,7 @@
 #ifndef cmWIXRichTextFormatWriter_h
 #define cmWIXRichTextFormatWriter_h
 
-#include <fstream>
+#include <cmsys/FStream.hxx>
 
 /** \class cmWIXRichtTextFormatWriter
  * \brief Helper class to generate Rich Text Format (RTF) documents
@@ -22,25 +22,31 @@
 class cmWIXRichTextFormatWriter
 {
 public:
-  cmWIXRichTextFormatWriter(const std::string& filename);
+  cmWIXRichTextFormatWriter(std::string const& filename);
   ~cmWIXRichTextFormatWriter();
 
-  void AddText(const std::string& text);
+  void AddText(std::string const& text);
 
 private:
   void WriteHeader();
   void WriteFontTable();
+  void WriteColorTable();
   void WriteGenerator();
 
   void WriteDocumentPrefix();
 
-  void ControlWord(const std::string& keyword);
-  void NewControlWord(const std::string& keyword);
+  void ControlWord(std::string const& keyword);
+  void NewControlWord(std::string const& keyword);
 
   void StartGroup();
   void EndGroup();
 
-  std::ofstream file;
+  void EmitUnicodeCodepoint(int c);
+  void EmitUnicodeSurrogate(int c);
+
+  void EmitInvalidCodepoint(int c);
+
+  cmsys::ofstream File;
 };
 
 #endif

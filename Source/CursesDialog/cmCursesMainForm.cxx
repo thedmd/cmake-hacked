@@ -43,14 +43,14 @@ cmCursesMainForm::cmCursesMainForm(std::vector<std::string> const& args,
   this->HelpMessage.push_back("");
   this->HelpMessage.push_back(s_ConstHelpMessage);
   this->CMakeInstance = new cmake;
-  this->CMakeInstance->SetCMakeEditCommand("ccmake");
+  this->CMakeInstance->SetCMakeEditCommand(
+    cmSystemTools::GetCMakeCursesCommand());
 
   // create the arguments for the cmake object
   std::string whereCMake = cmSystemTools::GetProgramPath(this->Args[0].c_str());
   whereCMake += "/cmake";
   this->Args[0] = whereCMake;
   this->CMakeInstance->SetArgs(this->Args);
-  this->CMakeInstance->SetCMakeCommand(whereCMake.c_str());
   this->SearchString = "";
   this->OldSearchString = "";
   this->SearchMode = false;
@@ -84,9 +84,9 @@ cmCursesMainForm::~cmCursesMainForm()
 }
 
 // See if a cache entry is in the list of entries in the ui.
-bool cmCursesMainForm::LookForCacheEntry(const char* key)
+bool cmCursesMainForm::LookForCacheEntry(const std::string& key)
 {
-  if (!key || !this->Entries)
+  if (!this->Entries)
     {
     return false;
     }
@@ -94,7 +94,7 @@ bool cmCursesMainForm::LookForCacheEntry(const char* key)
   std::vector<cmCursesCacheEntryComposite*>::iterator it;
   for (it = this->Entries->begin(); it != this->Entries->end(); ++it)
     {
-    if (!strcmp(key, (*it)->Key.c_str()))
+    if (key == (*it)->Key)
       {
       return true;
       }
@@ -146,7 +146,7 @@ void cmCursesMainForm::InitializeUI()
           this->CMakeInstance->GetCacheManager()->NewIterator();
         !i.IsAtEnd(); i.Next())
       {
-      const char* key = i.GetName();
+      std::string key = i.GetName();
       if ( i.GetType() == cmCacheManager::INTERNAL ||
            i.GetType() == cmCacheManager::STATIC ||
            i.GetType() == cmCacheManager::UNINITIALIZED )
@@ -168,7 +168,7 @@ void cmCursesMainForm::InitializeUI()
           this->CMakeInstance->GetCacheManager()->NewIterator();
         !i.IsAtEnd(); i.Next())
       {
-      const char* key = i.GetName();
+      std::string key = i.GetName();
       if ( i.GetType() == cmCacheManager::INTERNAL ||
            i.GetType() == cmCacheManager::STATIC ||
            i.GetType() == cmCacheManager::UNINITIALIZED )

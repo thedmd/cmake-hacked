@@ -37,15 +37,26 @@ function(check_updates build)
     REGEX "<(${types}|FullName)>"
     LIMIT_INPUT ${max_update_xml_size}
     )
+
   string(REGEX REPLACE
     "[ \t]*<(${types})>[ \t]*;[ \t]*<FullName>([^<]*)</FullName>"
     "\\1{\\2}" UPDATE_XML_ENTRIES "${UPDATE_XML_ENTRIES}")
+
+  # If specified, remove the given prefix from the files in Update.xml.
+  # Some VCS systems, like Perforce, return absolute locations
+  if(DEFINED REPOSITORY_FILE_PREFIX)
+    string(REPLACE
+      "${REPOSITORY_FILE_PREFIX}" ""
+      UPDATE_XML_ENTRIES "${UPDATE_XML_ENTRIES}")
+  endif()
 
   # Compare expected and actual entries
   set(EXTRA "${UPDATE_XML_ENTRIES}")
   list(REMOVE_ITEM EXTRA ${ARGN} ${UPDATE_EXTRA} ${UPDATE_MAYBE})
   set(MISSING "${ARGN}" ${UPDATE_EXTRA})
-  list(REMOVE_ITEM MISSING ${UPDATE_XML_ENTRIES})
+  if(NOT "" STREQUAL "${UPDATE_XML_ENTRIES}")
+    list(REMOVE_ITEM MISSING ${UPDATE_XML_ENTRIES})
+  endif()
 
   if(NOT UPDATE_NOT_GLOBAL)
     set(rev_elements Revision PriorRevision ${UPDATE_GLOBAL_ELEMENTS})
@@ -216,7 +227,7 @@ function(run_dashboard_script bin_dir)
     )
 
   # Verify the updates reported by CTest.
-  list(APPEND UPDATE_MAYBE Updated{subdir})
+  list(APPEND UPDATE_MAYBE Updated{subdir} Updated{CTestConfig.cmake})
   check_updates(${bin_dir}
     Updated{foo.txt}
     Updated{bar.txt}

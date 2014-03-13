@@ -1,20 +1,34 @@
-# - Locate SDL_image library
+#.rst:
+# FindSDL_image
+# -------------
+#
+# Locate SDL_image library
+#
 # This module defines:
-#  SDL_IMAGE_LIBRARIES, the name of the library to link against
-#  SDL_IMAGE_INCLUDE_DIRS, where to find the headers
-#  SDL_IMAGE_FOUND, if false, do not try to link against
-#  SDL_IMAGE_VERSION_STRING - human-readable string containing the version of SDL_image
+#
+# ::
+#
+#   SDL_IMAGE_LIBRARIES, the name of the library to link against
+#   SDL_IMAGE_INCLUDE_DIRS, where to find the headers
+#   SDL_IMAGE_FOUND, if false, do not try to link against
+#   SDL_IMAGE_VERSION_STRING - human-readable string containing the version of SDL_image
+#
+#
 #
 # For backward compatiblity the following variables are also set:
-#  SDLIMAGE_LIBRARY (same value as SDL_IMAGE_LIBRARIES)
-#  SDLIMAGE_INCLUDE_DIR (same value as SDL_IMAGE_INCLUDE_DIRS)
-#  SDLIMAGE_FOUND (same value as SDL_IMAGE_FOUND)
 #
-# $SDLDIR is an environment variable that would
-# correspond to the ./configure --prefix=$SDLDIR
-# used in building SDL.
+# ::
 #
-# Created by Eric Wing. This was influenced by the FindSDL.cmake
+#   SDLIMAGE_LIBRARY (same value as SDL_IMAGE_LIBRARIES)
+#   SDLIMAGE_INCLUDE_DIR (same value as SDL_IMAGE_INCLUDE_DIRS)
+#   SDLIMAGE_FOUND (same value as SDL_IMAGE_FOUND)
+#
+#
+#
+# $SDLDIR is an environment variable that would correspond to the
+# ./configure --prefix=$SDLDIR used in building SDL.
+#
+# Created by Eric Wing.  This was influenced by the FindSDL.cmake
 # module, but with modifications to recognize OS X frameworks and
 # additional Unix paths (FreeBSD, etc).
 
@@ -40,8 +54,16 @@ find_path(SDL_IMAGE_INCLUDE_DIR SDL_image.h
   HINTS
     ENV SDLIMAGEDIR
     ENV SDLDIR
-  PATH_SUFFIXES include/SDL include/SDL12 include/SDL11 include
+  PATH_SUFFIXES SDL
+                # path suffixes to search inside ENV{SDLDIR}
+                include/SDL include/SDL12 include/SDL11 include
 )
+
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+  set(VC_LIB_PATH_SUFFIX lib/x64)
+else()
+  set(VC_LIB_PATH_SUFFIX lib/x86)
+endif()
 
 if(NOT SDL_IMAGE_LIBRARY AND SDLIMAGE_LIBRARY)
   set(SDL_IMAGE_LIBRARY ${SDLIMAGE_LIBRARY} CACHE FILEPATH "file cache entry
@@ -52,7 +74,7 @@ find_library(SDL_IMAGE_LIBRARY
   HINTS
     ENV SDLIMAGEDIR
     ENV SDLDIR
-  PATH_SUFFIXES lib
+  PATH_SUFFIXES lib ${VC_LIB_PATH_SUFFIX}
 )
 
 if(SDL_IMAGE_INCLUDE_DIR AND EXISTS "${SDL_IMAGE_INCLUDE_DIR}/SDL_image.h")

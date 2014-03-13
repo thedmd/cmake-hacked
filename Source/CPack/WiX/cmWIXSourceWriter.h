@@ -15,7 +15,7 @@
 
 #include <vector>
 #include <string>
-#include <fstream>
+#include <cmsys/FStream.hxx>
 
 #include <CPack/cmCPackLog.h>
 
@@ -26,21 +26,24 @@ class cmWIXSourceWriter
 {
 public:
   cmWIXSourceWriter(cmCPackLog* logger,
-    const std::string& filename, bool isIncludeFile = false);
+    std::string const& filename, bool isIncludeFile = false);
 
   ~cmWIXSourceWriter();
 
-  void BeginElement(const std::string& name);
+  void BeginElement(std::string const& name);
 
-  void EndElement();
+  void EndElement(std::string const& name);
 
   void AddProcessingInstruction(
-    const std::string& target, const std::string& content);
+    std::string const& target, std::string const& content);
 
   void AddAttribute(
-    const std::string& key, const std::string& value);
+    std::string const& key, std::string const& value);
 
-  static std::string WindowsCodepageToUtf8(const std::string& value);
+  void AddAttributeUnlessEmpty(
+    std::string const& key, std::string const& value);
+
+  static std::string WindowsCodepageToUtf8(std::string const& value);
 
 private:
   enum State
@@ -53,15 +56,17 @@ private:
 
   void Indent(size_t count);
 
-  static std::string EscapeAttributeValue(const std::string& value);
+  static std::string EscapeAttributeValue(std::string const& value);
 
   cmCPackLog* Logger;
 
-  std::ofstream file;
+  cmsys::ofstream File;
 
-  State state;
+  State State;
 
-  std::vector<std::string> elements;
+  std::vector<std::string> Elements;
+
+  std::string SourceFilename;
 };
 
 #endif

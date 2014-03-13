@@ -27,6 +27,7 @@ public:
   // Store definitions and flags.
   void AddDefine(const std::string& define);
   void AddDefines(const char* defines);
+  void AddDefines(const std::vector<std::string> &defines);
   void AddFlag(const char* flag, const char* value);
   void RemoveFlag(const char* flag);
   const char* GetFlag(const char* flag);
@@ -39,13 +40,13 @@ protected:
   // Then parse the command line flags specified in CMAKE_CXX_FLAGS
   // and CMAKE_C_FLAGS
   // and overwrite or add new values to this map
-  std::map<cmStdString, cmStdString> FlagMap;
+  std::map<std::string, std::string> FlagMap;
 
   // Preprocessor definitions.
   std::vector<std::string> Defines;
 
   // Unrecognized flags that get no special handling.
-  cmStdString FlagString;
+  std::string FlagString;
 
   bool DoingDefine;
   bool AllowDefine;

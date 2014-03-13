@@ -16,9 +16,10 @@
 #include "cmake.h"
 
 //----------------------------------------------------------------------------
-cmGlobalVisualStudio71Generator::cmGlobalVisualStudio71Generator()
+cmGlobalVisualStudio71Generator::cmGlobalVisualStudio71Generator(
+  const std::string& platformName)
+  : cmGlobalVisualStudio7Generator(platformName)
 {
-  this->FindMakeProgramFile = "CMakeVS71FindMake.cmake";
   this->ProjectConfigurationSectionName = "ProjectConfiguration";
 }
 
@@ -155,9 +156,9 @@ cmGlobalVisualStudio71Generator
 // the libraries it uses are also done here
 void
 cmGlobalVisualStudio71Generator::WriteProject(std::ostream& fout,
-                                              const char* dspname,
+                                              const std::string& dspname,
                                               const char* dir,
-                                              cmTarget& t)
+                                              cmTarget const& t)
 {
   // check to see if this is a fortran build
   const char* ext = ".vcproj";
@@ -208,8 +209,8 @@ cmGlobalVisualStudio71Generator::WriteProject(std::ostream& fout,
 void
 cmGlobalVisualStudio71Generator
 ::WriteProjectDepends(std::ostream& fout,
-                      const char*,
-                      const char*, cmTarget& target)
+                      const std::string&,
+                      const char*, cmTarget const& target)
 {
   VSDependSet const& depends = this->VSTargetDepends[&target];
   for(VSDependSet::const_iterator di = depends.begin();
@@ -234,13 +235,13 @@ cmGlobalVisualStudio71Generator
 // executables to the libraries it uses are also done here
 void cmGlobalVisualStudio71Generator
 ::WriteExternalProject(std::ostream& fout,
-                       const char* name,
+                       const std::string& name,
                        const char* location,
                        const char* typeGuid,
-                       const std::set<cmStdString>& depends)
+                       const std::set<std::string>& depends)
 {
   fout << "Project(\"{"
-       << (typeGuid ? typeGuid : "8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942")
+       << (typeGuid ? typeGuid : this->ExternalProjectType(location))
        << "}\") = \""
        << name << "\", \""
        << this->ConvertToSolutionPath(location) << "\", \"{"
@@ -252,7 +253,7 @@ void cmGlobalVisualStudio71Generator
   if(!depends.empty())
     {
     fout << "\tProjectSection(ProjectDependencies) = postProject\n";
-    std::set<cmStdString>::const_iterator it;
+    std::set<std::string>::const_iterator it;
     for(it = depends.begin(); it != depends.end(); ++it)
       {
       if(it->size() > 0)
@@ -277,24 +278,24 @@ void cmGlobalVisualStudio71Generator
 // executables to the libraries it uses are also done here
 void cmGlobalVisualStudio71Generator
 ::WriteProjectConfigurations(
-  std::ostream& fout, const char* name, cmTarget::TargetType,
+  std::ostream& fout, const std::string& name, cmTarget::TargetType,
   const std::set<std::string>& configsPartOfDefaultBuild,
-  const char* platformMapping)
+  std::string const& platformMapping)
 {
+  const std::string& platformName =
+    !platformMapping.empty() ? platformMapping : this->GetPlatformName();
   std::string guid = this->GetGUID(name);
   for(std::vector<std::string>::iterator i = this->Configurations.begin();
       i != this->Configurations.end(); ++i)
     {
     fout << "\t\t{" << guid << "}." << *i
-         << ".ActiveCfg = " << *i << "|"
-         << (platformMapping ? platformMapping : "Win32") << std::endl;
+         << ".ActiveCfg = " << *i << "|" << platformName << std::endl;
     std::set<std::string>::const_iterator
       ci = configsPartOfDefaultBuild.find(*i);
     if(!(ci == configsPartOfDefaultBuild.end()))
       {
       fout << "\t\t{" << guid << "}." << *i
-           << ".Build.0 = " << *i << "|"
-           << (platformMapping ? platformMapping : "Win32") << std::endl;
+           << ".Build.0 = " << *i << "|" << platformName << std::endl;
       }
     }
 }
@@ -312,5 +313,4 @@ void cmGlobalVisualStudio71Generator
 {
   entry.Name = cmGlobalVisualStudio71Generator::GetActualName();
   entry.Brief = "Generates Visual Studio .NET 2003 project files.";
-  entry.Full = "";
 }

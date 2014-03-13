@@ -27,21 +27,21 @@ class cmTarget;
 class cmOrderDirectories
 {
 public:
-  cmOrderDirectories(cmGlobalGenerator* gg, cmTarget* target,
+  cmOrderDirectories(cmGlobalGenerator* gg, cmTarget const* target,
                      const char* purpose);
   ~cmOrderDirectories();
   void AddRuntimeLibrary(std::string const& fullPath, const char* soname = 0);
   void AddLinkLibrary(std::string const& fullPath);
   void AddUserDirectories(std::vector<std::string> const& extra);
   void AddLanguageDirectories(std::vector<std::string> const& dirs);
-  void SetImplicitDirectories(std::set<cmStdString> const& implicitDirs);
+  void SetImplicitDirectories(std::set<std::string> const& implicitDirs);
   void SetLinkExtensionInfo(std::vector<std::string> const& linkExtensions,
                             std::string const& removeExtRegex);
 
   std::vector<std::string> const& GetOrderedDirectories();
 private:
   cmGlobalGenerator* GlobalGenerator;
-  cmTarget* Target;
+  cmTarget const* Target;
   std::string Purpose;
 
   bool Computed;
@@ -54,11 +54,11 @@ private:
   std::vector<std::string> LanguageDirectories;
   cmsys::RegularExpression RemoveLibraryExtension;
   std::vector<std::string> LinkExtensions;
-  std::set<cmStdString> ImplicitDirectories;
-  std::set<cmStdString> EmmittedConstraintSOName;
-  std::set<cmStdString> EmmittedConstraintLibrary;
+  std::set<std::string> ImplicitDirectories;
+  std::set<std::string> EmmittedConstraintSOName;
+  std::set<std::string> EmmittedConstraintLibrary;
   std::vector<std::string> OriginalDirectories;
-  std::map<cmStdString, int> DirectoryIndex;
+  std::map<std::string, int> DirectoryIndex;
   std::vector<int> DirectoryVisited;
   void CollectOriginalDirectories();
   int AddOriginalDirectory(std::string const& dir);

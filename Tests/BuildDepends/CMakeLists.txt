@@ -13,7 +13,7 @@ project(BuildDepends)
 set(CMAKE_SUPPRESS_REGENERATION 1)
 
 # Xcode needs some help with the fancy dependencies in this test.
-if("${CMAKE_GENERATOR}" MATCHES "Xcode")
+if(XCODE AND XCODE_VERSION VERSION_LESS 5)
   set(HELP_XCODE 1)
 endif()
 function(help_xcode_depends)
@@ -53,6 +53,8 @@ write_file(${BuildDepends_BINARY_DIR}/Project/foo.cxx
 
 file(WRITE ${BuildDepends_BINARY_DIR}/Project/zot.hxx.in
   "static const char* zot = \"zot\";\n")
+file(WRITE ${BuildDepends_BINARY_DIR}/Project/dir/header.txt
+  "#define HEADER_STRING \"ninja\"\n" )
 file(WRITE ${BuildDepends_BINARY_DIR}/Project/zot_custom.hxx.in
   "static const char* zot_custom = \"zot_custom\";\n")
 file(WRITE ${BuildDepends_BINARY_DIR}/Project/zot_macro_dir.hxx
@@ -65,6 +67,8 @@ file(WRITE ${BuildDepends_BINARY_DIR}/Project/link_depends_no_shared_lib.h
 file(WRITE ${BuildDepends_BINARY_DIR}/Project/link_depends_no_shared_exe.h
   "#define link_depends_no_shared_exe_value 0\n")
 set(link_depends_no_shared_check_txt ${BuildDepends_BINARY_DIR}/Project/link_depends_no_shared_check.txt)
+
+file(WRITE ${BuildDepends_BINARY_DIR}/Project/external.in "external original\n")
 
 help_xcode_depends()
 
@@ -91,6 +95,26 @@ endif()
 message("Output from first build:\n${OUTPUT}")
 if(NOT RESULT)
   message(SEND_ERROR "Could not build test project (1)!")
+endif()
+
+# find and save the ninjadep executable
+set(ninjadep ${BuildDepends_BINARY_DIR}/Project/ninjadep${CMAKE_EXECUTABLE_SUFFIX})
+if(EXISTS
+    "${BuildDepends_BINARY_DIR}/Project/Debug/ninjadep${CMAKE_EXECUTABLE_SUFFIX}" )
+  message("found debug")
+  set(ninjadep
+    "${BuildDepends_BINARY_DIR}/Project/Debug/ninjadep${CMAKE_EXECUTABLE_SUFFIX}")
+endif()
+message("Running ${ninjadep}  ")
+execute_process(COMMAND ${ninjadep} OUTPUT_VARIABLE out RESULT_VARIABLE runResult)
+string(REGEX REPLACE "[\r\n]" " " out "${out}")
+message("Run result: ${runResult} Output: \"${out}\"")
+
+if("${out}" STREQUAL "HEADER_STRING: ninja ")
+  message("Worked!")
+else()
+  message(SEND_ERROR "Project did not rebuild properly. Output[${out}]\n"
+    " expected [HEADER_STRING: ninja]")
 endif()
 
 set(bar ${BuildDepends_BINARY_DIR}/Project/bar${CMAKE_EXECUTABLE_SUFFIX})
@@ -144,6 +168,19 @@ else()
     "Targets link_depends_no_shared_lib and link_depends_no_shared_exe not both built.")
 endif()
 
+if(EXISTS ${BuildDepends_BINARY_DIR}/Project/external.out)
+  file(STRINGS ${BuildDepends_BINARY_DIR}/Project/external.out external_out)
+  if("${external_out}" STREQUAL "external original")
+    message(STATUS "external.out contains '${external_out}'")
+  else()
+    message(SEND_ERROR "Project did not initially build properly: "
+      "external.out contains '${external_out}'")
+  endif()
+else()
+  message(SEND_ERROR "Project did not initially build properly: "
+    "external.out is missing")
+endif()
+
 message("Waiting 3 seconds...")
 # any additional argument will cause ${bar} to wait forever
 execute_process(COMMAND ${bar} -infinite TIMEOUT 3 OUTPUT_VARIABLE out)
@@ -151,6 +188,8 @@ execute_process(COMMAND ${bar} -infinite TIMEOUT 3 OUTPUT_VARIABLE out)
 message("Modifying Project/foo.cxx")
 write_file(${BuildDepends_BINARY_DIR}/Project/foo.cxx
   "const char* foo() { return \"foo changed\";}" )
+file(WRITE "${BuildDepends_BINARY_DIR}/Project/dir/header.txt"
+  "#define HEADER_STRING \"ninja changed\"\n" )
 file(WRITE ${BuildDepends_BINARY_DIR}/Project/zot.hxx.in
   "static const char* zot = \"zot changed\";\n")
 file(WRITE ${BuildDepends_BINARY_DIR}/Project/zot_custom.hxx.in
@@ -166,6 +205,8 @@ file(WRITE ${BuildDepends_BINARY_DIR}/Project/link_depends_no_shared_lib.h
 if(TEST_LINK_DEPENDS)
   file(WRITE ${TEST_LINK_DEPENDS} "2")
 endif()
+
+file(WRITE ${BuildDepends_BINARY_DIR}/Project/external.in "external changed\n")
 
 help_xcode_depends()
 
@@ -202,6 +243,21 @@ endif()
 if(EXISTS
     "${BuildDepends_BINARY_DIR}/Project/Debug/zot${CMAKE_EXECUTABLE_SUFFIX}" )
   message("found debug")
+endif()
+
+message("Running ${ninjadep}  ")
+execute_process(COMMAND ${ninjadep} OUTPUT_VARIABLE out RESULT_VARIABLE runResult)
+string(REGEX REPLACE "[\r\n]" " " out "${out}")
+message("Run result: ${runResult} Output: \"${out}\"")
+
+if("${out}" STREQUAL "HEADER_STRING: ninja changed ")
+  message("Worked!")
+elseif(CMAKE_GENERATOR STREQUAL "Visual Studio 6")
+  # Tolerate failure because VS 6 does not seem to recompile ninjadep.cpp
+  # when the "dir/header.h" it includes changes.
+else()
+  message(SEND_ERROR "Project did not rebuild properly. Output[${out}]\n"
+    " expected [HEADER_STRING: ninja changed]")
 endif()
 
 message("Running ${bar}  ")
@@ -246,10 +302,25 @@ if(EXISTS "${link_depends_no_shared_check_txt}")
   file(STRINGS "${link_depends_no_shared_check_txt}" link_depends_no_shared_check LIMIT_COUNT 1)
   if("${link_depends_no_shared_check}" STREQUAL "0")
     message(STATUS "link_depends_no_shared_exe is older than link_depends_no_shared_lib as expected.")
+  elseif(XCODE AND NOT XCODE_VERSION VERSION_LESS 5)
+    message(STATUS "Known limitation: link_depends_no_shared_exe is newer than link_depends_no_shared_lib but we cannot stop Xcode ${XCODE_VERSION} from enforcing this dependency.")
   else()
     message(SEND_ERROR "Project did not rebuild properly: link_depends_no_shared_exe is newer than link_depends_no_shared_lib.")
   endif()
 else()
   message(SEND_ERROR "Project did not rebuild properly.  "
     "Targets link_depends_no_shared_lib and link_depends_no_shared_exe not both built.")
+endif()
+
+if(EXISTS ${BuildDepends_BINARY_DIR}/Project/external.out)
+  file(STRINGS ${BuildDepends_BINARY_DIR}/Project/external.out external_out)
+  if("${external_out}" STREQUAL "external changed")
+    message(STATUS "external.out contains '${external_out}'")
+  else()
+    message(SEND_ERROR "Project did not rebuild properly: "
+      "external.out contains '${external_out}'")
+  endif()
+else()
+  message(SEND_ERROR "Project did not rebuild properly: "
+    "external.out is missing")
 endif()

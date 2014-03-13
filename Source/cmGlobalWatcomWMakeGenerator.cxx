@@ -43,11 +43,10 @@ void cmGlobalWatcomWMakeGenerator
 cmLocalGenerator *cmGlobalWatcomWMakeGenerator::CreateLocalGenerator()
 {
   cmLocalUnixMakefileGenerator3* lg = new cmLocalUnixMakefileGenerator3;
-  lg->SetSilentNoColon(true);
   lg->SetDefineWindowsNULL(true);
   lg->SetWindowsShell(true);
   lg->SetWatcomWMake(true);
-  lg->SetMakeSilentFlag("-s -h");
+  lg->SetMakeSilentFlag("-h");
   lg->SetGlobalGenerator(this);
   lg->SetIgnoreLibPrefix(true);
   lg->SetPassMakeflags(false);
@@ -62,5 +61,4 @@ void cmGlobalWatcomWMakeGenerator
 {
   entry.Name = cmGlobalWatcomWMakeGenerator::GetActualName();
   entry.Brief = "Generates Watcom WMake makefiles.";
-  entry.Full = "";
 }

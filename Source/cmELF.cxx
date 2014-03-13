@@ -13,13 +13,19 @@
 #include "cmELF.h"
 
 #include <cmsys/auto_ptr.hxx>
+#include <cmsys/FStream.hxx>
 
 // Need the native byte order of the running CPU.
 #define cmsys_CPU_UNKNOWN_OKAY // We can decide at runtime if not known.
 #include <cmsys/CPU.h>
 
 // Include the ELF format information system header.
-#include <elf.h>
+#if defined(__OpenBSD__)
+# include <stdint.h>
+# include <elf_abi.h>
+#else
+# include <elf.h>
+#endif
 #if defined(__sun)
 # include <sys/link.h> // For dynamic section information
 #endif
@@ -66,7 +72,7 @@ public:
 
   // Construct and take ownership of the file stream object.
   cmELFInternal(cmELF* external,
-                cmsys::auto_ptr<std::ifstream>& fin,
+                cmsys::auto_ptr<cmsys::ifstream>& fin,
                 ByteOrderType order):
     External(external),
     Stream(*fin.release()),
@@ -175,7 +181,7 @@ struct cmELFTypes32
   static const char* GetName() { return "32-bit"; }
 };
 
-// Configure the implementation template for 32-bit ELF files.
+// Configure the implementation template for 64-bit ELF files.
 struct cmELFTypes64
 {
   typedef Elf64_Ehdr ELF_Ehdr;
@@ -199,7 +205,7 @@ public:
 
   // Construct with a stream and byte swap indicator.
   cmELFInternalImpl(cmELF* external,
-                    cmsys::auto_ptr<std::ifstream>& fin,
+                    cmsys::auto_ptr<cmsys::ifstream>& fin,
                     ByteOrderType order);
 
   // Return the number of sections as specified by the ELF header.
@@ -457,7 +463,7 @@ private:
 template <class Types>
 cmELFInternalImpl<Types>
 ::cmELFInternalImpl(cmELF* external,
-                    cmsys::auto_ptr<std::ifstream>& fin,
+                    cmsys::auto_ptr<cmsys::ifstream>& fin,
                     ByteOrderType order):
   cmELFInternal(external, fin, order)
 {
@@ -702,7 +708,7 @@ cmELFInternalImpl<Types>::GetDynamicSectionString(int tag)
 cmELF::cmELF(const char* fname): Internal(0)
 {
   // Try to open the file.
-  cmsys::auto_ptr<std::ifstream> fin(new std::ifstream(fname));
+  cmsys::auto_ptr<cmsys::ifstream> fin(new cmsys::ifstream(fname));
 
   // Quit now if the file could not be opened.
   if(!fin.get() || !*fin)

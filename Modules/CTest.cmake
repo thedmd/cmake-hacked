@@ -1,49 +1,68 @@
-# - Configure a project for testing with CTest/CDash
+#.rst:
+# CTest
+# -----
+#
+# Configure a project for testing with CTest/CDash
+#
 # Include this module in the top CMakeLists.txt file of a project to
 # enable testing with CTest and dashboard submissions to CDash:
-#   project(MyProject)
-#   ...
-#   include(CTest)
+#
+# ::
+#
+#    project(MyProject)
+#    ...
+#    include(CTest)
+#
 # The module automatically creates a BUILD_TESTING option that selects
 # whether to enable testing support (ON by default).  After including
 # the module, use code like
-#   if(BUILD_TESTING)
-#     # ... CMake code to create tests ...
-#   endif()
+#
+# ::
+#
+#    if(BUILD_TESTING)
+#      # ... CMake code to create tests ...
+#    endif()
+#
 # to creating tests when testing is enabled.
 #
 # To enable submissions to a CDash server, create a CTestConfig.cmake
 # file at the top of the project with content such as
-#   set(CTEST_PROJECT_NAME "MyProject")
-#   set(CTEST_NIGHTLY_START_TIME "01:00:00 UTC")
-#   set(CTEST_DROP_METHOD "http")
-#   set(CTEST_DROP_SITE "my.cdash.org")
-#   set(CTEST_DROP_LOCATION "/submit.php?project=MyProject")
-#   set(CTEST_DROP_SITE_CDASH TRUE)
-# (the CDash server can provide the file to a project administrator
-# who configures 'MyProject').
-# Settings in the config file are shared by both this CTest module and
-# the CTest command-line tool's dashboard script mode (ctest -S).
+#
+# ::
+#
+#    set(CTEST_PROJECT_NAME "MyProject")
+#    set(CTEST_NIGHTLY_START_TIME "01:00:00 UTC")
+#    set(CTEST_DROP_METHOD "http")
+#    set(CTEST_DROP_SITE "my.cdash.org")
+#    set(CTEST_DROP_LOCATION "/submit.php?project=MyProject")
+#    set(CTEST_DROP_SITE_CDASH TRUE)
+#
+# (the CDash server can provide the file to a project administrator who
+# configures 'MyProject').  Settings in the config file are shared by
+# both this CTest module and the CTest command-line tool's dashboard
+# script mode (ctest -S).
 #
 # While building a project for submission to CDash, CTest scans the
-# build output for errors and warnings and reports them with
-# surrounding context from the build log.  This generic approach works
-# for all build tools, but does not give details about the command
-# invocation that produced a given problem.  One may get more detailed
-# reports by adding
-#   set(CTEST_USE_LAUNCHERS 1)
-# to the CTestConfig.cmake file.  When this option is enabled, the
-# CTest module tells CMake's Makefile generators to invoke every
-# command in the generated build system through a CTest launcher
-# program.  (Currently the CTEST_USE_LAUNCHERS option is ignored on
-# non-Makefile generators.)  During a manual build each launcher
-# transparently runs the command it wraps.  During a CTest-driven
-# build for submission to CDash each launcher reports detailed
-# information when its command fails or warns.
-# (Setting CTEST_USE_LAUNCHERS in CTestConfig.cmake is convenient, but
-# also adds the launcher overhead even for manual builds.  One may
-# instead set it in a CTest dashboard script and add it to the CMake
-# cache for the build tree.)
+# build output for errors and warnings and reports them with surrounding
+# context from the build log.  This generic approach works for all build
+# tools, but does not give details about the command invocation that
+# produced a given problem.  One may get more detailed reports by adding
+#
+# ::
+#
+#    set(CTEST_USE_LAUNCHERS 1)
+#
+# to the CTestConfig.cmake file.  When this option is enabled, the CTest
+# module tells CMake's Makefile generators to invoke every command in
+# the generated build system through a CTest launcher program.
+# (Currently the CTEST_USE_LAUNCHERS option is ignored on non-Makefile
+# generators.) During a manual build each launcher transparently runs
+# the command it wraps.  During a CTest-driven build for submission to
+# CDash each launcher reports detailed information when its command
+# fails or warns.  (Setting CTEST_USE_LAUNCHERS in CTestConfig.cmake is
+# convenient, but also adds the launcher overhead even for manual
+# builds.  One may instead set it in a CTest dashboard script and add it
+# to the CMake cache for the build tree.)
 
 #=============================================================================
 # Copyright 2005-2009 Kitware, Inc.
@@ -84,13 +103,13 @@ if(BUILD_TESTING)
   endmacro()
 
   macro(SET_IF_SET var val)
-    if(NOT "${val}" MATCHES "^$")
+    if(NOT "${val}" STREQUAL "")
       set("${var}" "${val}")
     endif()
   endmacro()
 
   macro(SET_IF_SET_AND_NOT_SET var val)
-    if(NOT "${val}" MATCHES "^$")
+    if(NOT "${val}" STREQUAL "")
       SET_IF_NOT_SET("${var}" "${val}")
     endif()
   endmacro()
@@ -130,6 +149,7 @@ if(BUILD_TESTING)
   find_program(BZRCOMMAND bzr)
   find_program(HGCOMMAND hg)
   find_program(GITCOMMAND git)
+  find_program(P4COMMAND p4)
 
   if(NOT UPDATE_TYPE)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/CVS")
@@ -161,6 +181,9 @@ if(BUILD_TESTING)
   elseif("${_update_type}" STREQUAL "git")
     set(UPDATE_COMMAND "${GITCOMMAND}")
     set(UPDATE_OPTIONS "${GIT_UPDATE_OPTIONS}")
+  elseif("${_update_type}" STREQUAL "p4")
+    set(UPDATE_COMMAND "${P4COMMAND}")
+    set(UPDATE_OPTIONS "${P4_UPDATE_OPTIONS}")
   endif()
 
   set(DART_TESTING_TIMEOUT 1500 CACHE STRING
@@ -221,7 +244,7 @@ if(BUILD_TESTING)
         "${CMAKE_CXX_COMPILER}" ${DART_NAME_COMPONENT})
     else()
       get_filename_component(DART_CXX_NAME
-        "${CMAKE_BUILD_TOOL}" ${DART_NAME_COMPONENT})
+        "${CMAKE_MAKE_PROGRAM}" ${DART_NAME_COMPONENT})
     endif()
     if(DART_CXX_NAME MATCHES "msdev")
       set(DART_CXX_NAME "vs60")
@@ -256,6 +279,7 @@ if(BUILD_TESTING)
     CVS_UPDATE_OPTIONS
     DART_TESTING_TIMEOUT
     GITCOMMAND
+    P4COMMAND
     HGCOMMAND
     MAKECOMMAND
     MEMORYCHECK_COMMAND

@@ -42,6 +42,7 @@ endif()
 if(${CMAKE_GENERATOR} MATCHES "Visual Studio")
 elseif("${CMAKE_GENERATOR}" MATCHES "Xcode")
   set(CMAKE_C_COMPILER_XCODE_TYPE sourcecode.c.c)
+  _cmake_find_compiler_path(C)
 else()
   if(NOT CMAKE_C_COMPILER)
     set(CMAKE_C_COMPILER_INIT NOTFOUND)
@@ -72,31 +73,7 @@ else()
     _cmake_find_compiler(C)
 
   else()
-
-    # we only get here if CMAKE_C_COMPILER was specified using -D or a pre-made CMakeCache.txt
-    # (e.g. via ctest) or set in CMAKE_TOOLCHAIN_FILE
-    # if CMAKE_C_COMPILER is a list of length 2, use the first item as
-    # CMAKE_C_COMPILER and the 2nd one as CMAKE_C_COMPILER_ARG1
-
-    list(LENGTH CMAKE_C_COMPILER _CMAKE_C_COMPILER_LIST_LENGTH)
-    if("${_CMAKE_C_COMPILER_LIST_LENGTH}" EQUAL 2)
-      list(GET CMAKE_C_COMPILER 1 CMAKE_C_COMPILER_ARG1)
-      list(GET CMAKE_C_COMPILER 0 CMAKE_C_COMPILER)
-    endif()
-
-    # if a compiler was specified by the user but without path,
-    # now try to find it with the full path
-    # if it is found, force it into the cache,
-    # if not, don't overwrite the setting (which was given by the user) with "NOTFOUND"
-    # if the C compiler already had a path, reuse it for searching the CXX compiler
-    get_filename_component(_CMAKE_USER_C_COMPILER_PATH "${CMAKE_C_COMPILER}" PATH)
-    if(NOT _CMAKE_USER_C_COMPILER_PATH)
-      find_program(CMAKE_C_COMPILER_WITH_PATH NAMES ${CMAKE_C_COMPILER})
-      mark_as_advanced(CMAKE_C_COMPILER_WITH_PATH)
-      if(CMAKE_C_COMPILER_WITH_PATH)
-        set(CMAKE_C_COMPILER ${CMAKE_C_COMPILER_WITH_PATH} CACHE STRING "C compiler" FORCE)
-      endif()
-    endif()
+    _cmake_find_compiler_path(C)
   endif()
   mark_as_advanced(CMAKE_C_COMPILER)
 
@@ -120,6 +97,13 @@ if(NOT CMAKE_C_COMPILER_ID_RUN)
   set(CMAKE_C_COMPILER_ID)
   file(READ ${CMAKE_ROOT}/Modules/CMakePlatformId.h.in
     CMAKE_C_COMPILER_ID_PLATFORM_CONTENT)
+
+  # The IAR compiler produces weird output.
+  # See http://www.cmake.org/Bug/view.php?id=10176#c19598
+  list(APPEND CMAKE_C_COMPILER_ID_VENDORS IAR)
+  set(CMAKE_C_COMPILER_ID_VENDOR_FLAGS_IAR )
+  set(CMAKE_C_COMPILER_ID_VENDOR_REGEX_IAR "IAR .+ Compiler")
+
   include(${CMAKE_ROOT}/Modules/CMakeDetermineCompilerId.cmake)
   CMAKE_DETERMINE_COMPILER_ID(C CFLAGS CMakeCCompilerId.c)
 
@@ -142,34 +126,49 @@ endif ()
 # e.g. powerpc-linux-gcc, arm-elf-gcc or i586-mingw32msvc-gcc, optionally
 # with a 3-component version number at the end (e.g. arm-eabi-gcc-4.5.2).
 # The other tools of the toolchain usually have the same prefix
-# NAME_WE cannot be used since then this test will fail for names lile
+# NAME_WE cannot be used since then this test will fail for names like
 # "arm-unknown-nto-qnx6.3.0-gcc.exe", where BASENAME would be
 # "arm-unknown-nto-qnx6" instead of the correct "arm-unknown-nto-qnx6.3.0-"
-if (CMAKE_CROSSCOMPILING
-    AND "${CMAKE_C_COMPILER_ID}" MATCHES "GNU"
-    AND NOT _CMAKE_TOOLCHAIN_PREFIX)
-  get_filename_component(COMPILER_BASENAME "${CMAKE_C_COMPILER}" NAME)
-  if (COMPILER_BASENAME MATCHES "^(.+-)g?cc(-[0-9]+\\.[0-9]+\\.[0-9]+)?(\\.exe)?$")
-    set(_CMAKE_TOOLCHAIN_PREFIX ${CMAKE_MATCH_1})
-  endif ()
+if (CMAKE_CROSSCOMPILING  AND NOT _CMAKE_TOOLCHAIN_PREFIX)
 
-  # if "llvm-" is part of the prefix, remove it, since llvm doesn't have its own binutils
-  # but uses the regular ar, objcopy, etc. (instead of llvm-objcopy etc.)
-  if ("${_CMAKE_TOOLCHAIN_PREFIX}" MATCHES "(.+-)?llvm-$")
-    set(_CMAKE_TOOLCHAIN_PREFIX ${CMAKE_MATCH_1})
-  endif ()
+  if("${CMAKE_C_COMPILER_ID}" MATCHES "GNU" OR "${CMAKE_C_COMPILER_ID}" MATCHES "Clang")
+    get_filename_component(COMPILER_BASENAME "${CMAKE_C_COMPILER}" NAME)
+    if (COMPILER_BASENAME MATCHES "^(.+-)(clang|g?cc)(-[0-9]+\\.[0-9]+\\.[0-9]+)?(\\.exe)?$")
+      set(_CMAKE_TOOLCHAIN_PREFIX ${CMAKE_MATCH_1})
+    elseif("${CMAKE_C_COMPILER_ID}" MATCHES "Clang")
+      set(_CMAKE_TOOLCHAIN_PREFIX ${CMAKE_C_COMPILER_TARGET}-)
+    elseif(COMPILER_BASENAME MATCHES "qcc(\\.exe)?$")
+      if(CMAKE_C_COMPILER_TARGET MATCHES "gcc_nto([^_le]+)(le)?.*$")
+        set(_CMAKE_TOOLCHAIN_PREFIX nto${CMAKE_MATCH_1}-)
+      endif()
+    endif ()
+
+    # if "llvm-" is part of the prefix, remove it, since llvm doesn't have its own binutils
+    # but uses the regular ar, objcopy, etc. (instead of llvm-objcopy etc.)
+    if ("${_CMAKE_TOOLCHAIN_PREFIX}" MATCHES "(.+-)?llvm-$")
+      set(_CMAKE_TOOLCHAIN_PREFIX ${CMAKE_MATCH_1})
+    endif ()
+  elseif("${CMAKE_C_COMPILER_ID}" MATCHES "TI")
+    # TI compilers are named e.g. cl6x, cl470 or armcl.exe
+    get_filename_component(COMPILER_BASENAME "${CMAKE_C_COMPILER}" NAME)
+    if (COMPILER_BASENAME MATCHES "^(.+)?cl([^.]+)?(\\.exe)?$")
+      set(_CMAKE_TOOLCHAIN_PREFIX "${CMAKE_MATCH_1}")
+      set(_CMAKE_TOOLCHAIN_SUFFIX "${CMAKE_MATCH_2}")
+    endif ()
+  endif()
 
 endif ()
 
-include(${CMAKE_ROOT}/Modules/CMakeClDeps.cmake)
 include(CMakeFindBinUtils)
 if(MSVC_C_ARCHITECTURE_ID)
+  include(${CMAKE_ROOT}/Modules/CMakeClDeps.cmake)
   set(SET_MSVC_C_ARCHITECTURE_ID
     "set(MSVC_C_ARCHITECTURE_ID ${MSVC_C_ARCHITECTURE_ID})")
 endif()
+
 # configure variables set in this file for fast reload later on
 configure_file(${CMAKE_ROOT}/Modules/CMakeCCompiler.cmake.in
   ${CMAKE_PLATFORM_INFO_DIR}/CMakeCCompiler.cmake
-  @ONLY IMMEDIATE # IMMEDIATE must be here for compatibility mode <= 2.0
+  @ONLY
   )
 set(CMAKE_C_COMPILER_ENV_VAR "CC")

@@ -15,9 +15,7 @@
 #include "cmCommand.h"
 
 /** \class cmIncludeCommand
- * \brief
- *
- *  cmIncludeCommand defines a list of distant
+ * \brief cmIncludeCommand defines a list of distant
  *  files that can be "included" in the current list file.
  *  In almost every sense, this is identical to a C/C++
  *  #include command.  Arguments are first expended as usual.
@@ -48,41 +46,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const {return "include";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Read CMake listfile code from the given file.";
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "  include(<file|module> [OPTIONAL] [RESULT_VARIABLE <VAR>]\n"
-      "                        [NO_POLICY_SCOPE])\n"
-      "Reads CMake listfile code from the given file.  Commands in the file "
-      "are processed immediately as if they were written in place of the "
-      "include command.  If OPTIONAL is present, then no error "
-      "is raised if the file does not exist.  If RESULT_VARIABLE is given "
-      "the variable will be set to the full filename which "
-      "has been included or NOTFOUND if it failed.\n"
-      "If a module is specified instead of a file, the file with name "
-      "<modulename>.cmake is searched first in CMAKE_MODULE_PATH, then in the "
-      "CMake module directory. There is one exception to this: if the file "
-      "which calls include() is located itself in the CMake module directory, "
-      "then first the CMake module directory is searched and "
-      "CMAKE_MODULE_PATH afterwards. See also policy CMP0017."
-      "\n"
-      "See the cmake_policy() command documentation for discussion of the "
-      "NO_POLICY_SCOPE option."
-      ;
-    }
+  virtual std::string GetName() const {return "include";}
 
   cmTypeMacro(cmIncludeCommand, cmCommand);
 };

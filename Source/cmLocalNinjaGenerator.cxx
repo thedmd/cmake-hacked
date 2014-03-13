@@ -17,7 +17,6 @@
 #include "cmNinjaTargetGenerator.h"
 #include "cmGeneratedFileStream.h"
 #include "cmSourceFile.h"
-#include "cmComputeLinkInformation.h"
 #include "cmake.h"
 
 #include <assert.h>
@@ -27,7 +26,6 @@ cmLocalNinjaGenerator::cmLocalNinjaGenerator()
   , ConfigName("")
   , HomeRelativeOutputPath("")
 {
-  this->IsMakefileGenerator = true;
 #ifdef _WIN32
   this->WindowsShell = true;
 #endif
@@ -50,20 +48,42 @@ void cmLocalNinjaGenerator::Generate()
   this->WriteProcessedMakefile(this->GetRulesFileStream());
 #endif
 
-  this->WriteBuildFileTop();
-
-  cmTargets& targets = this->GetMakefile()->GetTargets();
-  for(cmTargets::iterator t = targets.begin(); t != targets.end(); ++t)
+  // We do that only once for the top CMakeLists.txt file.
+  if(this->isRootMakefile())
     {
-    cmNinjaTargetGenerator* tg = cmNinjaTargetGenerator::New(&t->second);
+    this->WriteBuildFileTop();
+
+    this->WritePools(this->GetRulesFileStream());
+
+    const std::string showIncludesPrefix = this->GetMakefile()
+             ->GetSafeDefinition("CMAKE_CL_SHOWINCLUDES_PREFIX");
+    if (!showIncludesPrefix.empty())
+      {
+      cmGlobalNinjaGenerator::WriteComment(this->GetRulesFileStream(),
+                                           "localized /showIncludes string");
+      this->GetRulesFileStream()
+            << "msvc_deps_prefix = " << showIncludesPrefix << "\n\n";
+      }
+    }
+
+  cmGeneratorTargetsType targets = this->GetMakefile()->GetGeneratorTargets();
+  for(cmGeneratorTargetsType::iterator t = targets.begin();
+      t != targets.end(); ++t)
+    {
+    if (t->second->Target->GetType() == cmTarget::INTERFACE_LIBRARY
+        || t->second->Target->IsImported())
+      {
+      continue;
+      }
+    cmNinjaTargetGenerator* tg = cmNinjaTargetGenerator::New(t->second);
     if(tg)
       {
       tg->Generate();
       // Add the target to "all" if required.
       if (!this->GetGlobalNinjaGenerator()->IsExcluded(
             this->GetGlobalNinjaGenerator()->GetLocalGenerators()[0],
-            t->second))
-        this->GetGlobalNinjaGenerator()->AddDependencyToAll(&t->second);
+            *t->second->Target))
+        this->GetGlobalNinjaGenerator()->AddDependencyToAll(t->second->Target);
       delete tg;
       }
     }
@@ -123,15 +143,17 @@ cmGlobalNinjaGenerator* cmLocalNinjaGenerator::GetGlobalNinjaGenerator()
 // Virtual protected methods.
 
 std::string
-cmLocalNinjaGenerator::ConvertToLinkReference(std::string const& lib)
+cmLocalNinjaGenerator::ConvertToLinkReference(std::string const& lib,
+                                              OutputFormat format)
 {
-  return this->Convert(lib.c_str(), HOME_OUTPUT, SHELL);
+  return this->Convert(lib, HOME_OUTPUT, format);
 }
 
 std::string
-cmLocalNinjaGenerator::ConvertToIncludeReference(std::string const& path)
+cmLocalNinjaGenerator::ConvertToIncludeReference(std::string const& path,
+                                                 OutputFormat format)
 {
-  return this->Convert(path.c_str(), HOME_OUTPUT, SHELL);
+  return this->Convert(path, HOME_OUTPUT, format);
 }
 
 //----------------------------------------------------------------------------
@@ -165,10 +187,6 @@ bool cmLocalNinjaGenerator::isRootMakefile() const
 
 void cmLocalNinjaGenerator::WriteBuildFileTop()
 {
-  // We do that only once for the top CMakeLists.txt file.
-  if(!this->isRootMakefile())
-    return;
-
   // For the build file.
   this->WriteProjectHeader(this->GetBuildFileStream());
   this->WriteNinjaFilesInclusion(this->GetBuildFileStream());
@@ -185,6 +203,39 @@ void cmLocalNinjaGenerator::WriteProjectHeader(std::ostream& os)
     << "# Configuration: " << this->ConfigName << std::endl
     ;
   cmGlobalNinjaGenerator::WriteDivider(os);
+}
+
+void cmLocalNinjaGenerator::WritePools(std::ostream& os)
+{
+  cmGlobalNinjaGenerator::WriteDivider(os);
+
+  const char* jobpools = this->GetCMakeInstance()
+                               ->GetProperty("JOB_POOLS", cmProperty::GLOBAL);
+  if (jobpools)
+    {
+    cmGlobalNinjaGenerator::WriteComment(os,
+                            "Pools defined by global property JOB_POOLS");
+    std::vector<std::string> pools;
+    cmSystemTools::ExpandListArgument(jobpools, pools);
+    for (size_t i = 0; i < pools.size(); ++i)
+      {
+      const std::string pool = pools[i];
+      const std::string::size_type eq = pool.find("=");
+      unsigned int jobs;
+      if (eq != std::string::npos &&
+          sscanf(pool.c_str() + eq, "=%u", &jobs) == 1)
+        {
+        os << "pool " << pool.substr(0, eq) << std::endl;
+        os << "  depth = " << jobs << std::endl;
+        os << std::endl;
+        }
+      else
+        {
+        cmSystemTools::Error("Invalid pool defined by property 'JOB_POOLS': ",
+                             pool.c_str());
+        }
+      }
+    }
 }
 
 void cmLocalNinjaGenerator::WriteNinjaFilesInclusion(std::ostream& os)
@@ -252,14 +303,15 @@ cmLocalNinjaGenerator
   this->GetGlobalNinjaGenerator()->AppendTargetDepends(target, outputs);
 }
 
-void cmLocalNinjaGenerator::AppendCustomCommandDeps(const cmCustomCommand *cc,
-                                                    cmNinjaDeps &ninjaDeps)
+void cmLocalNinjaGenerator::AppendCustomCommandDeps(
+  cmCustomCommandGenerator const& ccg,
+  cmNinjaDeps &ninjaDeps)
 {
-  const std::vector<std::string> &deps = cc->GetDepends();
+  const std::vector<std::string> &deps = ccg.GetDepends();
   for (std::vector<std::string>::const_iterator i = deps.begin();
        i != deps.end(); ++i) {
     std::string dep;
-    if (this->GetRealDependency(i->c_str(), this->GetConfigName(), dep))
+    if (this->GetRealDependency(*i, this->GetConfigName(), dep))
       ninjaDeps.push_back(ConvertToNinjaPath(dep.c_str()));
   }
 }
@@ -279,35 +331,60 @@ std::string cmLocalNinjaGenerator::BuildCommandLine(
 
   cmOStringStream cmd;
   for (std::vector<std::string>::const_iterator li = cmdLines.begin();
-       li != cmdLines.end(); ++li) {
-    if (li != cmdLines.begin()) {
-      cmd << " && ";
+       li != cmdLines.end(); ++li)
 #ifdef _WIN32
-    } else if (cmdLines.size() > 1) {
-      cmd << "cmd.exe /c ";
-#endif
-    }
+    {
+    if (li != cmdLines.begin())
+      {
+      cmd << " && ";
+      }
+    else if (cmdLines.size() > 1)
+      {
+      cmd << "cmd.exe /C \"";
+      }
     cmd << *li;
-  }
+    }
+  if (cmdLines.size() > 1)
+    {
+    cmd << "\"";
+    }
+#else
+    {
+    if (li != cmdLines.begin())
+      {
+      cmd << " && ";
+      }
+    cmd << *li;
+    }
+#endif
   return cmd.str();
 }
 
-void cmLocalNinjaGenerator::AppendCustomCommandLines(const cmCustomCommand *cc,
-                                            std::vector<std::string> &cmdLines)
+void cmLocalNinjaGenerator::AppendCustomCommandLines(
+  cmCustomCommandGenerator const& ccg,
+  std::vector<std::string> &cmdLines)
 {
-  cmCustomCommandGenerator ccg(*cc, this->GetConfigName(), this->Makefile);
   if (ccg.GetNumberOfCommands() > 0) {
-    const char* wd = cc->GetWorkingDirectory();
-    if (!wd)
+    std::string wd = ccg.GetWorkingDirectory();
+    if (wd.empty())
       wd = this->GetMakefile()->GetStartOutputDirectory();
 
     cmOStringStream cdCmd;
-    cdCmd << "cd " << this->ConvertToOutputFormat(wd, SHELL);
+#ifdef _WIN32
+        std::string cdStr = "cd /D ";
+#else
+        std::string cdStr = "cd ";
+#endif
+    cdCmd << cdStr << this->ConvertToOutputFormat(wd, SHELL);
     cmdLines.push_back(cdCmd.str());
   }
+
+  std::string launcher = this->MakeCustomLauncher(ccg);
+
   for (unsigned i = 0; i != ccg.GetNumberOfCommands(); ++i) {
-    cmdLines.push_back(this->ConvertToOutputFormat(ccg.GetCommand(i).c_str(),
-                                                   SHELL));
+    cmdLines.push_back(launcher +
+      this->ConvertToOutputFormat(ccg.GetCommand(i), SHELL));
+
     std::string& cmd = cmdLines.back();
     ccg.AppendArguments(i, cmd);
   }
@@ -320,33 +397,36 @@ cmLocalNinjaGenerator::WriteCustomCommandBuildStatement(
   if (this->GetGlobalNinjaGenerator()->SeenCustomCommand(cc))
     return;
 
-  const std::vector<std::string> &outputs = cc->GetOutputs();
+  cmCustomCommandGenerator ccg(*cc, this->GetConfigName(), this->Makefile);
+
+  const std::vector<std::string> &outputs = ccg.GetOutputs();
   cmNinjaDeps ninjaOutputs(outputs.size()), ninjaDeps;
 
   std::transform(outputs.begin(), outputs.end(),
                  ninjaOutputs.begin(), MapToNinjaPath());
-  this->AppendCustomCommandDeps(cc, ninjaDeps);
+  this->AppendCustomCommandDeps(ccg, ninjaDeps);
 
   for (cmNinjaDeps::iterator i = ninjaOutputs.begin(); i != ninjaOutputs.end();
        ++i)
     this->GetGlobalNinjaGenerator()->SeenCustomCommandOutput(*i);
 
   std::vector<std::string> cmdLines;
-  this->AppendCustomCommandLines(cc, cmdLines);
+  this->AppendCustomCommandLines(ccg, cmdLines);
 
   if (cmdLines.empty()) {
-    cmGlobalNinjaGenerator::WritePhonyBuild(this->GetBuildFileStream(),
-                                            "Phony custom command for " +
-                                              ninjaOutputs[0],
-                                            ninjaOutputs,
-                                            ninjaDeps,
-                                            cmNinjaDeps(),
-                                            orderOnlyDeps,
-                                            cmNinjaVars());
+    this->GetGlobalNinjaGenerator()->WritePhonyBuild(
+      this->GetBuildFileStream(),
+      "Phony custom command for " +
+      ninjaOutputs[0],
+      ninjaOutputs,
+      ninjaDeps,
+      cmNinjaDeps(),
+      orderOnlyDeps,
+      cmNinjaVars());
   } else {
     this->GetGlobalNinjaGenerator()->WriteCustomCommandBuild(
       this->BuildCommandLine(cmdLines),
-      this->ConstructComment(*cc),
+      this->ConstructComment(ccg),
       "Custom command for " + ninjaOutputs[0],
       ninjaOutputs,
       ninjaDeps,
@@ -392,4 +472,40 @@ void cmLocalNinjaGenerator::WriteCustomCommandBuildStatements()
 
     this->WriteCustomCommandBuildStatement(i->first, ccTargetDeps);
   }
+}
+
+std::string cmLocalNinjaGenerator::MakeCustomLauncher(
+  cmCustomCommandGenerator const& ccg)
+{
+  const char* property = "RULE_LAUNCH_CUSTOM";
+  const char* property_value = this->Makefile->GetProperty(property);
+
+  if(!property_value || !*property_value)
+  {
+    return std::string();
+  }
+
+  // Expand rules in the empty string.  It may insert the launcher and
+  // perform replacements.
+  RuleVariables vars;
+  vars.RuleLauncher = property;
+  std::string output;
+  const std::vector<std::string>& outputs = ccg.GetOutputs();
+  if(!outputs.empty())
+  {
+    RelativeRoot relative_root =
+      ccg.GetWorkingDirectory().empty() ? START_OUTPUT : NONE;
+
+    output = this->Convert(outputs[0], relative_root, SHELL);
+  }
+  vars.Output = output.c_str();
+
+  std::string launcher;
+  this->ExpandRuleVariables(launcher, vars);
+  if(!launcher.empty())
+  {
+    launcher += " ";
+  }
+
+  return launcher;
 }

@@ -24,7 +24,7 @@ if(CMAKE_Fortran_COMPILER_ID)
 endif()
 
 set(CMAKE_BASE_NAME)
-get_filename_component(CMAKE_BASE_NAME ${CMAKE_Fortran_COMPILER} NAME_WE)
+get_filename_component(CMAKE_BASE_NAME "${CMAKE_Fortran_COMPILER}" NAME_WE)
 # since the gnu compiler has several names force g++
 if(CMAKE_COMPILER_IS_GNUG77)
   set(CMAKE_BASE_NAME g77)
@@ -218,7 +218,7 @@ endif()
 
 if(CMAKE_Fortran_STANDARD_LIBRARIES_INIT)
   set(CMAKE_Fortran_STANDARD_LIBRARIES "${CMAKE_Fortran_STANDARD_LIBRARIES_INIT}"
-    CACHE STRING "Libraries linked by defalut with all Fortran applications.")
+    CACHE STRING "Libraries linked by default with all Fortran applications.")
   mark_as_advanced(CMAKE_Fortran_STANDARD_LIBRARIES)
 endif()
 
@@ -226,11 +226,11 @@ if(NOT CMAKE_NOT_USING_CONFIG_FLAGS)
   set (CMAKE_Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG_INIT}" CACHE STRING
      "Flags used by the compiler during debug builds.")
   set (CMAKE_Fortran_FLAGS_MINSIZEREL "${CMAKE_Fortran_FLAGS_MINSIZEREL_INIT}" CACHE STRING
-      "Flags used by the compiler during release minsize builds.")
+     "Flags used by the compiler during release builds for minimum size.")
   set (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE_INIT}" CACHE STRING
-     "Flags used by the compiler during release builds (/MD /Ob1 /Oi /Ot /Oy /Gs will produce slightly less optimized but smaller files).")
+     "Flags used by the compiler during release builds.")
   set (CMAKE_Fortran_FLAGS_RELWITHDEBINFO "${CMAKE_Fortran_FLAGS_RELWITHDEBINFO_INIT}" CACHE STRING
-     "Flags used by the compiler during Release with Debug Info builds.")
+     "Flags used by the compiler during release builds with debug info.")
 
 endif()
 

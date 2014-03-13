@@ -17,11 +17,12 @@
 #include <windows.h>
 
 cmWIXSourceWriter::cmWIXSourceWriter(cmCPackLog* logger,
-  const std::string& filename,
+  std::string const& filename,
   bool isIncludeFile):
     Logger(logger),
-    file(filename.c_str()),
-    state(DEFAULT)
+    File(filename.c_str()),
+    State(DEFAULT),
+    SourceFilename(filename)
 {
   WriteXMLDeclaration();
 
@@ -39,75 +40,99 @@ cmWIXSourceWriter::cmWIXSourceWriter(cmCPackLog* logger,
 
 cmWIXSourceWriter::~cmWIXSourceWriter()
 {
-  while(elements.size())
-    {
-    EndElement();
-    }
-}
-
-void cmWIXSourceWriter::BeginElement(const std::string& name)
-{
-  if(state == BEGIN)
-    {
-    file << ">";
-    }
-
-  file << "\n";
-  Indent(elements.size());
-  file << "<" << name;
-
-  elements.push_back(name);
-  state = BEGIN;
-}
-
-void cmWIXSourceWriter::EndElement()
-{
-  if(elements.empty())
+  if(Elements.size() > 1)
     {
     cmCPackLogger(cmCPackLog::LOG_ERROR,
-      "can not end WiX element with no open elements" << std::endl);
+      Elements.size() - 1 << " WiX elements were still open when closing '" <<
+      SourceFilename << "'" << std::endl);
     return;
     }
 
-  if(state == DEFAULT)
+  EndElement(Elements.back());
+}
+
+void cmWIXSourceWriter::BeginElement(std::string const& name)
+{
+  if(State == BEGIN)
     {
-    file << "\n";
-    Indent(elements.size()-1);
-    file << "</" << elements.back() << ">";
+    File << ">";
+    }
+
+  File << "\n";
+  Indent(Elements.size());
+  File << "<" << name;
+
+  Elements.push_back(name);
+  State = BEGIN;
+}
+
+void cmWIXSourceWriter::EndElement(std::string const& name)
+{
+  if(Elements.empty())
+    {
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+      "can not end WiX element with no open elements in '" <<
+      SourceFilename << "'" << std::endl);
+    return;
+    }
+
+  if(Elements.back() != name)
+    {
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+      "WiX element <" << Elements.back() <<
+      "> can not be closed by </" << name << "> in '" <<
+      SourceFilename << "'" << std::endl);
+    return;
+    }
+
+  if(State == DEFAULT)
+    {
+    File << "\n";
+    Indent(Elements.size()-1);
+    File << "</" << Elements.back() << ">";
     }
   else
     {
-    file << "/>";
+    File << "/>";
     }
 
-  elements.pop_back();
-  state = DEFAULT;
+  Elements.pop_back();
+  State = DEFAULT;
 }
 
 void cmWIXSourceWriter::AddProcessingInstruction(
-  const std::string& target, const std::string& content)
+  std::string const& target, std::string const& content)
 {
-  if(state == BEGIN)
+  if(State == BEGIN)
     {
-    file << ">";
+    File << ">";
     }
 
-  file << "\n";
-  Indent(elements.size());
-  file << "<?" << target << " " << content << "?>";
+  File << "\n";
+  Indent(Elements.size());
+  File << "<?" << target << " " << content << "?>";
 
-  state = DEFAULT;
+  State = DEFAULT;
 }
 
 void cmWIXSourceWriter::AddAttribute(
-  const std::string& key, const std::string& value)
+  std::string const& key, std::string const& value)
 {
   std::string utf8 = WindowsCodepageToUtf8(value);
 
-  file << " " << key << "=\"" << EscapeAttributeValue(utf8) << '"';
+  File << " " << key << "=\"" << EscapeAttributeValue(utf8) << '"';
 }
 
-std::string cmWIXSourceWriter::WindowsCodepageToUtf8(const std::string& value)
+void cmWIXSourceWriter::AddAttributeUnlessEmpty(
+    std::string const& key, std::string const& value)
+{
+  if(value.size())
+    {
+    AddAttribute(key, value);
+    }
+}
+
+std::string cmWIXSourceWriter::WindowsCodepageToUtf8(std::string const& value)
 {
   if(value.empty())
     {
@@ -147,19 +172,19 @@ std::string cmWIXSourceWriter::WindowsCodepageToUtf8(const std::string& value)
 
 void cmWIXSourceWriter::WriteXMLDeclaration()
 {
-  file << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" << std::endl;
+  File << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" << std::endl;
 }
 
 void cmWIXSourceWriter::Indent(size_t count)
 {
   for(size_t i = 0; i < count; ++i)
     {
-    file << "    ";
+    File << "    ";
     }
 }
 
 std::string cmWIXSourceWriter::EscapeAttributeValue(
-  const std::string& value)
+  std::string const& value)
 {
   std::string result;
   result.reserve(value.size());
@@ -172,6 +197,9 @@ std::string cmWIXSourceWriter::EscapeAttributeValue(
       {
     case '<':
       result += "&lt;";
+      break;
+    case '>':
+      result += "&gt;";
       break;
     case '&':
       result +="&amp;";

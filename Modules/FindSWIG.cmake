@@ -1,17 +1,26 @@
-# - Find SWIG
+#.rst:
+# FindSWIG
+# --------
+#
+# Find SWIG
+#
 # This module finds an installed SWIG.  It sets the following variables:
-#  SWIG_FOUND - set to true if SWIG is found
-#  SWIG_DIR - the directory where swig is installed
-#  SWIG_EXECUTABLE - the path to the swig executable
-#  SWIG_VERSION   - the version number of the swig executable
+#
+# ::
+#
+#   SWIG_FOUND - set to true if SWIG is found
+#   SWIG_DIR - the directory where swig is installed
+#   SWIG_EXECUTABLE - the path to the swig executable
+#   SWIG_VERSION   - the version number of the swig executable
+#
+#
 #
 # The minimum required version of SWIG can be specified using the
-# standard syntax, e.g. find_package(SWIG 1.1)
+# standard syntax, e.g.  find_package(SWIG 1.1)
 #
-# All information is collected from the SWIG_EXECUTABLE so the
-# version to be found can be changed from the command line by
-# means of setting SWIG_EXECUTABLE
-#
+# All information is collected from the SWIG_EXECUTABLE so the version
+# to be found can be changed from the command line by means of setting
+# SWIG_EXECUTABLE
 
 #=============================================================================
 # Copyright 2004-2009 Kitware, Inc.
@@ -43,11 +52,9 @@ if(SWIG_EXECUTABLE)
     endif()
   else()
     string(REGEX REPLACE "[\n\r]+" ";" SWIG_swiglib_output ${SWIG_swiglib_output})
-    # force the path to be computed each time in case SWIG_EXECUTABLE has changed.
-    set(SWIG_DIR SWIG_DIR-NOTFOUND)
-    find_path(SWIG_DIR swig.swg PATHS ${SWIG_swiglib_output})
+    find_path(SWIG_DIR swig.swg PATHS ${SWIG_swiglib_output} NO_CMAKE_FIND_ROOT_PATH)
     if(SWIG_DIR)
-      set(SWIG_USE_FILE ${CMAKE_ROOT}/Modules/UseSWIG.cmake)
+      set(SWIG_USE_FILE ${CMAKE_CURRENT_LIST_DIR}/UseSWIG.cmake)
       execute_process(COMMAND ${SWIG_EXECUTABLE} -version
         OUTPUT_VARIABLE SWIG_version_output
         ERROR_VARIABLE SWIG_version_output
@@ -66,3 +73,5 @@ endif()
 include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(SWIG  REQUIRED_VARS SWIG_EXECUTABLE SWIG_DIR
                                         VERSION_VAR SWIG_VERSION )
+
+mark_as_advanced(SWIG_DIR SWIG_VERSION)

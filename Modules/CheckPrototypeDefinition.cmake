@@ -1,23 +1,38 @@
-# - Check if the protoype we expect is correct.
-# check_prototype_definition(FUNCTION PROTOTYPE RETURN HEADER VARIABLE)
-#  FUNCTION - The name of the function (used to check if prototype exists)
-#  PROTOTYPE- The prototype to check.
-#  RETURN - The return value of the function.
-#  HEADER - The header files required.
-#  VARIABLE - The variable to store the result.
-# Example:
-#  check_prototype_definition(getpwent_r
-#   "struct passwd *getpwent_r(struct passwd *src, char *buf, int buflen)"
-#   "NULL"
-#   "unistd.h;pwd.h"
-#   SOLARIS_GETPWENT_R)
-# The following variables may be set before calling this macro to
-# modify the way the check is run:
+#.rst:
+# CheckPrototypeDefinition
+# ------------------------
 #
-#  CMAKE_REQUIRED_FLAGS = string of compile command line flags
-#  CMAKE_REQUIRED_DEFINITIONS = list of macros to define (-DFOO=bar)
-#  CMAKE_REQUIRED_INCLUDES = list of include directories
-#  CMAKE_REQUIRED_LIBRARIES = list of libraries to link
+# Check if the protoype we expect is correct.
+#
+# check_prototype_definition(FUNCTION PROTOTYPE RETURN HEADER VARIABLE)
+#
+# ::
+#
+#   FUNCTION - The name of the function (used to check if prototype exists)
+#   PROTOTYPE- The prototype to check.
+#   RETURN - The return value of the function.
+#   HEADER - The header files required.
+#   VARIABLE - The variable to store the result.
+#
+# Example:
+#
+# ::
+#
+#   check_prototype_definition(getpwent_r
+#    "struct passwd *getpwent_r(struct passwd *src, char *buf, int buflen)"
+#    "NULL"
+#    "unistd.h;pwd.h"
+#    SOLARIS_GETPWENT_R)
+#
+# The following variables may be set before calling this macro to modify
+# the way the check is run:
+#
+# ::
+#
+#   CMAKE_REQUIRED_FLAGS = string of compile command line flags
+#   CMAKE_REQUIRED_DEFINITIONS = list of macros to define (-DFOO=bar)
+#   CMAKE_REQUIRED_INCLUDES = list of include directories
+#   CMAKE_REQUIRED_LIBRARIES = list of libraries to link
 
 #=============================================================================
 # Copyright 2005-2009 Kitware, Inc.
@@ -34,7 +49,6 @@
 #  License text for the above reference.)
 #
 
-include("${CMAKE_CURRENT_LIST_DIR}/CMakeExpandImportedTargets.cmake")
 
 get_filename_component(__check_proto_def_dir "${CMAKE_CURRENT_LIST_FILE}" PATH)
 
@@ -46,10 +60,8 @@ function(CHECK_PROTOTYPE_DEFINITION _FUNCTION _PROTOTYPE _RETURN _HEADER _VARIAB
 
     set(CHECK_PROTOTYPE_DEFINITION_FLAGS ${CMAKE_REQUIRED_FLAGS})
     if (CMAKE_REQUIRED_LIBRARIES)
-      # this one translates potentially used imported library targets to their files on disk
-      cmake_expand_imported_targets(_ADJUSTED_CMAKE_REQUIRED_LIBRARIES  LIBRARIES  ${CMAKE_REQUIRED_LIBRARIES} CONFIGURATION "${CMAKE_TRY_COMPILE_CONFIGURATION}")
       set(CHECK_PROTOTYPE_DEFINITION_LIBS
-        "-DLINK_LIBRARIES:STRING=${_ADJUSTED_CMAKE_REQUIRED_LIBRARIES}")
+        LINK_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES})
     else()
       set(CHECK_PROTOTYPE_DEFINITION_LIBS)
     endif()
@@ -78,8 +90,8 @@ function(CHECK_PROTOTYPE_DEFINITION _FUNCTION _PROTOTYPE _RETURN _HEADER _VARIAB
       ${CMAKE_BINARY_DIR}
       ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/CheckPrototypeDefinition.c
       COMPILE_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS}
+      ${CHECK_PROTOTYPE_DEFINITION_LIBS}
       CMAKE_FLAGS -DCOMPILE_DEFINITIONS:STRING=${CHECK_PROTOTYPE_DEFINITION_FLAGS}
-      "${CHECK_PROTOTYPE_DEFINITION_LIBS}"
       "${CMAKE_SYMBOL_EXISTS_INCLUDES}"
       OUTPUT_VARIABLE OUTPUT)
 

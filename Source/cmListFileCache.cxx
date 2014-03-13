@@ -22,10 +22,121 @@
 # pragma warn -8060 /* possibly incorrect assignment */
 #endif
 
-bool cmListFileCacheParseFunction(cmListFileLexer* lexer,
-                                  cmListFileFunction& function,
-                                  const char* filename);
+//----------------------------------------------------------------------------
+struct cmListFileParser
+{
+  cmListFileParser(cmListFile* lf, cmMakefile* mf, const char* filename);
+  ~cmListFileParser();
+  bool ParseFile();
+  bool ParseFunction(const char* name, long line);
+  bool AddArgument(cmListFileLexer_Token* token,
+                   cmListFileArgument::Delimiter delim);
+  cmListFile* ListFile;
+  cmMakefile* Makefile;
+  const char* FileName;
+  cmListFileLexer* Lexer;
+  cmListFileFunction Function;
+  enum { SeparationOkay, SeparationWarning, SeparationError} Separation;
+};
 
+//----------------------------------------------------------------------------
+cmListFileParser::cmListFileParser(cmListFile* lf, cmMakefile* mf,
+                                   const char* filename):
+  ListFile(lf), Makefile(mf), FileName(filename),
+  Lexer(cmListFileLexer_New())
+{
+}
+
+//----------------------------------------------------------------------------
+cmListFileParser::~cmListFileParser()
+{
+  cmListFileLexer_Delete(this->Lexer);
+}
+
+//----------------------------------------------------------------------------
+bool cmListFileParser::ParseFile()
+{
+  // Open the file.
+  cmListFileLexer_BOM bom;
+  if(!cmListFileLexer_SetFileName(this->Lexer, this->FileName, &bom))
+    {
+    cmSystemTools::Error("cmListFileCache: error can not open file ",
+                         this->FileName);
+    return false;
+    }
+
+  // Verify the Byte-Order-Mark, if any.
+  if(bom != cmListFileLexer_BOM_None &&
+     bom != cmListFileLexer_BOM_UTF8)
+    {
+    cmListFileLexer_SetFileName(this->Lexer, 0, 0);
+    cmOStringStream m;
+    m << "File\n  " << this->FileName << "\n"
+      << "starts with a Byte-Order-Mark that is not UTF-8.";
+    this->Makefile->IssueMessage(cmake::FATAL_ERROR, m.str());
+    return false;
+    }
+
+  // Use a simple recursive-descent parser to process the token
+  // stream.
+  bool haveNewline = true;
+  while(cmListFileLexer_Token* token =
+        cmListFileLexer_Scan(this->Lexer))
+    {
+    if(token->type == cmListFileLexer_Token_Space)
+      {
+      }
+    else if(token->type == cmListFileLexer_Token_Newline)
+      {
+      haveNewline = true;
+      }
+    else if(token->type == cmListFileLexer_Token_CommentBracket)
+      {
+      haveNewline = false;
+      }
+    else if(token->type == cmListFileLexer_Token_Identifier)
+      {
+      if(haveNewline)
+        {
+        haveNewline = false;
+        if(this->ParseFunction(token->text, token->line))
+          {
+          this->ListFile->Functions.push_back(this->Function);
+          }
+        else
+          {
+          return false;
+          }
+        }
+      else
+        {
+        cmOStringStream error;
+        error << "Error in cmake code at\n"
+              << this->FileName << ":" << token->line << ":\n"
+              << "Parse error.  Expected a newline, got "
+              << cmListFileLexer_GetTypeAsString(this->Lexer, token->type)
+              << " with text \"" << token->text << "\".";
+        cmSystemTools::Error(error.str().c_str());
+        return false;
+        }
+      }
+    else
+      {
+      cmOStringStream error;
+      error << "Error in cmake code at\n"
+            << this->FileName << ":" << token->line << ":\n"
+            << "Parse error.  Expected a command name, got "
+            << cmListFileLexer_GetTypeAsString(this->Lexer, token->type)
+            << " with text \""
+            << token->text << "\".";
+      cmSystemTools::Error(error.str().c_str());
+      return false;
+      }
+    }
+  return true;
+}
+
+//----------------------------------------------------------------------------
 bool cmListFile::ParseFile(const char* filename,
                            bool topLevel,
                            cmMakefile *mf)
@@ -35,84 +146,18 @@ bool cmListFile::ParseFile(const char* filename,
     return false;
     }
 
-  // Create the scanner.
-  cmListFileLexer* lexer = cmListFileLexer_New();
-  if(!lexer)
-    {
-    cmSystemTools::Error("cmListFileCache: error allocating lexer ");
-    return false;
-    }
-
-  // Open the file.
-  if(!cmListFileLexer_SetFileName(lexer, filename))
-    {
-    cmListFileLexer_Delete(lexer);
-    cmSystemTools::Error("cmListFileCache: error can not open file ",
-                         filename);
-    return false;
-    }
-
-  // Use a simple recursive-descent parser to process the token
-  // stream.
-  this->ModifiedTime = cmSystemTools::ModifiedTime(filename);
   bool parseError = false;
-  bool haveNewline = true;
-  cmListFileLexer_Token* token;
-  while(!parseError && (token = cmListFileLexer_Scan(lexer)))
-    {
-    if(token->type == cmListFileLexer_Token_Newline)
-      {
-      haveNewline = true;
-      }
-    else if(token->type == cmListFileLexer_Token_Identifier)
-      {
-      if(haveNewline)
-        {
-        haveNewline = false;
-        cmListFileFunction inFunction;
-        inFunction.Name = token->text;
-        inFunction.FilePath = filename;
-        inFunction.Line = token->line;
-        if(cmListFileCacheParseFunction(lexer, inFunction, filename))
-          {
-          this->Functions.push_back(inFunction);
-          }
-        else
-          {
-          parseError = true;
-          }
-        }
-      else
-        {
-        cmOStringStream error;
-        error << "Error in cmake code at\n"
-              << filename << ":" << token->line << ":\n"
-              << "Parse error.  Expected a newline, got "
-              << cmListFileLexer_GetTypeAsString(lexer, token->type)
-              << " with text \"" << token->text << "\".";
-        cmSystemTools::Error(error.str().c_str());
-        parseError = true;
-        }
-      }
-    else
-      {
-      cmOStringStream error;
-      error << "Error in cmake code at\n"
-            << filename << ":" << token->line << ":\n"
-            << "Parse error.  Expected a command name, got "
-            << cmListFileLexer_GetTypeAsString(lexer, token->type)
-            << " with text \""
-            << token->text << "\".";
-      cmSystemTools::Error(error.str().c_str());
-      parseError = true;
-      }
-    }
-  if (parseError)
+  this->ModifiedTime = cmSystemTools::ModifiedTime(filename);
+
+  {
+  cmListFileParser parser(this, mf, filename);
+  parseError = !parser.ParseFile();
+  }
+
+  if(parseError)
     {
     this->ModifiedTime = 0;
     }
-
-  cmListFileLexer_Delete(lexer);
 
   // do we need a cmake_policy(VERSION call?
   if(topLevel)
@@ -196,7 +241,8 @@ bool cmListFile::ParseFile(const char* filename,
       {
       cmListFileFunction project;
       project.Name = "PROJECT";
-      cmListFileArgument prj("Project", false, filename, 0);
+      cmListFileArgument prj("Project", cmListFileArgument::Unquoted,
+                             filename, 0);
       project.Arguments.push_back(prj);
       this->Functions.insert(this->Functions.begin(),project);
       }
@@ -208,17 +254,24 @@ bool cmListFile::ParseFile(const char* filename,
   return true;
 }
 
-bool cmListFileCacheParseFunction(cmListFileLexer* lexer,
-                                  cmListFileFunction& function,
-                                  const char* filename)
+//----------------------------------------------------------------------------
+bool cmListFileParser::ParseFunction(const char* name, long line)
 {
+  // Inintialize a new function call.
+  this->Function = cmListFileFunction();
+  this->Function.FilePath = this->FileName;
+  this->Function.Name = name;
+  this->Function.Line = line;
+
   // Command name has already been parsed.  Read the left paren.
   cmListFileLexer_Token* token;
-  if(!(token = cmListFileLexer_Scan(lexer)))
+  while((token = cmListFileLexer_Scan(this->Lexer)) &&
+        token->type == cmListFileLexer_Token_Space) {}
+  if(!token)
     {
     cmOStringStream error;
-    error << "Error in cmake code at\n"
-          << filename << ":" << cmListFileLexer_GetCurrentLine(lexer) << ":\n"
+    error << "Error in cmake code at\n" << this->FileName << ":"
+          << cmListFileLexer_GetCurrentLine(this->Lexer) << ":\n"
           << "Parse error.  Function missing opening \"(\".";
     cmSystemTools::Error(error.str().c_str());
     return false;
@@ -226,26 +279,36 @@ bool cmListFileCacheParseFunction(cmListFileLexer* lexer,
   if(token->type != cmListFileLexer_Token_ParenLeft)
     {
     cmOStringStream error;
-    error << "Error in cmake code at\n"
-          << filename << ":" << cmListFileLexer_GetCurrentLine(lexer) << ":\n"
+    error << "Error in cmake code at\n" << this->FileName << ":"
+          << cmListFileLexer_GetCurrentLine(this->Lexer) << ":\n"
           << "Parse error.  Expected \"(\", got "
-          << cmListFileLexer_GetTypeAsString(lexer, token->type)
+          << cmListFileLexer_GetTypeAsString(this->Lexer, token->type)
           << " with text \"" << token->text << "\".";
     cmSystemTools::Error(error.str().c_str());
     return false;
     }
 
   // Arguments.
-  unsigned long lastLine = cmListFileLexer_GetCurrentLine(lexer);
+  unsigned long lastLine;
   unsigned long parenDepth = 0;
-  while((token = cmListFileLexer_Scan(lexer)))
+  this->Separation = SeparationOkay;
+  while((lastLine = cmListFileLexer_GetCurrentLine(this->Lexer),
+         token = cmListFileLexer_Scan(this->Lexer)))
     {
+    if(token->type == cmListFileLexer_Token_Space ||
+       token->type == cmListFileLexer_Token_Newline)
+      {
+      this->Separation = SeparationOkay;
+      continue;
+      }
     if(token->type == cmListFileLexer_Token_ParenLeft)
       {
       parenDepth++;
-      cmListFileArgument a("(",
-                           false, filename, token->line);
-      function.Arguments.push_back(a);
+      this->Separation = SeparationOkay;
+      if(!this->AddArgument(token, cmListFileArgument::Unquoted))
+        {
+        return false;
+        }
       }
     else if(token->type == cmListFileLexer_Token_ParenRight)
       {
@@ -254,48 +317,94 @@ bool cmListFileCacheParseFunction(cmListFileLexer* lexer,
         return true;
         }
       parenDepth--;
-      cmListFileArgument a(")",
-                           false, filename, token->line);
-      function.Arguments.push_back(a);
+      this->Separation = SeparationOkay;
+      if(!this->AddArgument(token, cmListFileArgument::Unquoted))
+        {
+        return false;
+        }
+      this->Separation = SeparationWarning;
       }
     else if(token->type == cmListFileLexer_Token_Identifier ||
             token->type == cmListFileLexer_Token_ArgumentUnquoted)
       {
-      cmListFileArgument a(token->text,
-                           false, filename, token->line);
-      function.Arguments.push_back(a);
+      if(!this->AddArgument(token, cmListFileArgument::Unquoted))
+        {
+        return false;
+        }
+      this->Separation = SeparationWarning;
       }
     else if(token->type == cmListFileLexer_Token_ArgumentQuoted)
       {
-      cmListFileArgument a(token->text,
-                           true, filename, token->line);
-      function.Arguments.push_back(a);
+      if(!this->AddArgument(token, cmListFileArgument::Quoted))
+        {
+        return false;
+        }
+      this->Separation = SeparationWarning;
       }
-    else if(token->type != cmListFileLexer_Token_Newline)
+    else if(token->type == cmListFileLexer_Token_ArgumentBracket)
+      {
+      if(!this->AddArgument(token, cmListFileArgument::Bracket))
+        {
+        return false;
+        }
+      this->Separation = SeparationError;
+      }
+    else if(token->type == cmListFileLexer_Token_CommentBracket)
+      {
+      this->Separation = SeparationError;
+      }
+    else
       {
       // Error.
       cmOStringStream error;
-      error << "Error in cmake code at\n"
-            << filename << ":" << cmListFileLexer_GetCurrentLine(lexer)
-            << ":\n"
+      error << "Error in cmake code at\n" << this->FileName << ":"
+            << cmListFileLexer_GetCurrentLine(this->Lexer) << ":\n"
             << "Parse error.  Function missing ending \")\".  "
             << "Instead found "
-            << cmListFileLexer_GetTypeAsString(lexer, token->type)
+            << cmListFileLexer_GetTypeAsString(this->Lexer, token->type)
             << " with text \"" << token->text << "\".";
       cmSystemTools::Error(error.str().c_str());
       return false;
       }
-    lastLine = cmListFileLexer_GetCurrentLine(lexer);
     }
 
   cmOStringStream error;
   error << "Error in cmake code at\n"
-        << filename << ":" << lastLine << ":\n"
+        << this->FileName << ":" << lastLine << ":\n"
         << "Parse error.  Function missing ending \")\".  "
         << "End of file reached.";
   cmSystemTools::Error(error.str().c_str());
 
   return false;
+}
+
+//----------------------------------------------------------------------------
+bool cmListFileParser::AddArgument(cmListFileLexer_Token* token,
+                                   cmListFileArgument::Delimiter delim)
+{
+  cmListFileArgument a(token->text, delim, this->FileName, token->line);
+  this->Function.Arguments.push_back(a);
+  if(this->Separation == SeparationOkay)
+    {
+    return true;
+    }
+  bool isError = (this->Separation == SeparationError ||
+                  delim == cmListFileArgument::Bracket);
+  cmOStringStream m;
+  m << "Syntax " << (isError? "Error":"Warning") << " in cmake code at\n"
+    << "  " << this->FileName << ":" << token->line << ":"
+    << token->column << "\n"
+    << "Argument not separated from preceding token by whitespace.";
+  if(isError)
+    {
+    this->Makefile->IssueMessage(cmake::FATAL_ERROR, m.str());
+    return false;
+    }
+  else
+    {
+    this->Makefile->IssueMessage(cmake::AUTHOR_WARNING, m.str());
+    return true;
+    }
 }
 
 //----------------------------------------------------------------------------

@@ -52,25 +52,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "endfunction";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Ends a list of commands in a function block.";
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "  endfunction(expression)\n"
-      "See the function command.";
-    }
+  virtual std::string GetName() const { return "endfunction";}
 
   cmTypeMacro(cmEndFunctionCommand, cmCommand);
 };

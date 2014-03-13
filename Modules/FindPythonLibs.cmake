@@ -1,23 +1,36 @@
-# - Find python libraries
+#.rst:
+# FindPythonLibs
+# --------------
+#
+# Find python libraries
+#
 # This module finds if Python is installed and determines where the
-# include files and libraries are. It also determines what the name of
-# the library is. This code sets the following variables:
+# include files and libraries are.  It also determines what the name of
+# the library is.  This code sets the following variables:
 #
-#  PYTHONLIBS_FOUND           - have the Python libs been found
-#  PYTHON_LIBRARIES           - path to the python library
-#  PYTHON_INCLUDE_PATH        - path to where Python.h is found (deprecated)
-#  PYTHON_INCLUDE_DIRS        - path to where Python.h is found
-#  PYTHON_DEBUG_LIBRARIES     - path to the debug library (deprecated)
-#  PYTHONLIBS_VERSION_STRING  - version of the Python libs found (since CMake 2.8.8)
+# ::
 #
-# The Python_ADDITIONAL_VERSIONS variable can be used to specify a list of
-# version numbers that should be taken into account when searching for Python.
-# You need to set this variable before calling find_package(PythonLibs).
+#   PYTHONLIBS_FOUND           - have the Python libs been found
+#   PYTHON_LIBRARIES           - path to the python library
+#   PYTHON_INCLUDE_PATH        - path to where Python.h is found (deprecated)
+#   PYTHON_INCLUDE_DIRS        - path to where Python.h is found
+#   PYTHON_DEBUG_LIBRARIES     - path to the debug library (deprecated)
+#   PYTHONLIBS_VERSION_STRING  - version of the Python libs found (since CMake 2.8.8)
 #
-# If you'd like to specify the installation of Python to use, you should modify
-# the following cache variables:
-#  PYTHON_LIBRARY             - path to the python library
-#  PYTHON_INCLUDE_DIR         - path to where Python.h is found
+#
+#
+# The Python_ADDITIONAL_VERSIONS variable can be used to specify a list
+# of version numbers that should be taken into account when searching
+# for Python.  You need to set this variable before calling
+# find_package(PythonLibs).
+#
+# If you'd like to specify the installation of Python to use, you should
+# modify the following cache variables:
+#
+# ::
+#
+#   PYTHON_LIBRARY             - path to the python library
+#   PYTHON_INCLUDE_DIR         - path to where Python.h is found
 
 #=============================================================================
 # Copyright 2001-2009 Kitware, Inc.
@@ -38,12 +51,11 @@ CMAKE_FIND_FRAMEWORKS(Python)
 
 set(_PYTHON1_VERSIONS 1.6 1.5)
 set(_PYTHON2_VERSIONS 2.7 2.6 2.5 2.4 2.3 2.2 2.1 2.0)
-set(_PYTHON3_VERSIONS 3.3 3.2 3.1 3.0)
+set(_PYTHON3_VERSIONS 3.4 3.3 3.2 3.1 3.0)
 
 if(PythonLibs_FIND_VERSION)
-    if(PythonLibs_FIND_VERSION MATCHES "^[0-9]+\\.[0-9]+(\\.[0-9]+.*)?$")
-        string(REGEX REPLACE "^([0-9]+\\.[0-9]+).*" "\\1" _PYTHON_FIND_MAJ_MIN "${PythonLibs_FIND_VERSION}")
-        string(REGEX REPLACE "^([0-9]+).*" "\\1" _PYTHON_FIND_MAJ "${_PYTHON_FIND_MAJ_MIN}")
+    if(PythonLibs_FIND_VERSION_COUNT GREATER 1)
+        set(_PYTHON_FIND_MAJ_MIN "${PythonLibs_FIND_VERSION_MAJOR}.${PythonLibs_FIND_VERSION_MINOR}")
         unset(_PYTHON_FIND_OTHER_VERSIONS)
         if(PythonLibs_FIND_VERSION_EXACT)
             if(_PYTHON_FIND_MAJ_MIN STREQUAL PythonLibs_FIND_VERSION)
@@ -52,16 +64,15 @@ if(PythonLibs_FIND_VERSION)
                 set(_PYTHON_FIND_OTHER_VERSIONS "${PythonLibs_FIND_VERSION}" "${_PYTHON_FIND_MAJ_MIN}")
             endif()
         else()
-            foreach(_PYTHON_V ${_PYTHON${_PYTHON_FIND_MAJ}_VERSIONS})
+            foreach(_PYTHON_V ${_PYTHON${PythonLibs_FIND_VERSION_MAJOR}_VERSIONS})
                 if(NOT _PYTHON_V VERSION_LESS _PYTHON_FIND_MAJ_MIN)
                     list(APPEND _PYTHON_FIND_OTHER_VERSIONS ${_PYTHON_V})
                 endif()
              endforeach()
         endif()
         unset(_PYTHON_FIND_MAJ_MIN)
-        unset(_PYTHON_FIND_MAJ)
     else()
-        set(_PYTHON_FIND_OTHER_VERSIONS ${_PYTHON${PythonLibs_FIND_VERSION}_VERSIONS})
+        set(_PYTHON_FIND_OTHER_VERSIONS ${_PYTHON${PythonLibs_FIND_VERSION_MAJOR}_VERSIONS})
     endif()
 else()
     set(_PYTHON_FIND_OTHER_VERSIONS ${_PYTHON3_VERSIONS} ${_PYTHON2_VERSIONS} ${_PYTHON1_VERSIONS})
@@ -69,10 +80,14 @@ endif()
 
 # Set up the versions we know about, in the order we will search. Always add
 # the user supplied additional versions to the front.
-set(_Python_VERSIONS
-  ${Python_ADDITIONAL_VERSIONS}
-  ${_PYTHON_FIND_OTHER_VERSIONS}
-  )
+# If FindPythonInterp has already found the major and minor version,
+# insert that version between the user supplied versions and the stock
+# version list.
+set(_Python_VERSIONS ${Python_ADDITIONAL_VERSIONS})
+if(DEFINED PYTHON_VERSION_MAJOR AND DEFINED PYTHON_VERSION_MINOR)
+  list(APPEND _Python_VERSIONS ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR})
+endif()
+list(APPEND _Python_VERSIONS ${_PYTHON_FIND_OTHER_VERSIONS})
 
 unset(_PYTHON_FIND_OTHER_VERSIONS)
 unset(_PYTHON1_VERSIONS)

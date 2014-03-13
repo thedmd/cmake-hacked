@@ -12,6 +12,7 @@
 #include "cmLocalXCodeGenerator.h"
 #include "cmGlobalXCodeGenerator.h"
 #include "cmSourceFile.h"
+#include "cmMakefile.h"
 
 //----------------------------------------------------------------------------
 cmLocalXCodeGenerator::cmLocalXCodeGenerator()
@@ -32,4 +33,41 @@ cmLocalXCodeGenerator::GetTargetDirectory(cmTarget const&) const
 {
   // No per-target directory for this generator (yet).
   return "";
+}
+
+//----------------------------------------------------------------------------
+void cmLocalXCodeGenerator::AppendFlagEscape(std::string& flags,
+                                             const std::string& rawFlag)
+{
+  cmGlobalXCodeGenerator* gg =
+    static_cast<cmGlobalXCodeGenerator*>(this->GlobalGenerator);
+  gg->AppendFlag(flags, rawFlag);
+}
+
+//----------------------------------------------------------------------------
+void cmLocalXCodeGenerator::Generate()
+{
+  cmLocalGenerator::Generate();
+
+  cmTargets& targets = this->Makefile->GetTargets();
+  for(cmTargets::iterator iter = targets.begin();
+      iter != targets.end(); ++iter)
+    {
+    cmTarget* t = &iter->second;
+    t->HasMacOSXRpathInstallNameDir("");
+    }
+}
+
+//----------------------------------------------------------------------------
+void cmLocalXCodeGenerator::GenerateInstallRules()
+{
+  cmLocalGenerator::GenerateInstallRules();
+
+  cmTargets& targets = this->Makefile->GetTargets();
+  for(cmTargets::iterator iter = targets.begin();
+      iter != targets.end(); ++iter)
+    {
+    cmTarget* t = &iter->second;
+    t->HasMacOSXRpathInstallNameDir("");
+    }
 }

@@ -44,6 +44,12 @@ public:
   void SetUseUnion(bool val) { this->UseUnion = val; }
 
   /**
+   * Set whether or not CTest should only execute the tests that failed
+   * on the previous run.  By default this is false.
+   */
+  void SetRerunFailed(bool val) { this->RerunFailed = val; }
+
+  /**
    * This method is called when reading CTest custom file
    */
   void PopulateCustomVectors(cmMakefile *mf);
@@ -81,8 +87,8 @@ public:
   // ctest -j N will break for that feature
   struct cmCTestTestProperties
   {
-    cmStdString Name;
-    cmStdString Directory;
+    std::string Name;
+    std::string Directory;
     std::vector<std::string> Args;
     std::vector<std::string> RequiredFiles;
     std::vector<std::string> Depends;
@@ -92,7 +98,7 @@ public:
                           std::string> > ErrorRegularExpressions;
     std::vector<std::pair<cmsys::RegularExpression,
                           std::string> > RequiredRegularExpressions;
-    std::map<cmStdString, cmStdString> Measurements;
+    std::map<std::string, std::string> Measurements;
     bool IsInBasedOnREOptions;
     bool WillFail;
     float Cost;
@@ -103,6 +109,8 @@ public:
     int Index;
     //Requested number of process slots
     int Processors;
+    // return code of test which will mark test as "not run"
+    int SkipReturnCode;
     std::vector<std::string> Environment;
     std::vector<std::string> Labels;
     std::set<std::string> LockedResources;
@@ -153,8 +161,8 @@ protected:
   // compute a final test list
   virtual int PreProcessHandler();
   virtual int PostProcessHandler();
-  virtual void GenerateTestCommand(std::vector<std::string>& args);
-  int ExecuteCommands(std::vector<cmStdString>& vec);
+  virtual void GenerateTestCommand(std::vector<std::string>& args, int test);
+  int ExecuteCommands(std::vector<std::string>& vec);
 
   void WriteTestResultHeader(std::ostream& os, cmCTestTestResult* result);
   void WriteTestResultFooter(std::ostream& os, cmCTestTestResult* result);
@@ -169,7 +177,7 @@ protected:
   typedef std::vector<cmCTestTestResult> TestResultsVector;
   TestResultsVector    TestResults;
 
-  std::vector<cmStdString> CustomTestsIgnore;
+  std::vector<std::string> CustomTestsIgnore;
   std::string             StartTest;
   std::string             EndTest;
   unsigned int            StartTestTime;
@@ -202,8 +210,8 @@ private:
   /**
    * Run the tests for a directory and any subdirectories
    */
-  void ProcessDirectory(std::vector<cmStdString> &passed,
-                        std::vector<cmStdString> &failed);
+  void ProcessDirectory(std::vector<std::string> &passed,
+                        std::vector<std::string> &failed);
 
   /**
    * Get the list of tests in directory and subdirectories.
@@ -213,21 +221,27 @@ private:
   // based on union regex and -I stuff
   void ComputeTestList();
 
+  // compute the lists of tests that will actually run
+  // based on LastTestFailed.log
+  void ComputeTestListForRerunFailed();
+
+  void UpdateMaxTestNameWidth();
+
   bool GetValue(const char* tag,
                 std::string& value,
-                std::ifstream& fin);
+                std::istream& fin);
   bool GetValue(const char* tag,
                 int& value,
-                std::ifstream& fin);
+                std::istream& fin);
   bool GetValue(const char* tag,
                 size_t& value,
-                std::ifstream& fin);
+                std::istream& fin);
   bool GetValue(const char* tag,
                 bool& value,
-                std::ifstream& fin);
+                std::istream& fin);
   bool GetValue(const char* tag,
                 double& value,
-                std::ifstream& fin);
+                std::istream& fin);
   /**
    * Find the executable for a test
    */
@@ -235,9 +249,10 @@ private:
 
   const char* GetTestStatus(int status);
   void ExpandTestsToRunInformation(size_t numPossibleTests);
+  void ExpandTestsToRunInformationForRerunFailed();
 
-  std::vector<cmStdString> CustomPreTest;
-  std::vector<cmStdString> CustomPostTest;
+  std::vector<std::string> CustomPreTest;
+  std::vector<std::string> CustomPostTest;
 
   std::vector<int>        TestsToRun;
 
@@ -268,6 +283,8 @@ private:
   cmsys::RegularExpression DartStuff;
 
   std::ostream* LogFile;
+
+  bool RerunFailed;
 };
 
 #endif

@@ -12,6 +12,7 @@
 #include "cmCryptoHash.h"
 
 #include <cmsys/MD5.h>
+#include <cmsys/FStream.hxx>
 #include "cm_sha2.h"
 
 //----------------------------------------------------------------------------
@@ -34,18 +35,18 @@ cmsys::auto_ptr<cmCryptoHash> cmCryptoHash::New(const char* algo)
 }
 
 //----------------------------------------------------------------------------
-std::string cmCryptoHash::HashString(const char* input)
+std::string cmCryptoHash::HashString(const std::string& input)
 {
   this->Initialize();
-  this->Append(reinterpret_cast<unsigned char const*>(input),
-               static_cast<int>(strlen(input)));
+  this->Append(reinterpret_cast<unsigned char const*>(&input[0]),
+               static_cast<int>(input.size()));
   return this->Finalize();
 }
 
 //----------------------------------------------------------------------------
-std::string cmCryptoHash::HashFile(const char* file)
+std::string cmCryptoHash::HashFile(const std::string& file)
 {
-  std::ifstream fin(file, std::ios::in | cmsys_ios_binary);
+  cmsys::ifstream fin(file.c_str(), std::ios::in | cmsys_ios_binary);
   if(!fin)
     {
     return "";
@@ -54,8 +55,8 @@ std::string cmCryptoHash::HashFile(const char* file)
   this->Initialize();
 
   // Should be efficient enough on most system:
-  const int bufferSize = 4096;
-  char buffer[bufferSize];
+  cm_sha2_uint64_t buffer[512];
+  char* buffer_c = reinterpret_cast<char*>(buffer);
   unsigned char const* buffer_uc =
     reinterpret_cast<unsigned char const*>(buffer);
   // This copy loop is very sensitive on certain platforms with
@@ -65,7 +66,7 @@ std::string cmCryptoHash::HashFile(const char* file)
   // error occurred.  Therefore, the loop should be safe everywhere.
   while(fin)
     {
-    fin.read(buffer, bufferSize);
+    fin.read(buffer_c, sizeof(buffer));
     if(int gcount = static_cast<int>(fin.gcount()))
       {
       this->Append(buffer_uc, gcount);

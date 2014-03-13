@@ -42,26 +42,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const {return "remove_definitions";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Removes -D define flags added by add_definitions.";
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "  remove_definitions(-DFOO -DBAR ...)\n"
-      "Removes flags (added by add_definitions) from the compiler command "
-      "line for sources in the current directory and below.";
-    }
+  virtual std::string GetName() const {return "remove_definitions";}
 
   cmTypeMacro(cmRemoveDefinitionsCommand, cmCommand);
 };

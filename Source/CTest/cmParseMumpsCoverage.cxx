@@ -5,6 +5,7 @@
 #include "cmParseGTMCoverage.h"
 #include <cmsys/Directory.hxx>
 #include <cmsys/Glob.hxx>
+#include <cmsys/FStream.hxx>
 
 
 cmParseMumpsCoverage::cmParseMumpsCoverage(
@@ -23,7 +24,7 @@ bool cmParseMumpsCoverage::ReadCoverageFile(const char* file)
   // Read the gtm_coverage.mcov file, that has two lines of data:
   // packages:/full/path/to/Vista/Packages
   // coverage_dir:/full/path/to/dir/with/*.mcov
-  std::ifstream in(file);
+  cmsys::ifstream in(file);
   if(!in)
     {
     return false;
@@ -61,7 +62,7 @@ bool cmParseMumpsCoverage::ReadCoverageFile(const char* file)
 void cmParseMumpsCoverage::InitializeMumpsFile(std::string& file)
 {
   // initialize the coverage information for a given mumps file
-  std::ifstream in(file.c_str());
+  cmsys::ifstream in(file.c_str());
   if(!in)
     {
     return;
@@ -121,7 +122,7 @@ bool cmParseMumpsCoverage::LoadPackages(const char* d)
   glob.RecurseOn();
   std::string pat = d;
   pat += "/*.m";
-  glob.FindFiles(pat.c_str());
+  glob.FindFiles(pat);
   std::vector<std::string>& files = glob.GetFiles();
   std::vector<std::string>::iterator fileIt;
   for ( fileIt = files.begin(); fileIt != files.end();
@@ -139,7 +140,7 @@ bool cmParseMumpsCoverage::LoadPackages(const char* d)
 bool cmParseMumpsCoverage::FindMumpsFile(std::string const& routine,
                                          std::string& filepath)
 {
-  std::map<cmStdString, cmStdString>::iterator i =
+  std::map<std::string, std::string>::iterator i =
     this->RoutineToDirectory.find(routine);
   if(i != this->RoutineToDirectory.end())
     {

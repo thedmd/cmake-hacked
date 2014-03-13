@@ -11,6 +11,7 @@
 #=============================================================================
 
 set( CURSES_SRCS
+              CursesDialog/cmCursesOptionsWidget
               CursesDialog/cmCursesBoolWidget
               CursesDialog/cmCursesCacheEntryComposite
               CursesDialog/cmCursesDummyWidget
@@ -34,4 +35,4 @@ add_executable(ccmake ${CURSES_SRCS} )
 target_link_libraries(ccmake CMakeLib)
 target_link_libraries(ccmake cmForm)
 
-install_targets(/bin ccmake)
+install(TARGETS ccmake DESTINATION bin)

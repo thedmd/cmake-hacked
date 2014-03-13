@@ -35,7 +35,7 @@ class cmGeneratedFileStream;
 /** \brief Represents a cmake invocation.
  *
  * This class represents a cmake invocation. It is the top level class when
- * running cmake. Most cmake based GUIS should primarily create an instance
+ * running cmake. Most cmake based GUIs should primarily create an instance
  * of this class and communicate with it.
  *
  * The basic process for a GUI is as follows:
@@ -65,7 +65,9 @@ class cmake
     INTERNAL_ERROR,
     MESSAGE,
     WARNING,
-    LOG
+    LOG,
+    DEPRECATION_ERROR,
+    DEPRECATION_WARNING
   };
 
 
@@ -89,7 +91,7 @@ class cmake
      */
     FIND_PACKAGE_MODE
   };
-  typedef std::map<cmStdString, cmCommand*> RegisteredCommandsMap;
+  typedef std::map<std::string, cmCommand*> RegisteredCommandsMap;
 
   /// Default constructor
   cmake();
@@ -108,12 +110,12 @@ class cmake
    * CMakeLists files by recursing up the tree starting at the StartDirectory
    * and going up until it reaches the HomeDirectory.
    */
-  void SetHomeDirectory(const char* dir);
+  void SetHomeDirectory(const std::string& dir);
   const char* GetHomeDirectory() const
     {
     return this->cmHomeDirectory.c_str();
     }
-  void SetHomeOutputDirectory(const char* lib);
+  void SetHomeOutputDirectory(const std::string& lib);
   const char* GetHomeOutputDirectory() const
     {
     return this->HomeOutputDirectory.c_str();
@@ -128,7 +130,7 @@ class cmake
    * recursing up the tree starting at the StartDirectory and going up until
    * it reaches the HomeDirectory.
    */
-  void SetStartDirectory(const char* dir)
+  void SetStartDirectory(const std::string& dir)
     {
       this->cmStartDirectory = dir;
       cmSystemTools::ConvertToUnixSlashes(this->cmStartDirectory);
@@ -137,7 +139,7 @@ class cmake
     {
       return this->cmStartDirectory.c_str();
     }
-  void SetStartOutputDirectory(const char* lib)
+  void SetStartOutputDirectory(const std::string& lib)
     {
       this->StartOutputDirectory = lib;
       cmSystemTools::ConvertToUnixSlashes(this->StartOutputDirectory);
@@ -173,7 +175,7 @@ class cmake
   void PreLoadCMakeFiles();
 
   ///! Create a GlobalGenerator
-  cmGlobalGenerator* CreateGlobalGenerator(const char* name);
+  cmGlobalGenerator* CreateGlobalGenerator(const std::string& name);
 
   ///! Return the global generator assigned to this instance of cmake
   cmGlobalGenerator* GetGlobalGenerator()     { return this->GlobalGenerator; }
@@ -187,25 +189,25 @@ class cmake
   ///! Get the names of the current registered generators
   void GetRegisteredGenerators(std::vector<std::string>& names);
 
+  ///! Set the name of the selected generator-specific toolset.
+  void SetGeneratorToolset(std::string const& ts)
+    { this->GeneratorToolset = ts; }
+
+  ///! Get the name of the selected generator-specific toolset.
+  std::string const& GetGeneratorToolset() const
+    { return this->GeneratorToolset; }
+
   ///! get the cmCachemManager used by this invocation of cmake
   cmCacheManager *GetCacheManager() { return this->CacheManager; }
-
-  ///! set the cmake command this instance of cmake should use
-  void SetCMakeCommand(const char* cmd) { this->CMakeCommand = cmd; }
 
   /**
    * Given a variable name, return its value (as a string).
    */
-  const char* GetCacheDefinition(const char*) const;
+  const char* GetCacheDefinition(const std::string&) const;
   ///! Add an entry into the cache
-  void AddCacheEntry(const char* key, const char* value,
+  void AddCacheEntry(const std::string& key, const char* value,
                      const char* helpString,
                      int type);
-  /**
-   * Execute commands during the build process. Supports options such
-   * as echo, remove file etc.
-   */
-  static int ExecuteCMakeCommand(std::vector<std::string>&);
 
   /**
    * Get the system information and write it to the file specified
@@ -216,20 +218,20 @@ class cmake
    * Add a command to this cmake instance
    */
   void AddCommand(cmCommand* );
-  void RenameCommand(const char* oldName, const char* newName);
-  void RemoveCommand(const char* name);
+  void RenameCommand(const std::string& oldName, const std::string& newName);
+  void RemoveCommand(const std::string& name);
   void RemoveUnscriptableCommands();
 
   /**
    * Get a command by its name
    */
-  cmCommand *GetCommand(const char *name);
+  cmCommand *GetCommand(const std::string& name);
 
   /** Get list of all commands */
   RegisteredCommandsMap* GetCommands() { return &this->Commands; }
 
   /** Check if a command exists. */
-  bool CommandExists(const char* name) const;
+  bool CommandExists(const std::string& name) const;
 
   ///! Parse command line arguments
   void SetArgs(const std::vector<std::string>&,
@@ -247,7 +249,7 @@ class cmake
   typedef  void (*ProgressCallbackType)
     (const char*msg, float progress, void *);
   /**
-   *  Set the function used by GUI's to receive progress updates
+   *  Set the function used by GUIs to receive progress updates
    *  Function gets passed: message as a const char*, a progress
    *  amount ranging from 0 to 1.0 and client data. The progress
    *  number provided may be negative in cases where a message is
@@ -264,27 +266,16 @@ class cmake
   ///! Get the variable watch object
   cmVariableWatch* GetVariableWatch() { return this->VariableWatch; }
 
-  /** Get the documentation entries for the supported commands.
-   *  If withCurrentCommands is true, the documentation for the
-   *  recommended set of commands is included.
-   *  If withCompatCommands is true, the documentation for discouraged
-   *  (compatibility) commands is included.
-   *  You probably don't want to set both to false.
-   */
-  void GetCommandDocumentation(std::vector<cmDocumentationEntry>& entries,
-                               bool withCurrentCommands = true,
-                               bool withCompatCommands = true) const;
-  void GetPropertiesDocumentation(std::map<std::string,
-                                  cmDocumentationSection *>&);
   void GetGeneratorDocumentation(std::vector<cmDocumentationEntry>&);
-  void GetPolicyDocumentation(std::vector<cmDocumentationEntry>& entries);
 
   ///! Set/Get a property of this target file
-  void SetProperty(const char *prop, const char *value);
-  void AppendProperty(const char *prop, const char *value,bool asString=false);
-  const char *GetProperty(const char *prop);
-  const char *GetProperty(const char *prop, cmProperty::ScopeType scope);
-  bool GetPropertyAsBool(const char *prop);
+  void SetProperty(const std::string& prop, const char *value);
+  void AppendProperty(const std::string& prop,
+                      const char *value,bool asString=false);
+  const char *GetProperty(const std::string& prop);
+  const char *GetProperty(const std::string& prop,
+                          cmProperty::ScopeType scope);
+  bool GetPropertyAsBool(const std::string& prop);
 
   // Get the properties
   cmPropertyMap &GetProperties() { return this->Properties; };
@@ -309,13 +300,6 @@ class cmake
    */
   cmFileTimeComparison* GetFileComparison() { return this->FileComparison; }
 
-  /**
-   * Get the path to ctest
-   */
-  const char* GetCTestCommand();
-  const char* GetCPackCommand();
-  const char* GetCMakeCommand();
-
   // Do we want debug output during the cmake run.
   bool GetDebugOutput() { return this->DebugOutput; }
   void SetDebugOutputOn(bool b) { this->DebugOutput = b;}
@@ -335,35 +319,28 @@ class cmake
   void MarkCliAsUsed(const std::string& variable);
 
   // Define a property
-  void DefineProperty(const char *name, cmProperty::ScopeType scope,
+  void DefineProperty(const std::string& name, cmProperty::ScopeType scope,
                       const char *ShortDescription,
                       const char *FullDescription,
-                      bool chain = false,
-                      const char *variableGroup = 0);
+                      bool chain = false);
 
   // get property definition
   cmPropertyDefinition *GetPropertyDefinition
-  (const char *name, cmProperty::ScopeType scope);
+  (const std::string& name, cmProperty::ScopeType scope);
 
   // Is a property defined?
-  bool IsPropertyDefined(const char *name, cmProperty::ScopeType scope);
-  bool IsPropertyChained(const char *name, cmProperty::ScopeType scope);
+  bool IsPropertyDefined(const std::string& name, cmProperty::ScopeType scope);
+  bool IsPropertyChained(const std::string& name, cmProperty::ScopeType scope);
 
   /** Get the list of configurations (in upper case) considered to be
       debugging configurations.*/
   std::vector<std::string> const& GetDebugConfigs();
 
-  // record accesses of properties and variables
-  void RecordPropertyAccess(const char *name, cmProperty::ScopeType scope);
-  void ReportUndefinedPropertyAccesses(const char *filename);
+  void SetCMakeEditCommand(std::string const& s)
+    { this->CMakeEditCommand = s; }
+  std::string const& GetCMakeEditCommand() const
+    { return this->CMakeEditCommand; }
 
-  // Define the properties
-  static void DefineProperties(cmake *cm);
-
-  void SetCMakeEditCommand(const char* s)
-    {
-      this->CMakeEditCommand = s;
-    }
   void SetSuppressDevWarnings(bool v)
     {
       this->SuppressDevWarnings = v;
@@ -378,24 +355,23 @@ class cmake
             const std::string& target,
             const std::string& config,
             const std::vector<std::string>& nativeOptions,
-            bool clean,
-            cmSystemTools::OutputOption outputflag);
+            bool clean);
 
-  void UnwatchUnusedCli(const char* var);
-  void WatchUnusedCli(const char* var);
+  void UnwatchUnusedCli(const std::string& var);
+  void WatchUnusedCli(const std::string& var);
 protected:
   void RunCheckForUnusedVariables();
   void InitializeProperties();
-  int HandleDeleteCacheVariables(const char* var);
+  int HandleDeleteCacheVariables(const std::string& var);
   cmPropertyMap Properties;
-  std::set<std::pair<cmStdString,cmProperty::ScopeType> > AccessedProperties;
+  std::set<std::pair<std::string,cmProperty::ScopeType> > AccessedProperties;
 
   std::map<cmProperty::ScopeType, cmPropertyDefinitionMap>
   PropertyDefinitions;
 
   typedef
      cmExternalMakefileProjectGenerator* (*CreateExtraGeneratorFunctionType)();
-  typedef std::map<cmStdString,
+  typedef std::map<std::string,
                 CreateExtraGeneratorFunctionType> RegisteredExtraGeneratorsMap;
   typedef std::vector<cmGlobalGeneratorFactory*> RegisteredGeneratorsVector;
   RegisteredCommandsMap Commands;
@@ -404,7 +380,7 @@ protected:
   void AddDefaultCommands();
   void AddDefaultGenerators();
   void AddDefaultExtraGenerators();
-  void AddExtraGenerator(const char* name,
+  void AddExtraGenerator(const std::string& name,
                          CreateExtraGeneratorFunctionType newFunction);
 
   cmPolicies *Policies;
@@ -416,6 +392,7 @@ protected:
   std::string StartOutputDirectory;
   bool SuppressDevWarnings;
   bool DoSuppressDevWarnings;
+  std::string GeneratorToolset;
 
   ///! read in a cmake list file to initialize the cache
   void ReadListFile(const std::vector<std::string>& args, const char *path);
@@ -439,33 +416,8 @@ protected:
 
   void GenerateGraphViz(const char* fileName) const;
 
-  static int SymlinkLibrary(std::vector<std::string>& args);
-  static int SymlinkExecutable(std::vector<std::string>& args);
-  static bool SymlinkInternal(std::string const& file,
-                              std::string const& link);
-  static int ExecuteEchoColor(std::vector<std::string>& args);
-  static int ExecuteLinkScript(std::vector<std::string>& args);
-  static int WindowsCEEnvironment(const char* version,
-                                  const std::string& name);
-  static int VisualStudioLink(std::vector<std::string>& args, int type);
-  static int VisualStudioLinkIncremental(std::vector<std::string>& args,
-                                         int type,
-                                         bool verbose);
-  static int VisualStudioLinkNonIncremental(std::vector<std::string>& args,
-                                            int type,
-                                            bool hasManifest,
-                                            bool verbose);
-  static int ParseVisualStudioLinkCommand(std::vector<std::string>& args,
-                                          std::vector<cmStdString>& command,
-                                          std::string& targetName);
-  static bool RunCommand(const char* comment,
-                         std::vector<cmStdString>& command,
-                         bool verbose,
-                         int* retCodeOut = 0);
   cmVariableWatch* VariableWatch;
 
-  ///! Find the full path to one of the cmake programs like ctest, cpack, etc.
-  std::string FindCMakeProgram(const char* name) const;
 private:
   cmake(const cmake&);  // Not implemented.
   void operator=(const cmake&);  // Not implemented.
@@ -480,17 +432,14 @@ private:
   bool WarnUnused;
   bool WarnUnusedCli;
   bool CheckSystemVars;
-  std::map<cmStdString, bool> UsedCliVariables;
+  std::map<std::string, bool> UsedCliVariables;
   std::string CMakeEditCommand;
-  std::string CMakeCommand;
   std::string CXXEnvironment;
   std::string CCEnvironment;
   std::string CheckBuildSystemArgument;
   std::string CheckStampFile;
   std::string CheckStampList;
   std::string VSSolutionFile;
-  std::string CTestCommand;
-  std::string CPackCommand;
   bool ClearBuildSystem;
   bool DebugTryCompile;
   cmFileTimeComparison* FileComparison;
@@ -501,45 +450,12 @@ private:
 };
 
 #define CMAKE_STANDARD_OPTIONS_TABLE \
-  {"-C <initial-cache>", "Pre-load a script to populate the cache.", \
-   "When cmake is first run in an empty build tree, it creates a " \
-   "CMakeCache.txt file and populates it with customizable settings " \
-   "for the project.  This option may be used to specify a file from " \
-   "which to load cache entries before the first pass through " \
-   "the project's cmake listfiles.  The loaded entries take priority " \
-   "over the project's default values.  The given file should be a CMake " \
-   "script containing SET commands that use the CACHE option, " \
-   "not a cache-format file."}, \
-  {"-D <var>:<type>=<value>", "Create a cmake cache entry.", \
-   "When cmake is first run in an empty build tree, it creates a " \
-   "CMakeCache.txt file and populates it with customizable settings " \
-   "for the project.  This option may be used to specify a setting " \
-   "that takes priority over the project's default value.  The option " \
-   "may be repeated for as many cache entries as desired."}, \
-  {"-U <globbing_expr>", "Remove matching entries from CMake cache.", \
-   "This option may be used to remove one or more variables from the " \
-   "CMakeCache.txt file, globbing expressions using * and ? are supported. "\
-   "The option may be repeated for as many cache entries as desired.\n" \
-   "Use with care, you can make your CMakeCache.txt non-working."}, \
-  {"-G <generator-name>", "Specify a makefile generator.", \
-   "CMake may support multiple native build systems on certain platforms.  " \
-   "A makefile generator is responsible for generating a particular build " \
-   "system.  Possible generator names are specified in the Generators " \
-   "section."},\
-  {"-Wno-dev", "Suppress developer warnings.",\
-   "Suppress warnings that are meant for the author"\
-   " of the CMakeLists.txt files."},\
-  {"-Wdev", "Enable developer warnings.",\
-   "Enable warnings that are meant for the author"\
-   " of the CMakeLists.txt files."}
+  {"-C <initial-cache>", "Pre-load a script to populate the cache."}, \
+  {"-D <var>:<type>=<value>", "Create a cmake cache entry."}, \
+  {"-U <globbing_expr>", "Remove matching entries from CMake cache."}, \
+  {"-G <generator-name>", "Specify a build system generator."},\
+  {"-T <toolset-name>", "Specify toolset name if supported by generator."}, \
+  {"-Wno-dev", "Suppress developer warnings."},\
+  {"-Wdev", "Enable developer warnings."}
 
-
-#define CMAKE_STANDARD_INTRODUCTION \
-  {0, \
-   "CMake is a cross-platform build system generator.  Projects " \
-   "specify their build process with platform-independent CMake listfiles " \
-   "included in each directory of a source tree with the name " \
-   "CMakeLists.txt. " \
-   "Users build a project by using CMake to generate a build system " \
-   "for a native tool on their platform.", 0}
 #endif

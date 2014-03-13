@@ -10,6 +10,7 @@
   See the License for more information.
 ============================================================================*/
 #include "cmCursesCacheEntryComposite.h"
+#include "cmCursesOptionsWidget.h"
 #include "cmCursesStringWidget.h"
 #include "cmCursesLabelWidget.h"
 #include "cmCursesBoolWidget.h"
@@ -18,9 +19,10 @@
 #include "cmCursesDummyWidget.h"
 #include "../cmSystemTools.h"
 
-cmCursesCacheEntryComposite::cmCursesCacheEntryComposite(const char* key,
-                                                         int labelwidth,
-                                                         int entrywidth) :
+cmCursesCacheEntryComposite::cmCursesCacheEntryComposite(
+                                                        const std::string& key,
+                                                        int labelwidth,
+                                                        int entrywidth) :
   Key(key), LabelWidth(labelwidth), EntryWidth(entrywidth)
 {
   this->Label = new cmCursesLabelWidget(this->LabelWidth, 1, 1, 1, key);
@@ -30,7 +32,7 @@ cmCursesCacheEntryComposite::cmCursesCacheEntryComposite(const char* key,
 }
 
 cmCursesCacheEntryComposite::cmCursesCacheEntryComposite(
-  const char* key, const cmCacheManager::CacheIterator& it, bool isNew,
+  const std::string& key, const cmCacheManager::CacheIterator& it, bool isNew,
   int labelwidth, int entrywidth)
   : Key(key), LabelWidth(labelwidth), EntryWidth(entrywidth)
 {
@@ -49,7 +51,7 @@ cmCursesCacheEntryComposite::cmCursesCacheEntryComposite(
     {
     case  cmCacheManager::BOOL:
       this->Entry = new cmCursesBoolWidget(this->EntryWidth, 1, 1, 1);
-      if (cmSystemTools::IsOn(it.GetValue()))
+      if (cmSystemTools::IsOn(it.GetValue().c_str()))
         {
         static_cast<cmCursesBoolWidget*>(this->Entry)->SetValueAsBool(true);
         }
@@ -69,12 +71,31 @@ cmCursesCacheEntryComposite::cmCursesCacheEntryComposite(
         it.GetValue());
       break;
     case cmCacheManager::STRING:
-      this->Entry = new cmCursesStringWidget(this->EntryWidth, 1, 1, 1);
-      static_cast<cmCursesStringWidget*>(this->Entry)->SetString(
-        it.GetValue());
+      if(it.PropertyExists("STRINGS"))
+        {
+        cmCursesOptionsWidget* ow =
+          new cmCursesOptionsWidget(this->EntryWidth, 1, 1, 1);
+        this->Entry = ow;
+        std::vector<std::string> options;
+        cmSystemTools::ExpandListArgument(
+          std::string(it.GetProperty("STRINGS")), options);
+        for(std::vector<std::string>::iterator
+              si = options.begin(); si != options.end(); ++si)
+          {
+          ow->AddOption(*si);
+          }
+        ow->SetOption(it.GetValue());
+        }
+      else
+        {
+        this->Entry = new cmCursesStringWidget(this->EntryWidth, 1, 1, 1);
+        static_cast<cmCursesStringWidget*>(this->Entry)->SetString(
+          it.GetValue());
+        }
       break;
     case cmCacheManager::UNINITIALIZED:
-      cmSystemTools::Error("Found an undefined variable: ", it.GetName());
+      cmSystemTools::Error("Found an undefined variable: ",
+                           it.GetName().c_str());
       break;
     default:
       // TODO : put warning message here

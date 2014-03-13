@@ -1,6 +1,23 @@
 cmake_minimum_required (VERSION 2.6)
 project(IncludeDirectories)
 
+if (((CMAKE_C_COMPILER_ID STREQUAL GNU AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 4.4)
+    OR CMAKE_C_COMPILER_ID STREQUAL Clang OR CMAKE_C_COMPILER_ID STREQUAL AppleClang)
+    AND (CMAKE_GENERATOR STREQUAL "Unix Makefiles" OR CMAKE_GENERATOR STREQUAL "Ninja"))
+  include(CheckCXXCompilerFlag)
+  check_cxx_compiler_flag(-Wunused-variable run_sys_includes_test)
+  if(run_sys_includes_test)
+    # The Bullseye wrapper appears to break the -isystem effect.
+    execute_process(COMMAND ${CMAKE_CXX_COMPILER} --version OUTPUT_VARIABLE out ERROR_VARIABLE out)
+    if("x${out}" MATCHES "Bullseye")
+      set(run_sys_includes_test 0)
+    endif()
+  endif()
+  if (run_sys_includes_test)
+    add_subdirectory(SystemIncludeDirectories)
+  endif()
+endif()
+
 file(WRITE ${CMAKE_BINARY_DIR}/Flags/Flags.h
 "//Flags.h
 ")
@@ -47,3 +64,29 @@ else()
 endif()
 
 add_subdirectory(TargetIncludeDirectories)
+
+set_property(DIRECTORY PROPERTY INCLUDE_DIRECTORIES "${CMAKE_BINARY_DIR}")
+get_property(propContent DIRECTORY PROPERTY INCLUDE_DIRECTORIES)
+if (NOT propContent STREQUAL "${CMAKE_BINARY_DIR}")
+  message(SEND_ERROR "Setting DIRECTORY property failed.")
+endif()
+set_property(DIRECTORY PROPERTY INCLUDE_DIRECTORIES)
+get_property(propContentAfter DIRECTORY PROPERTY INCLUDE_DIRECTORIES)
+if (NOT propContentAfter STREQUAL "")
+  message(SEND_ERROR "Clearing DIRECTORY property failed.")
+endif()
+
+add_library(empty_entry_test SHARED empty.cpp)
+set_target_properties(empty_entry_test PROPERTIES INCLUDE_DIRECTORIES "")
+include_directories(/one/two
+  " "
+  "  "
+)
+get_target_property(incs empty_entry_test INCLUDE_DIRECTORIES)
+if (NOT incs STREQUAL ";/one/two")
+  message(SEND_ERROR "Empty include_directories entry was not ignored.")
+endif()
+
+if(NOT CMAKE_GENERATOR STREQUAL Xcode AND NOT CMAKE_GENERATOR STREQUAL Ninja)
+  add_subdirectory(CMP0021)
+endif()

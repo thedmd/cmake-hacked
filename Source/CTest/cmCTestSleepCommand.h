@@ -47,27 +47,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "ctest_sleep";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "sleeps for some amount of time";
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "  ctest_sleep(<seconds>)\n"
-      "Sleep for given number of seconds.\n"
-      "  ctest_sleep(<time1> <duration> <time2>)\n"
-      "Sleep for t=(time1 + duration - time2) seconds if t > 0.";
-    }
+  virtual std::string GetName() const { return "ctest_sleep";}
 
   cmTypeMacro(cmCTestSleepCommand, cmCTestCommand);
 

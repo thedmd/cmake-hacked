@@ -66,7 +66,7 @@ bool cmSetPropertyCommand
     cmOStringStream e;
     e << "given invalid scope " << *arg << ".  "
       << "Valid scopes are GLOBAL, DIRECTORY, TARGET, SOURCE, TEST, CACHE.";
-    this->SetError(e.str().c_str());
+    this->SetError(e.str());
     return false;
     }
 
@@ -84,12 +84,14 @@ bool cmSetPropertyCommand
       {
       doing = DoingNone;
       this->AppendMode = true;
+      this->Remove = false;
       this->AppendAsString = false;
       }
     else if(*arg == "APPEND_STRING")
       {
       doing = DoingNone;
       this->AppendMode = true;
+      this->Remove = false;
       this->AppendAsString = true;
       }
     else if(doing == DoingNames)
@@ -112,7 +114,7 @@ bool cmSetPropertyCommand
       {
       cmOStringStream e;
       e << "given invalid argument \"" << *arg << "\".";
-      this->SetError(e.str().c_str());
+      this->SetError(e.str());
       return false;
       }
     }
@@ -160,7 +162,7 @@ bool cmSetPropertyCommand::HandleGlobalMode()
     }
   if(this->AppendMode)
     {
-    cm->AppendProperty(name, value, this->AppendAsString);
+    cm->AppendProperty(name, value ? value : "", this->AppendAsString);
     }
   else
     {
@@ -201,7 +203,7 @@ bool cmSetPropertyCommand::HandleDirectoryMode()
     // Lookup the generator.
     if(cmLocalGenerator* lg =
        (this->Makefile->GetLocalGenerator()
-        ->GetGlobalGenerator()->FindLocalGenerator(dir.c_str())))
+        ->GetGlobalGenerator()->FindLocalGenerator(dir)))
       {
       // Use the makefile for the directory found.
       mf = lg->GetMakefile();
@@ -226,7 +228,7 @@ bool cmSetPropertyCommand::HandleDirectoryMode()
     }
   if(this->AppendMode)
     {
-    mf->AppendProperty(name, value, this->AppendAsString);
+    mf->AppendProperty(name, value ? value : "", this->AppendAsString);
     }
   else
     {
@@ -239,10 +241,15 @@ bool cmSetPropertyCommand::HandleDirectoryMode()
 //----------------------------------------------------------------------------
 bool cmSetPropertyCommand::HandleTargetMode()
 {
-  for(std::set<cmStdString>::const_iterator ni = this->Names.begin();
+  for(std::set<std::string>::const_iterator ni = this->Names.begin();
       ni != this->Names.end(); ++ni)
     {
-    if(cmTarget* target = this->Makefile->FindTargetToUse(ni->c_str()))
+    if (this->Makefile->IsAlias(*ni))
+      {
+      this->SetError("can not be used on an ALIAS target.");
+      return false;
+      }
+    if(cmTarget* target = this->Makefile->FindTargetToUse(*ni))
       {
       // Handle the current target.
       if(!this->HandleTarget(target))
@@ -255,7 +262,7 @@ bool cmSetPropertyCommand::HandleTargetMode()
       cmOStringStream e;
       e << "could not find TARGET " << *ni
         << ".  Perhaps it has not yet been created.";
-      this->SetError(e.str().c_str());
+      this->SetError(e.str());
       return false;
       }
     }
@@ -290,11 +297,11 @@ bool cmSetPropertyCommand::HandleTarget(cmTarget* target)
 //----------------------------------------------------------------------------
 bool cmSetPropertyCommand::HandleSourceMode()
 {
-  for(std::set<cmStdString>::const_iterator ni = this->Names.begin();
+  for(std::set<std::string>::const_iterator ni = this->Names.begin();
       ni != this->Names.end(); ++ni)
     {
     // Get the source file.
-    if(cmSourceFile* sf = this->Makefile->GetOrCreateSource(ni->c_str()))
+    if(cmSourceFile* sf = this->Makefile->GetOrCreateSource(*ni))
       {
       if(!this->HandleSource(sf))
         {
@@ -305,7 +312,7 @@ bool cmSetPropertyCommand::HandleSourceMode()
       {
       cmOStringStream e;
       e << "given SOURCE name that could not be found or created: " << *ni;
-      this->SetError(e.str().c_str());
+      this->SetError(e.str());
       return false;
       }
     }
@@ -338,13 +345,13 @@ bool cmSetPropertyCommand::HandleSource(cmSourceFile* sf)
 bool cmSetPropertyCommand::HandleTestMode()
 {
   // Look for tests with all names given.
-  std::set<cmStdString>::iterator next;
-  for(std::set<cmStdString>::iterator ni = this->Names.begin();
+  std::set<std::string>::iterator next;
+  for(std::set<std::string>::iterator ni = this->Names.begin();
       ni != this->Names.end(); ni = next)
     {
     next = ni;
     ++next;
-    if(cmTest* test = this->Makefile->GetTest(ni->c_str()))
+    if(cmTest* test = this->Makefile->GetTest(*ni))
       {
       if(this->HandleTest(test))
         {
@@ -362,12 +369,12 @@ bool cmSetPropertyCommand::HandleTestMode()
     {
     cmOStringStream e;
     e << "given TEST names that do not exist:\n";
-    for(std::set<cmStdString>::const_iterator ni = this->Names.begin();
+    for(std::set<std::string>::const_iterator ni = this->Names.begin();
         ni != this->Names.end(); ++ni)
       {
       e << "  " << *ni << "\n";
       }
-    this->SetError(e.str().c_str());
+    this->SetError(e.str());
     return false;
     }
   return true;
@@ -407,7 +414,7 @@ bool cmSetPropertyCommand::HandleCacheMode()
       cmOStringStream e;
       e << "given non-boolean value \"" << this->PropertyValue
         << "\" for CACHE property \"ADVANCED\".  ";
-      this->SetError(e.str().c_str());
+      this->SetError(e.str());
       return false;
       }
     }
@@ -417,7 +424,7 @@ bool cmSetPropertyCommand::HandleCacheMode()
       {
       cmOStringStream e;
       e << "given invalid CACHE entry TYPE \"" << this->PropertyValue << "\"";
-      this->SetError(e.str().c_str());
+      this->SetError(e.str());
       return false;
       }
     }
@@ -429,11 +436,11 @@ bool cmSetPropertyCommand::HandleCacheMode()
     e << "given invalid CACHE property " << this->PropertyName << ".  "
       << "Settable CACHE properties are: "
       << "ADVANCED, HELPSTRING, STRINGS, TYPE, and VALUE.";
-    this->SetError(e.str().c_str());
+    this->SetError(e.str());
     return false;
     }
 
-  for(std::set<cmStdString>::const_iterator ni = this->Names.begin();
+  for(std::set<std::string>::const_iterator ni = this->Names.begin();
       ni != this->Names.end(); ++ni)
     {
     // Get the source file.
@@ -453,7 +460,7 @@ bool cmSetPropertyCommand::HandleCacheMode()
       cmOStringStream e;
       e << "could not find CACHE variable " << *ni
         << ".  Perhaps it has not yet been created.";
-      this->SetError(e.str().c_str());
+      this->SetError(e.str());
       return false;
       }
     }

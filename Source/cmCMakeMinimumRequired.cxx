@@ -79,8 +79,8 @@ bool cmCMakeMinimumRequired
             &required_patch, &required_tweak) < 2)
     {
     cmOStringStream e;
-    e << "could not parse VERSION \"" << version_string.c_str() << "\".";
-    this->SetError(e.str().c_str());
+    e << "could not parse VERSION \"" << version_string << "\".";
+    this->SetError(e.str());
     return false;
     }
 
@@ -98,7 +98,7 @@ bool cmCMakeMinimumRequired
     {
     // The current version is too low.
     cmOStringStream e;
-    e << "CMake " << version_string.c_str()
+    e << "CMake " << version_string
       << " or higher is required.  You are running version "
       << cmVersion::GetCMakeVersion();
     this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
@@ -114,6 +114,9 @@ bool cmCMakeMinimumRequired
 
   if (required_major < 2 || (required_major == 2 && required_minor < 4))
   {
+    this->Makefile->IssueMessage(
+      cmake::AUTHOR_WARNING,
+      "Compatibility with CMake < 2.4 is not supported by CMake >= 3.0.");
     this->Makefile->SetPolicyVersion("2.4");
   }
   else
@@ -132,7 +135,7 @@ bool cmCMakeMinimumRequired::EnforceUnknownArguments()
     cmOStringStream e;
     e << "called with unknown argument \""
       << this->UnknownArguments[0] << "\".";
-    this->SetError(e.str().c_str());
+    this->SetError(e.str());
     return false;
     }
   return true;

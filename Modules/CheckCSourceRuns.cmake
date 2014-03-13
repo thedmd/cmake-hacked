@@ -1,15 +1,26 @@
-# - Check if the given C source code compiles and runs.
-# CHECK_C_SOURCE_RUNS(<code> <var>)
-#  <code>   - source code to try to compile
-#  <var>    - variable to store the result
-#             (1 for success, empty for failure)
-# The following variables may be set before calling this macro to
-# modify the way the check is run:
+#.rst:
+# CheckCSourceRuns
+# ----------------
 #
-#  CMAKE_REQUIRED_FLAGS = string of compile command line flags
-#  CMAKE_REQUIRED_DEFINITIONS = list of macros to define (-DFOO=bar)
-#  CMAKE_REQUIRED_INCLUDES = list of include directories
-#  CMAKE_REQUIRED_LIBRARIES = list of libraries to link
+# Check if the given C source code compiles and runs.
+#
+# CHECK_C_SOURCE_RUNS(<code> <var>)
+#
+# ::
+#
+#   <code>   - source code to try to compile
+#   <var>    - variable to store the result
+#              (1 for success, empty for failure)
+#
+# The following variables may be set before calling this macro to modify
+# the way the check is run:
+#
+# ::
+#
+#   CMAKE_REQUIRED_FLAGS = string of compile command line flags
+#   CMAKE_REQUIRED_DEFINITIONS = list of macros to define (-DFOO=bar)
+#   CMAKE_REQUIRED_INCLUDES = list of include directories
+#   CMAKE_REQUIRED_LIBRARIES = list of libraries to link
 
 #=============================================================================
 # Copyright 2006-2009 Kitware, Inc.
@@ -24,7 +35,6 @@
 # (To distribute this file outside of CMake, substitute the full
 #  License text for the above reference.)
 
-include("${CMAKE_CURRENT_LIST_DIR}/CMakeExpandImportedTargets.cmake")
 
 
 macro(CHECK_C_SOURCE_RUNS SOURCE VAR)
@@ -32,10 +42,8 @@ macro(CHECK_C_SOURCE_RUNS SOURCE VAR)
     set(MACRO_CHECK_FUNCTION_DEFINITIONS
       "-D${VAR} ${CMAKE_REQUIRED_FLAGS}")
     if(CMAKE_REQUIRED_LIBRARIES)
-      # this one translates potentially used imported library targets to their files on disk
-      CMAKE_EXPAND_IMPORTED_TARGETS(_ADJUSTED_CMAKE_REQUIRED_LIBRARIES  LIBRARIES  ${CMAKE_REQUIRED_LIBRARIES} CONFIGURATION "${CMAKE_TRY_COMPILE_CONFIGURATION}")
       set(CHECK_C_SOURCE_COMPILES_ADD_LIBRARIES
-        "-DLINK_LIBRARIES:STRING=${_ADJUSTED_CMAKE_REQUIRED_LIBRARIES}")
+        LINK_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES})
     else()
       set(CHECK_C_SOURCE_COMPILES_ADD_LIBRARIES)
     endif()
@@ -53,9 +61,9 @@ macro(CHECK_C_SOURCE_RUNS SOURCE VAR)
       ${CMAKE_BINARY_DIR}
       ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/src.c
       COMPILE_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS}
+      ${CHECK_C_SOURCE_COMPILES_ADD_LIBRARIES}
       CMAKE_FLAGS -DCOMPILE_DEFINITIONS:STRING=${MACRO_CHECK_FUNCTION_DEFINITIONS}
       -DCMAKE_SKIP_RPATH:BOOL=${CMAKE_SKIP_RPATH}
-      "${CHECK_C_SOURCE_COMPILES_ADD_LIBRARIES}"
       "${CHECK_C_SOURCE_COMPILES_ADD_INCLUDES}"
       COMPILE_OUTPUT_VARIABLE OUTPUT)
     # if it did not compile make the return value fail code of 1

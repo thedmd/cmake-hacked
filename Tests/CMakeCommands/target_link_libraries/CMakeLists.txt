@@ -29,13 +29,10 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 add_library(depA SHARED depA.cpp)
 generate_export_header(depA)
 
-add_library(importedlib UNKNOWN IMPORTED)
-target_link_libraries(importedlib LINK_INTERFACE_LIBRARIES depA)
-
 add_library(depB SHARED depB.cpp)
 generate_export_header(depB)
 
-target_link_libraries(depB LINK_PRIVATE depA)
+target_link_libraries(depB LINK_PRIVATE depA LINK_PRIVATE depA)
 
 add_library(libgenex SHARED libgenex.cpp)
 generate_export_header(libgenex)
@@ -47,11 +44,11 @@ set_property(TARGET depB APPEND PROPERTY
 add_library(depC SHARED depC.cpp)
 generate_export_header(depC)
 
-target_link_libraries(depC LINK_PUBLIC depA)
+target_link_libraries(depC LINK_PUBLIC depA LINK_PUBLIC depA)
 
 assert_property(depA LINK_INTERFACE_LIBRARIES "")
 assert_property(depB LINK_INTERFACE_LIBRARIES "")
-assert_property(depC LINK_INTERFACE_LIBRARIES "depA")
+assert_property(depC LINK_INTERFACE_LIBRARIES "depA;depA")
 
 add_executable(targetA targetA.cpp)
 
@@ -65,10 +62,6 @@ assert_property(targetA LINK_INTERFACE_LIBRARIES "")
 
 add_subdirectory(subdir)
 target_link_libraries(targetA subdirlib)
-set_property(TARGET targetA APPEND PROPERTY
-  INCLUDE_DIRECTORIES
-    $<TARGET_PROPERTY:subdirlib,INTERFACE_INCLUDE_DIRECTORIES>
-)
 
 target_link_libraries(targetA depB depC)
 
@@ -90,3 +83,50 @@ set_property(TARGET depD APPEND PROPERTY
 
 add_executable(targetB targetB.cpp)
 target_link_libraries(targetB depD)
+
+macro(create_header _name)
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${_name}")
+  file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/${_name}/${_name}.h" "//${_name}.h\n")
+endmacro()
+
+create_header(foo)
+create_header(bar)
+
+add_library(depG SHARED depG.cpp)
+generate_export_header(depG)
+target_include_directories(depG INTERFACE
+    "${CMAKE_CURRENT_BINARY_DIR}/foo"
+    "${CMAKE_CURRENT_BINARY_DIR}/bar"
+)
+target_compile_definitions(depG INTERFACE
+    TEST_DEF
+)
+
+
+add_executable(targetC targetC.cpp)
+if(NOT BORLAND AND NOT WATCOM)
+  # Linking to a target containing a + should be non-fatal, though it does
+  # not work at all on Borland or watcom
+  add_library(wrapc++ empty.cpp)
+  target_link_libraries(targetC wrapc++)
+endif()
+# The TARGET_PROPERTY expression is duplicated below to test that there is no
+# shortcutting of the evaluation by returning an empty string.
+set(_exe_test $<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>)
+target_link_libraries(targetC $<$<AND:${_exe_test},${_exe_test}>:depG>)
+
+add_library(libConsumer empty.cpp)
+# This line causes $<$<CONFIG:Debug>:depA> to be used when
+# determining the include directories for libConsumer based on the
+# interface properties of its LINK_LIBRARIES. Because the above expression
+# evaluates to the empty string in non-Debug cases, ensure that that causes
+# no problems.
+target_link_libraries(libConsumer debug depA)
+
+add_subdirectory(cmp0022)
+
+add_executable(newsignature1 newsignature1.cpp)
+target_link_libraries(newsignature1 PRIVATE depC INTERFACE depD PUBLIC depB PRIVATE subdirlib INTERFACE INTERFACE PUBLIC)
+
+assert_property(newsignature1 INTERFACE_LINK_LIBRARIES "depD;depB")
+assert_property(newsignature1 LINK_LIBRARIES "depC;depB;subdirlib")

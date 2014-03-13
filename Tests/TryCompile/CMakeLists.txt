@@ -44,6 +44,23 @@ else()
    file(REMOVE "${TryCompile_BINARY_DIR}/CopyOfPass")
 endif()
 
+# try to compile a file that should compile
+# also check that COPY_FILE_ERROR works
+file(WRITE ${TryCompile_BINARY_DIR}/invalid "")
+try_compile(SHOULD_PASS
+    ${TryCompile_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp
+    ${TryCompile_SOURCE_DIR}/pass.c
+    OUTPUT_VARIABLE TRY_OUT
+    COPY_FILE ${TryCompile_BINARY_DIR}/invalid/path
+    COPY_FILE_ERROR _captured
+    )
+if(NOT SHOULD_PASS)
+  message(SEND_ERROR "should pass failed ${TRY_OUT}")
+endif()
+if(NOT _captured MATCHES "Cannot copy output executable.*/invalid/path")
+  message(SEND_ERROR "COPY_FILE_ERROR did not capture expected message")
+endif()
+
 # try to compile a file that should not compile
 try_compile(SHOULD_FAIL
     ${TryCompile_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp
@@ -70,6 +87,42 @@ try_compile(SHOULD_FAIL
 if(SHOULD_FAIL)
    message(SEND_ERROR "Should fail passed ${TRY_OUT}")
 endif()
+
+# try to compile two files that should compile
+try_compile(SHOULD_PASS
+    ${TryCompile_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp
+    SOURCES ${TryCompile_SOURCE_DIR}/pass2a.c ${TryCompile_SOURCE_DIR}/pass2b.cxx
+    OUTPUT_VARIABLE TRY_OUT)
+if(NOT SHOULD_PASS)
+  message(SEND_ERROR "should pass failed ${TRY_OUT}")
+endif()
+
+# try to compile two files that should not compile
+try_compile(SHOULD_FAIL
+    ${TryCompile_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp
+    SOURCES ${TryCompile_SOURCE_DIR}/fail2a.c ${TryCompile_SOURCE_DIR}/fail2b.c
+    OUTPUT_VARIABLE TRY_OUT)
+if(SHOULD_FAIL)
+   message(SEND_ERROR "Should fail passed ${TRY_OUT}")
+endif()
+
+# try to compile a file that should compile
+set(_c_flags "${CMAKE_C_FLAGS}")
+if(CMAKE_GENERATOR STREQUAL "Visual Studio 6")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D \"TESTDEF\"")
+elseif(WATCOM)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -dTESTDEF")
+else()
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} \"-DTESTDEF\"")
+endif()
+try_compile(SHOULD_PASS
+    ${TryCompile_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp
+    ${TryCompile_SOURCE_DIR}/testdef.c
+    OUTPUT_VARIABLE TRY_OUT)
+if(NOT SHOULD_PASS)
+  message(SEND_ERROR "should pass failed ${TRY_OUT}")
+endif()
+set(CMAKE_C_FLAGS "${_c_flags}")
 
 if(NOT SHOULD_FAIL)
   if(SHOULD_PASS)

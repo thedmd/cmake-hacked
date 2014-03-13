@@ -20,7 +20,7 @@
 
 #include <cmsys/Directory.hxx>
 #include <cmsys/Glob.hxx>
-
+#include <cmsys/FStream.hxx>
 #include <cmsys/RegularExpression.hxx>
 
 const char* cmCacheManagerTypes[] =
@@ -82,19 +82,19 @@ bool cmCacheManager::LoadCache(cmMakefile* mf)
 }
 
 
-bool cmCacheManager::LoadCache(const char* path)
+bool cmCacheManager::LoadCache(const std::string& path)
 {
   return this->LoadCache(path,true);
 }
 
-bool cmCacheManager::LoadCache(const char* path,
+bool cmCacheManager::LoadCache(const std::string& path,
                                bool internal)
 {
-  std::set<cmStdString> emptySet;
+  std::set<std::string> emptySet;
   return this->LoadCache(path, internal, emptySet, emptySet);
 }
 
-static bool ParseEntryWithoutType(const char* entry,
+static bool ParseEntryWithoutType(const std::string& entry,
                                   std::string& var,
                                   std::string& value)
 {
@@ -132,7 +132,7 @@ static bool ParseEntryWithoutType(const char* entry,
   return flag;
 }
 
-bool cmCacheManager::ParseEntry(const char* entry,
+bool cmCacheManager::ParseEntry(const std::string& entry,
                                 std::string& var,
                                 std::string& value,
                                 CacheEntryType& type)
@@ -178,7 +178,7 @@ bool cmCacheManager::ParseEntry(const char* entry,
   return flag;
 }
 
-void cmCacheManager::CleanCMakeFiles(const char* path)
+void cmCacheManager::CleanCMakeFiles(const std::string& path)
 {
   std::string glob = path;
   glob += cmake::GetCMakeFilesDirectory();
@@ -193,10 +193,10 @@ void cmCacheManager::CleanCMakeFiles(const char* path)
     }
 }
 
-bool cmCacheManager::LoadCache(const char* path,
+bool cmCacheManager::LoadCache(const std::string& path,
                                bool internal,
-                               std::set<cmStdString>& excludes,
-                               std::set<cmStdString>& includes)
+                               std::set<std::string>& excludes,
+                               std::set<std::string>& includes)
 {
   std::string cacheFile = path;
   cacheFile += "/CMakeCache.txt";
@@ -211,7 +211,7 @@ bool cmCacheManager::LoadCache(const char* path,
     return false;
     }
 
-  std::ifstream fin(cacheFile.c_str());
+  cmsys::ifstream fin(cacheFile.c_str());
   if(!fin)
     {
     return false;
@@ -428,7 +428,7 @@ bool cmCacheManager::SaveCache(cmMakefile* mf)
 }
 
 
-bool cmCacheManager::SaveCache(const char* path)
+bool cmCacheManager::SaveCache(const std::string& path)
 {
   std::string cacheFile = path;
   cacheFile += "/CMakeCache.txt";
@@ -491,7 +491,7 @@ bool cmCacheManager::SaveCache(const char* path)
        << "# The syntax for the file is as follows:\n"
        << "# KEY:TYPE=VALUE\n"
        << "# KEY is the name of a variable in the cache.\n"
-       << "# TYPE is a hint to GUI's for the type of VALUE, DO NOT EDIT "
+       << "# TYPE is a hint to GUIs for the type of VALUE, DO NOT EDIT "
        "TYPE!." << std::endl
        << "# VALUE is the current value for the KEY.\n\n";
 
@@ -500,7 +500,7 @@ bool cmCacheManager::SaveCache(const char* path)
   fout << "########################\n";
   fout << "\n";
 
-  for( std::map<cmStdString, CacheEntry>::const_iterator i =
+  for( std::map<std::string, CacheEntry>::const_iterator i =
          this->Cache.begin(); i != this->Cache.end(); ++i)
     {
     const CacheEntry& ce = (*i).second;
@@ -566,7 +566,7 @@ bool cmCacheManager::SaveCache(const char* path)
   checkCacheFile += cmake::GetCMakeFilesDirectory();
   cmSystemTools::MakeDirectory(checkCacheFile.c_str());
   checkCacheFile += "/cmake.check_cache";
-  std::ofstream checkCache(checkCacheFile.c_str());
+  cmsys::ofstream checkCache(checkCacheFile.c_str());
   if(!checkCache)
     {
     cmSystemTools::Error("Unable to open check cache file for write. ",
@@ -578,29 +578,21 @@ bool cmCacheManager::SaveCache(const char* path)
   return true;
 }
 
-bool cmCacheManager::DeleteCache(const char* path)
+bool cmCacheManager::DeleteCache(const std::string& path)
 {
   std::string cacheFile = path;
   cmSystemTools::ConvertToUnixSlashes(cacheFile);
   std::string cmakeFiles = cacheFile;
   cacheFile += "/CMakeCache.txt";
-  cmSystemTools::RemoveFile(cacheFile.c_str());
-  // now remove the files in the CMakeFiles directory
-  // this cleans up language cache files
-  cmsys::Directory dir;
-  cmakeFiles += cmake::GetCMakeFilesDirectory();
-  dir.Load(cmakeFiles.c_str());
-  for (unsigned long fileNum = 0;
-    fileNum <  dir.GetNumberOfFiles();
-    ++fileNum)
+  if(cmSystemTools::FileExists(cacheFile.c_str()))
     {
-    if(!cmSystemTools::
-       FileIsDirectory(dir.GetFile(fileNum)))
+    cmSystemTools::RemoveFile(cacheFile.c_str());
+    // now remove the files in the CMakeFiles directory
+    // this cleans up language cache files
+    cmakeFiles += cmake::GetCMakeFilesDirectory();
+    if(cmSystemTools::FileIsDirectory(cmakeFiles.c_str()))
       {
-      std::string fullPath = cmakeFiles;
-      fullPath += "/";
-      fullPath += dir.GetFile(fileNum);
-      cmSystemTools::RemoveFile(fullPath.c_str());
+      cmSystemTools::RemoveADirectory(cmakeFiles.c_str());
       }
     }
   return true;
@@ -652,13 +644,13 @@ void cmCacheManager::OutputHelpString(std::ostream& fout,
         fout << "\\n";
         }
       oneLine = helpString.substr(pos, i - pos);
-      fout << oneLine.c_str() << "\n";
+      fout << oneLine << "\n";
       pos = i;
       }
     }
 }
 
-void cmCacheManager::RemoveCacheEntry(const char* key)
+void cmCacheManager::RemoveCacheEntry(const std::string& key)
 {
   CacheEntryMap::iterator i = this->Cache.find(key);
   if(i != this->Cache.end())
@@ -668,7 +660,8 @@ void cmCacheManager::RemoveCacheEntry(const char* key)
 }
 
 
-cmCacheManager::CacheEntry *cmCacheManager::GetCacheEntry(const char* key)
+cmCacheManager::CacheEntry *cmCacheManager::GetCacheEntry(
+    const std::string& key)
 {
   CacheEntryMap::iterator i = this->Cache.find(key);
   if(i != this->Cache.end())
@@ -684,7 +677,7 @@ cmCacheManager::CacheIterator cmCacheManager::GetCacheIterator(
   return CacheIterator(*this, key);
 }
 
-const char* cmCacheManager::GetCacheValue(const char* key) const
+const char* cmCacheManager::GetCacheValue(const std::string& key) const
 {
   CacheEntryMap::const_iterator i = this->Cache.find(key);
   if(i != this->Cache.end() &&
@@ -700,12 +693,12 @@ void cmCacheManager::PrintCache(std::ostream& out) const
 {
   out << "=================================================" << std::endl;
   out << "CMakeCache Contents:" << std::endl;
-  for(std::map<cmStdString, CacheEntry>::const_iterator i =
+  for(std::map<std::string, CacheEntry>::const_iterator i =
         this->Cache.begin(); i != this->Cache.end(); ++i)
     {
     if((*i).second.Type != INTERNAL)
       {
-      out << (*i).first.c_str() << " = " << (*i).second.Value.c_str()
+      out << (*i).first << " = " << (*i).second.Value
           << std::endl;
       }
     }
@@ -716,7 +709,7 @@ void cmCacheManager::PrintCache(std::ostream& out) const
 }
 
 
-void cmCacheManager::AddCacheEntry(const char* key,
+void cmCacheManager::AddCacheEntry(const std::string& key,
                                    const char* value,
                                    const char* helpString,
                                    CacheEntryType type)
@@ -758,6 +751,10 @@ void cmCacheManager::AddCacheEntry(const char* key,
     }
   e.SetProperty("HELPSTRING", helpString? helpString :
                 "(This variable does not exist and should not be used)");
+  if (this->Cache[key].Value == e.Value)
+    {
+    this->CMakeInstance->UnwatchUnusedCli(key);
+    }
   this->Cache[key] = e;
 }
 
@@ -771,7 +768,7 @@ void cmCacheManager::CacheIterator::Begin()
   this->Position = this->Container.Cache.begin();
 }
 
-bool cmCacheManager::CacheIterator::Find(const char* key)
+bool cmCacheManager::CacheIterator::Find(const std::string& key)
 {
   this->Position = this->Container.Cache.find(key);
   return !this->IsAtEnd();
@@ -811,13 +808,13 @@ bool cmCacheManager::CacheIterator::GetValueAsBool() const
 
 //----------------------------------------------------------------------------
 const char*
-cmCacheManager::CacheEntry::GetProperty(const char* prop) const
+cmCacheManager::CacheEntry::GetProperty(const std::string& prop) const
 {
-  if(strcmp(prop, "TYPE") == 0)
+  if(prop == "TYPE")
     {
     return cmCacheManagerTypes[this->Type];
     }
-  else if(strcmp(prop, "VALUE") == 0)
+  else if(prop == "VALUE")
     {
     return this->Value.c_str();
     }
@@ -827,14 +824,14 @@ cmCacheManager::CacheEntry::GetProperty(const char* prop) const
 }
 
 //----------------------------------------------------------------------------
-void cmCacheManager::CacheEntry::SetProperty(const char* prop,
+void cmCacheManager::CacheEntry::SetProperty(const std::string& prop,
                                              const char* value)
 {
-  if(strcmp(prop, "TYPE") == 0)
+  if(prop == "TYPE")
     {
     this->Type = cmCacheManager::StringToType(value? value : "STRING");
     }
-  else if(strcmp(prop, "VALUE") == 0)
+  else if(prop == "VALUE")
     {
     this->Value = value? value : "";
     }
@@ -845,15 +842,15 @@ void cmCacheManager::CacheEntry::SetProperty(const char* prop,
 }
 
 //----------------------------------------------------------------------------
-void cmCacheManager::CacheEntry::AppendProperty(const char* prop,
+void cmCacheManager::CacheEntry::AppendProperty(const std::string& prop,
                                                 const char* value,
                                                 bool asString)
 {
-  if(strcmp(prop, "TYPE") == 0)
+  if(prop == "TYPE")
     {
     this->Type = cmCacheManager::StringToType(value? value : "STRING");
     }
-  else if(strcmp(prop, "VALUE") == 0)
+  else if(prop == "VALUE")
     {
     if(value)
       {
@@ -871,7 +868,8 @@ void cmCacheManager::CacheEntry::AppendProperty(const char* prop,
 }
 
 //----------------------------------------------------------------------------
-const char* cmCacheManager::CacheIterator::GetProperty(const char* prop) const
+const char* cmCacheManager::CacheIterator::GetProperty(
+    const std::string& prop) const
 {
   if(!this->IsAtEnd())
     {
@@ -881,7 +879,8 @@ const char* cmCacheManager::CacheIterator::GetProperty(const char* prop) const
 }
 
 //----------------------------------------------------------------------------
-void cmCacheManager::CacheIterator::SetProperty(const char* p, const char* v)
+void cmCacheManager::CacheIterator::SetProperty(const std::string& p,
+                                                const char* v)
 {
   if(!this->IsAtEnd())
     {
@@ -890,7 +889,7 @@ void cmCacheManager::CacheIterator::SetProperty(const char* p, const char* v)
 }
 
 //----------------------------------------------------------------------------
-void cmCacheManager::CacheIterator::AppendProperty(const char* p,
+void cmCacheManager::CacheIterator::AppendProperty(const std::string& p,
                                                    const char* v,
                                                    bool asString)
 {
@@ -901,7 +900,8 @@ void cmCacheManager::CacheIterator::AppendProperty(const char* p,
 }
 
 //----------------------------------------------------------------------------
-bool cmCacheManager::CacheIterator::GetPropertyAsBool(const char* prop) const
+bool cmCacheManager::CacheIterator::GetPropertyAsBool(
+    const std::string& prop) const
 {
   if(const char* value = this->GetProperty(prop))
     {
@@ -911,13 +911,14 @@ bool cmCacheManager::CacheIterator::GetPropertyAsBool(const char* prop) const
 }
 
 //----------------------------------------------------------------------------
-void cmCacheManager::CacheIterator::SetProperty(const char* p, bool v)
+void cmCacheManager::CacheIterator::SetProperty(const std::string& p, bool v)
 {
   this->SetProperty(p, v ? "ON" : "OFF");
 }
 
 //----------------------------------------------------------------------------
-bool cmCacheManager::CacheIterator::PropertyExists(const char* prop) const
+bool cmCacheManager::CacheIterator::PropertyExists(
+    const std::string& prop) const
 {
   return this->GetProperty(prop)? true:false;
 }
@@ -934,70 +935,8 @@ bool cmCacheManager::NeedCacheCompatibility(int major, int minor)
 
   // Compatibility is needed if the cache version is equal to or lower
   // than the given version.
-  unsigned int actual_compat =
+  cmIML_INT_uint64_t actual_compat =
     CMake_VERSION_ENCODE(this->CacheMajorVersion, this->CacheMinorVersion, 0);
   return (actual_compat &&
           actual_compat <= CMake_VERSION_ENCODE(major, minor, 0));
-}
-
-//----------------------------------------------------------------------------
-void cmCacheManager::DefineProperties(cmake *cm)
-{
-  cm->DefineProperty
-    ("ADVANCED", cmProperty::CACHE,
-     "True if entry should be hidden by default in GUIs.",
-     "This is a boolean value indicating whether the entry is considered "
-     "interesting only for advanced configuration.  "
-     "The mark_as_advanced() command modifies this property."
-      );
-
-  cm->DefineProperty
-    ("HELPSTRING", cmProperty::CACHE,
-     "Help associated with entry in GUIs.",
-     "This string summarizes the purpose of an entry to help users set it "
-     "through a CMake GUI."
-      );
-
-  cm->DefineProperty
-    ("TYPE", cmProperty::CACHE,
-     "Widget type for entry in GUIs.",
-     "Cache entry values are always strings, but CMake GUIs present widgets "
-     "to help users set values.  "
-     "The GUIs use this property as a hint to determine the widget type.  "
-     "Valid TYPE values are:\n"
-     "  BOOL          = Boolean ON/OFF value.\n"
-     "  PATH          = Path to a directory.\n"
-     "  FILEPATH      = Path to a file.\n"
-     "  STRING        = Generic string value.\n"
-     "  INTERNAL      = Do not present in GUI at all.\n"
-     "  STATIC        = Value managed by CMake, do not change.\n"
-     "  UNINITIALIZED = Type not yet specified.\n"
-     "Generally the TYPE of a cache entry should be set by the command "
-     "which creates it (set, option, find_library, etc.)."
-      );
-
-  cm->DefineProperty
-    ("MODIFIED", cmProperty::CACHE,
-     "Internal management property.  Do not set or get.",
-     "This is an internal cache entry property managed by CMake to "
-     "track interactive user modification of entries.  Ignore it."
-      );
-
-  cm->DefineProperty
-    ("STRINGS", cmProperty::CACHE,
-     "Enumerate possible STRING entry values for GUI selection.",
-     "For cache entries with type STRING, this enumerates a set of values.  "
-     "CMake GUIs may use this to provide a selection widget instead of a "
-     "generic string entry field.  "
-     "This is for convenience only.  "
-     "CMake does not enforce that the value matches one of those listed."
-      );
-
-  cm->DefineProperty
-    ("VALUE", cmProperty::CACHE,
-     "Value of a cache entry.",
-     "This property maps to the actual value of a cache entry.  "
-     "Setting this property always sets the value without checking, so "
-     "use with care."
-      );
 }

@@ -110,7 +110,6 @@ public:
   void Initialize();
 
   void CreateCMake();
-  void GetCommandDocumentation(std::vector<cmDocumentationEntry>& v) const;
   cmake* GetCMake() { return this->CMake;}
 private:
   // reads in a script
@@ -136,26 +135,29 @@ private:
   // Add ctest command
   void AddCTestCommand(cmCTestCommand* command);
 
-  std::vector<cmStdString> ConfigurationScripts;
+  // Try to remove the binary directory once
+  static bool TryToRemoveBinaryDirectoryOnce(const std::string& directoryPath);
+
+  std::vector<std::string> ConfigurationScripts;
   std::vector<bool> ScriptProcessScope;
 
   bool Backup;
   bool EmptyBinDir;
   bool EmptyBinDirOnce;
 
-  cmStdString SourceDir;
-  cmStdString BinaryDir;
-  cmStdString BackupSourceDir;
-  cmStdString BackupBinaryDir;
-  cmStdString CTestRoot;
-  cmStdString CVSCheckOut;
-  cmStdString CTestCmd;
-  cmStdString UpdateCmd;
-  cmStdString CTestEnv;
-  cmStdString InitialCache;
-  cmStdString CMakeCmd;
-  cmStdString CMOutFile;
-  std::vector<cmStdString> ExtraUpdates;
+  std::string SourceDir;
+  std::string BinaryDir;
+  std::string BackupSourceDir;
+  std::string BackupBinaryDir;
+  std::string CTestRoot;
+  std::string CVSCheckOut;
+  std::string CTestCmd;
+  std::string UpdateCmd;
+  std::string CTestEnv;
+  std::string InitialCache;
+  std::string CMakeCmd;
+  std::string CMOutFile;
+  std::vector<std::string> ExtraUpdates;
 
   double MinimumInterval;
   double ContinuousDuration;

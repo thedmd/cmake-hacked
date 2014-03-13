@@ -15,6 +15,9 @@
 bool cmUtilitySourceCommand
 ::InitialPass(std::vector<std::string> const& args, cmExecutionStatus &)
 {
+  if(this->Disallowed(cmPolicies::CMP0034,
+      "The utility_source command should not be called; see CMP0034."))
+    { return true; }
   if(args.size() < 3)
     {
     this->SetError("called with incorrect number of arguments");
@@ -26,7 +29,7 @@ bool cmUtilitySourceCommand
   // The first argument is the cache entry name.
   std::string cacheEntry = *arg++;
   const char* cacheValue =
-    this->Makefile->GetDefinition(cacheEntry.c_str());
+    this->Makefile->GetDefinition(cacheEntry);
   // If it exists already and appears up to date then we are done.  If
   // the string contains "(IntDir)" but that is not the
   // CMAKE_CFG_INTDIR setting then the value is out of date.
@@ -110,14 +113,14 @@ bool cmUtilitySourceCommand
   cmSystemTools::ReplaceString(utilityExecutable, "/./", "/");
 
   // Enter the value into the cache.
-  this->Makefile->AddCacheDefinition(cacheEntry.c_str(),
+  this->Makefile->AddCacheDefinition(cacheEntry,
                                  utilityExecutable.c_str(),
                                  "Path to an internal program.",
                                  cmCacheManager::FILEPATH);
   // add a value into the cache that maps from the
   // full path to the name of the project
   cmSystemTools::ConvertToUnixSlashes(utilityExecutable);
-  this->Makefile->AddCacheDefinition(utilityExecutable.c_str(),
+  this->Makefile->AddCacheDefinition(utilityExecutable,
                                  utilityName.c_str(),
                                  "Executable to project name.",
                                  cmCacheManager::INTERNAL);

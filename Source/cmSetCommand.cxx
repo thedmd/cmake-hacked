@@ -23,7 +23,7 @@ bool cmSetCommand
 
   // watch for ENV signatures
   const char* variable = args[0].c_str(); // VAR is always first
-  if (!strncmp(variable,"ENV{",4) && strlen(variable) > 5)
+  if (cmHasLiteralPrefix(variable, "ENV{") && strlen(variable) > 5)
     {
     // what is the variable name
     char *varName = new char [strlen(variable)];
@@ -59,12 +59,20 @@ bool cmSetCommand
   // SET (VAR) // Removes the definition of VAR.
   if (args.size() == 1)
     {
-    this->Makefile->RemoveDefinition(args[0].c_str());
+    this->Makefile->RemoveDefinition(args[0]);
+    return true;
+    }
+  // SET (VAR PARENT_SCOPE) // Removes the definition of VAR
+                            // in the parent scope.
+  else if (args.size() == 2 && args[args.size()-1] == "PARENT_SCOPE")
+    {
+    this->Makefile->RaiseScope(variable, 0);
     return true;
     }
 
   // here are the remaining options
   //  SET (VAR value )
+  //  SET (VAR value PARENT_SCOPE)
   //  SET (VAR CACHE TYPE "doc String" [FORCE])
   //  SET (VAR value CACHE TYPE "doc string" [FORCE])
   std::string value;  // optional
@@ -114,15 +122,8 @@ bool cmSetCommand
 
   if (parentScope)
     {
-    if (value.empty())
-      {
-      this->Makefile->RaiseScope(variable, 0);
-      }
-    else
-      {
-      this->Makefile->RaiseScope(variable, value.c_str());
-      }
-      return true;
+    this->Makefile->RaiseScope(variable, value.c_str());
+    return true;
     }
 
 

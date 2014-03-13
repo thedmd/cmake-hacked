@@ -45,25 +45,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "endif";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Ends a list of commands in an if block.";
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "  endif(expression)\n"
-      "See the if command.";
-    }
+  virtual std::string GetName() const { return "endif";}
 
   cmTypeMacro(cmEndIfCommand, cmCommand);
 };

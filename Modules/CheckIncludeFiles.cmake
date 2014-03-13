@@ -1,16 +1,28 @@
-# - Check if the files can be included
+#.rst:
+# CheckIncludeFiles
+# -----------------
+#
+# Check if the files can be included
+#
+#
 #
 # CHECK_INCLUDE_FILES(INCLUDE VARIABLE)
 #
-#  INCLUDE  - list of files to include
-#  VARIABLE - variable to return result
+# ::
 #
-# The following variables may be set before calling this macro to
-# modify the way the check is run:
+#   INCLUDE  - list of files to include
+#   VARIABLE - variable to return result
 #
-#  CMAKE_REQUIRED_FLAGS = string of compile command line flags
-#  CMAKE_REQUIRED_DEFINITIONS = list of macros to define (-DFOO=bar)
-#  CMAKE_REQUIRED_INCLUDES = list of include directories
+#
+#
+# The following variables may be set before calling this macro to modify
+# the way the check is run:
+#
+# ::
+#
+#   CMAKE_REQUIRED_FLAGS = string of compile command line flags
+#   CMAKE_REQUIRED_DEFINITIONS = list of macros to define (-DFOO=bar)
+#   CMAKE_REQUIRED_INCLUDES = list of include directories
 
 #=============================================================================
 # Copyright 2003-2012 Kitware, Inc.
@@ -42,7 +54,7 @@ macro(CHECK_INCLUDE_FILES INCLUDE VARIABLE)
     set(CMAKE_CONFIGURABLE_FILE_CONTENT
       "${CMAKE_CONFIGURABLE_FILE_CONTENT}\n\nint main(){return 0;}\n")
     configure_file("${CMAKE_ROOT}/Modules/CMakeConfigurableFile.in"
-      "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/CheckIncludeFiles.c" @ONLY IMMEDIATE)
+      "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/CheckIncludeFiles.c" @ONLY)
 
     set(_INCLUDE ${INCLUDE}) # remove empty elements
     if("${_INCLUDE}" MATCHES "^([^;]+);.+;([^;]+)$")

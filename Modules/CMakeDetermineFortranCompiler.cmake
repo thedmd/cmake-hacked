@@ -26,12 +26,9 @@ if(NOT CMAKE_Fortran_COMPILER_NAMES)
 endif()
 
 if(${CMAKE_GENERATOR} MATCHES "Visual Studio")
-  set(CMAKE_Fortran_COMPILER_ID_RUN 1)
-  set(CMAKE_Fortran_PLATFORM_ID "Windows")
-  set(CMAKE_Fortran_COMPILER_ID "Intel")
-  set(CMAKE_Fortran_COMPILER "${CMAKE_GENERATOR_FC}")
 elseif("${CMAKE_GENERATOR}" MATCHES "Xcode")
   set(CMAKE_Fortran_COMPILER_XCODE_TYPE sourcecode.fortran.f90)
+  _cmake_find_compiler_path(Fortran)
 else()
   if(NOT CMAKE_Fortran_COMPILER)
     # prefer the environment variable CC
@@ -94,31 +91,7 @@ else()
     _cmake_find_compiler(Fortran)
 
   else()
-     # we only get here if CMAKE_Fortran_COMPILER was specified using -D or a pre-made CMakeCache.txt
-    # (e.g. via ctest) or set in CMAKE_TOOLCHAIN_FILE
-    # if CMAKE_Fortran_COMPILER is a list of length 2, use the first item as
-    # CMAKE_Fortran_COMPILER and the 2nd one as CMAKE_Fortran_COMPILER_ARG1
-
-    list(LENGTH CMAKE_Fortran_COMPILER _CMAKE_Fortran_COMPILER_LIST_LENGTH)
-    if("${_CMAKE_Fortran_COMPILER_LIST_LENGTH}" EQUAL 2)
-      list(GET CMAKE_Fortran_COMPILER 1 CMAKE_Fortran_COMPILER_ARG1)
-      list(GET CMAKE_Fortran_COMPILER 0 CMAKE_Fortran_COMPILER)
-    endif()
-
-    # if a compiler was specified by the user but without path,
-    # now try to find it with the full path
-    # if it is found, force it into the cache,
-    # if not, don't overwrite the setting (which was given by the user) with "NOTFOUND"
-    # if the C compiler already had a path, reuse it for searching the CXX compiler
-    get_filename_component(_CMAKE_USER_Fortran_COMPILER_PATH "${CMAKE_Fortran_COMPILER}" PATH)
-    if(NOT _CMAKE_USER_Fortran_COMPILER_PATH)
-      find_program(CMAKE_Fortran_COMPILER_WITH_PATH NAMES ${CMAKE_Fortran_COMPILER})
-      mark_as_advanced(CMAKE_Fortran_COMPILER_WITH_PATH)
-      if(CMAKE_Fortran_COMPILER_WITH_PATH)
-        set(CMAKE_Fortran_COMPILER ${CMAKE_Fortran_COMPILER_WITH_PATH}
-          CACHE STRING "Fortran compiler" FORCE)
-      endif()
-    endif()
+    _cmake_find_compiler_path(Fortran)
   endif()
   mark_as_advanced(CMAKE_Fortran_COMPILER)
 
@@ -197,22 +170,24 @@ endif ()
 # e.g. powerpc-linux-gfortran, arm-elf-gfortran or i586-mingw32msvc-gfortran , optionally
 # with a 3-component version number at the end (e.g. arm-eabi-gcc-4.5.2).
 # The other tools of the toolchain usually have the same prefix
-# NAME_WE cannot be used since then this test will fail for names lile
+# NAME_WE cannot be used since then this test will fail for names like
 # "arm-unknown-nto-qnx6.3.0-gcc.exe", where BASENAME would be
 # "arm-unknown-nto-qnx6" instead of the correct "arm-unknown-nto-qnx6.3.0-"
-if (CMAKE_CROSSCOMPILING
-    AND "${CMAKE_Fortran_COMPILER_ID}" MATCHES "GNU"
-    AND NOT _CMAKE_TOOLCHAIN_PREFIX)
-  get_filename_component(COMPILER_BASENAME "${CMAKE_Fortran_COMPILER}" NAME)
-  if (COMPILER_BASENAME MATCHES "^(.+-)g?fortran(-[0-9]+\\.[0-9]+\\.[0-9]+)?(\\.exe)?$")
-    set(_CMAKE_TOOLCHAIN_PREFIX ${CMAKE_MATCH_1})
-  endif ()
+if (CMAKE_CROSSCOMPILING  AND NOT _CMAKE_TOOLCHAIN_PREFIX)
 
-  # if "llvm-" is part of the prefix, remove it, since llvm doesn't have its own binutils
-  # but uses the regular ar, objcopy, etc. (instead of llvm-objcopy etc.)
-  if ("${_CMAKE_TOOLCHAIN_PREFIX}" MATCHES "(.+-)?llvm-$")
-    set(_CMAKE_TOOLCHAIN_PREFIX ${CMAKE_MATCH_1})
-  endif ()
+  if("${CMAKE_Fortran_COMPILER_ID}" MATCHES "GNU")
+    get_filename_component(COMPILER_BASENAME "${CMAKE_Fortran_COMPILER}" NAME)
+    if (COMPILER_BASENAME MATCHES "^(.+-)g?fortran(-[0-9]+\\.[0-9]+\\.[0-9]+)?(\\.exe)?$")
+      set(_CMAKE_TOOLCHAIN_PREFIX ${CMAKE_MATCH_1})
+    endif ()
+
+    # if "llvm-" is part of the prefix, remove it, since llvm doesn't have its own binutils
+    # but uses the regular ar, objcopy, etc. (instead of llvm-objcopy etc.)
+    if ("${_CMAKE_TOOLCHAIN_PREFIX}" MATCHES "(.+-)?llvm-$")
+      set(_CMAKE_TOOLCHAIN_PREFIX ${CMAKE_MATCH_1})
+    endif ()
+  endif()
+
 endif ()
 
 include(CMakeFindBinUtils)
@@ -224,6 +199,6 @@ endif()
 # configure variables set in this file for fast reload later on
 configure_file(${CMAKE_ROOT}/Modules/CMakeFortranCompiler.cmake.in
   ${CMAKE_PLATFORM_INFO_DIR}/CMakeFortranCompiler.cmake
-  @ONLY IMMEDIATE # IMMEDIATE must be here for compatibility mode <= 2.0
+  @ONLY
   )
 set(CMAKE_Fortran_COMPILER_ENV_VAR "FC")

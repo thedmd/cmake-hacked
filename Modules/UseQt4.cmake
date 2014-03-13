@@ -1,7 +1,12 @@
-# - Use Module for QT4
-# Sets up C and C++ to use Qt 4.  It is assumed that FindQt.cmake
-# has already been loaded.  See FindQt.cmake for information on
-# how to load Qt 4 into your CMake project.
+#.rst:
+# UseQt4
+# ------
+#
+# Use Module for QT4
+#
+# Sets up C and C++ to use Qt 4.  It is assumed that FindQt.cmake has
+# already been loaded.  See FindQt.cmake for information on how to load
+# Qt 4 into your CMake project.
 
 #=============================================================================
 # Copyright 2005-2009 Kitware, Inc.
@@ -17,13 +22,7 @@
 #  License text for the above reference.)
 
 add_definitions(${QT_DEFINITIONS})
-set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS_DEBUG QT_DEBUG)
-set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS_RELEASE QT_NO_DEBUG)
-set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS_RELWITHDEBINFO QT_NO_DEBUG)
-set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS_MINSIZEREL QT_NO_DEBUG)
-if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
-  set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS QT_NO_DEBUG)
-endif()
+set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS $<$<NOT:$<CONFIG:Debug>>:QT_NO_DEBUG>)
 
 if(QT_INCLUDE_DIRS_NO_SYSTEM)
   include_directories(${QT_INCLUDE_DIR})
@@ -58,7 +57,7 @@ endif ()
 
 # list dependent modules, so dependent libraries are added
 set(QT_QT3SUPPORT_MODULE_DEPENDS QTGUI QTSQL QTXML QTNETWORK QTCORE)
-set(QT_QTSVG_MODULE_DEPENDS QTGUI QTXML QTCORE)
+set(QT_QTSVG_MODULE_DEPENDS QTGUI QTCORE)
 set(QT_QTUITOOLS_MODULE_DEPENDS QTGUI QTXML QTCORE)
 set(QT_QTHELP_MODULE_DEPENDS QTGUI QTSQL QTXML QTNETWORK QTCORE)
 if(QT_QTDBUS_FOUND)
@@ -99,7 +98,9 @@ foreach(module QT3SUPPORT QTOPENGL QTASSISTANT QTDESIGNER QTMOTIF QTNSPLUGIN
           include_directories(SYSTEM ${QT_${module}_INCLUDE_DIR})
         endif(QT_INCLUDE_DIRS_NO_SYSTEM)
       endif()
-      set(QT_LIBRARIES ${QT_LIBRARIES} ${QT_${module}_LIBRARY})
+      if(QT_USE_${module} OR QT_IS_STATIC)
+        set(QT_LIBRARIES ${QT_LIBRARIES} ${QT_${module}_LIBRARY})
+      endif()
       set(QT_LIBRARIES_PLUGINS ${QT_LIBRARIES_PLUGINS} ${QT_${module}_PLUGINS})
       if(QT_IS_STATIC)
         set(QT_LIBRARIES ${QT_LIBRARIES} ${QT_${module}_LIB_DEPENDENCIES})

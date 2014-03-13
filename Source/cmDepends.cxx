@@ -17,6 +17,7 @@
 #include "cmSystemTools.h"
 #include "cmFileTimeComparison.h"
 #include <string.h>
+#include <cmsys/FStream.hxx>
 
 //----------------------------------------------------------------------------
 cmDepends::cmDepends(cmLocalGenerator* lg, const char* targetDir):
@@ -46,7 +47,7 @@ bool cmDepends::Write(std::ostream &makeDepends,
   std::string srcLang = "CMAKE_DEPENDS_CHECK_";
   srcLang += this->Language;
   cmMakefile* mf = this->LocalGenerator->GetMakefile();
-  const char* srcStr = mf->GetSafeDefinition(srcLang.c_str());
+  const char* srcStr = mf->GetSafeDefinition(srcLang);
   std::vector<std::string> pairs;
   cmSystemTools::ExpandListArgument(srcStr, pairs);
 
@@ -60,7 +61,7 @@ bool cmDepends::Write(std::ostream &makeDepends,
     std::string obj = *si++;
 
     // Make sure the object file is relative to the top of the build tree.
-    obj = this->LocalGenerator->Convert(obj.c_str(),
+    obj = this->LocalGenerator->Convert(obj,
                                         cmLocalGenerator::HOME_OUTPUT,
                                         cmLocalGenerator::MAKEFILE);
     dependencies[obj].insert(src);
@@ -103,7 +104,7 @@ bool cmDepends::Check(const char *makeFile, const char *internalFile,
 
   // Check whether dependencies must be regenerated.
   bool okay = true;
-  std::ifstream fin(internalFile);
+  cmsys::ifstream fin(internalFile);
   if(!(fin && this->CheckDependencies(fin, internalFile, validDeps)))
     {
     // Clear all dependencies so they will be regenerated.
@@ -296,7 +297,7 @@ bool cmDepends::CheckDependencies(std::istream& internalDepends,
 }
 
 //----------------------------------------------------------------------------
-void cmDepends::SetIncludePathFromLanguage(const char* lang)
+void cmDepends::SetIncludePathFromLanguage(const std::string& lang)
 {
   // Look for the new per "TARGET_" variant first:
   const char * includePath = 0;
@@ -304,7 +305,7 @@ void cmDepends::SetIncludePathFromLanguage(const char* lang)
   includePathVar += lang;
   includePathVar += "_TARGET_INCLUDE_PATH";
   cmMakefile* mf = this->LocalGenerator->GetMakefile();
-  includePath = mf->GetDefinition(includePathVar.c_str());
+  includePath = mf->GetDefinition(includePathVar);
   if(includePath)
     {
     cmSystemTools::ExpandListArgument(includePath, this->IncludePath);
@@ -315,7 +316,7 @@ void cmDepends::SetIncludePathFromLanguage(const char* lang)
     includePathVar = "CMAKE_";
     includePathVar += lang;
     includePathVar += "_INCLUDE_PATH";
-    includePath = mf->GetDefinition(includePathVar.c_str());
+    includePath = mf->GetDefinition(includePathVar);
     if(includePath)
       {
       cmSystemTools::ExpandListArgument(includePath, this->IncludePath);

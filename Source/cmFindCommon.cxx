@@ -37,55 +37,6 @@ cmFindCommon::cmFindCommon()
 }
 
 //----------------------------------------------------------------------------
-void cmFindCommon::GenerateDocumentation()
-{
-  // Documentation components.
-  this->GenericDocumentationMacPolicy =
-    "On Darwin or systems supporting OS X Frameworks, the cmake variable"
-    "    CMAKE_FIND_FRAMEWORK can be set to empty or one of the following:\n"
-    "   \"FIRST\"  - Try to find frameworks before standard\n"
-    "              libraries or headers. This is the default on Darwin.\n"
-    "   \"LAST\"   - Try to find frameworks after standard\n"
-    "              libraries or headers.\n"
-    "   \"ONLY\"   - Only try to find frameworks.\n"
-    "   \"NEVER\" - Never try to find frameworks.\n"
-    "On Darwin or systems supporting OS X Application Bundles, the cmake "
-    "variable CMAKE_FIND_APPBUNDLE can be set to empty or one of the "
-    "following:\n"
-    "   \"FIRST\"  - Try to find application bundles before standard\n"
-    "              programs. This is the default on Darwin.\n"
-    "   \"LAST\"   - Try to find application bundles after standard\n"
-    "              programs.\n"
-    "   \"ONLY\"   - Only try to find application bundles.\n"
-    "   \"NEVER\" - Never try to find application bundles.\n";
-  this->GenericDocumentationRootPath =
-    "The CMake variable CMAKE_FIND_ROOT_PATH specifies one or more "
-    "directories to be prepended to all other search directories. "
-    "This effectively \"re-roots\" the entire search under given locations. "
-    "By default it is empty. It is especially useful when "
-    "cross-compiling to point to the root directory of the "
-    "target environment and CMake will search there too. By default at first "
-    "the directories listed in CMAKE_FIND_ROOT_PATH and then the non-rooted "
-    "directories will be searched. "
-    "The default behavior can be adjusted by setting "
-    "CMAKE_FIND_ROOT_PATH_MODE_XXX.  This behavior can be manually "
-    "overridden on a per-call basis. "
-    "By using CMAKE_FIND_ROOT_PATH_BOTH the search order will "
-    "be as described above. If NO_CMAKE_FIND_ROOT_PATH is used "
-    "then CMAKE_FIND_ROOT_PATH will not be used. If ONLY_CMAKE_FIND_ROOT_PATH "
-    "is used then only the re-rooted directories will be searched.\n";
-  this->GenericDocumentationPathsOrder =
-    "The default search order is designed to be most-specific to "
-    "least-specific for common use cases.  "
-    "Projects may override the order by simply calling the command "
-    "multiple times and using the NO_* options:\n"
-    "   FIND_XXX(FIND_ARGS_XXX PATHS paths... NO_DEFAULT_PATH)\n"
-    "   FIND_XXX(FIND_ARGS_XXX)\n"
-    "Once one of the calls succeeds the result variable will be set "
-    "and stored in the cache so that no call will search again.";
-}
-
-//----------------------------------------------------------------------------
 cmFindCommon::~cmFindCommon()
 {
 }
@@ -100,7 +51,7 @@ void cmFindCommon::SelectDefaultRootPathMode()
   std::string findRootPathVar = "CMAKE_FIND_ROOT_PATH_MODE_";
   findRootPathVar += this->CMakePathName;
   std::string rootPathMode =
-    this->Makefile->GetSafeDefinition(findRootPathVar.c_str());
+    this->Makefile->GetSafeDefinition(findRootPathVar);
   if (rootPathMode=="NEVER")
     {
     this->FindRootPathMode = RootPathModeNoRootPath;
@@ -187,21 +138,35 @@ void cmFindCommon::RerootPaths(std::vector<std::string>& paths)
     {
     return;
     }
+  const char* sysroot =
+    this->Makefile->GetDefinition("CMAKE_SYSROOT");
   const char* rootPath =
     this->Makefile->GetDefinition("CMAKE_FIND_ROOT_PATH");
-  if((rootPath == 0) || (strlen(rootPath) == 0))
+  const bool noSysroot = !sysroot || !*sysroot;
+  const bool noRootPath = !rootPath || !*rootPath;
+  if(noSysroot && noRootPath)
     {
     return;
     }
 
   // Construct the list of path roots with no trailing slashes.
   std::vector<std::string> roots;
-  cmSystemTools::ExpandListArgument(rootPath, roots);
+  if (rootPath)
+    {
+    cmSystemTools::ExpandListArgument(rootPath, roots);
+    }
+  if (sysroot)
+    {
+    roots.push_back(sysroot);
+    }
   for(std::vector<std::string>::iterator ri = roots.begin();
       ri != roots.end(); ++ri)
     {
     cmSystemTools::ConvertToUnixSlashes(*ri);
     }
+
+  const char* stagePrefix =
+      this->Makefile->GetDefinition("CMAKE_STAGING_PREFIX");
 
   // Copy the original set of unrooted paths.
   std::vector<std::string> unrootedPaths = paths;
@@ -217,7 +182,9 @@ void cmFindCommon::RerootPaths(std::vector<std::string>& paths)
       // already inside.  Skip the unrooted path if it is relative to
       // a user home directory or is empty.
       std::string rootedDir;
-      if(cmSystemTools::IsSubDirectory(ui->c_str(), ri->c_str()))
+      if(cmSystemTools::IsSubDirectory(ui->c_str(), ri->c_str())
+          || (stagePrefix
+            && cmSystemTools::IsSubDirectory(ui->c_str(), stagePrefix)))
         {
         rootedDir = *ui;
         }
@@ -394,7 +361,7 @@ void cmFindCommon::AddUserPath(std::string const& p,
   // Expand using the view of the target application.
   std::string expanded = p;
   cmSystemTools::ExpandRegistryValues(expanded, view);
-  cmSystemTools::GlobDirs(expanded.c_str(), paths);
+  cmSystemTools::GlobDirs(expanded, paths);
 
   // Executables can be either 32-bit or 64-bit, so expand using the
   // alternative view.
@@ -402,12 +369,12 @@ void cmFindCommon::AddUserPath(std::string const& p,
     {
     expanded = p;
     cmSystemTools::ExpandRegistryValues(expanded, other_view);
-    cmSystemTools::GlobDirs(expanded.c_str(), paths);
+    cmSystemTools::GlobDirs(expanded, paths);
     }
 }
 
 //----------------------------------------------------------------------------
-void cmFindCommon::AddCMakePath(const char* variable)
+void cmFindCommon::AddCMakePath(const std::string& variable)
 {
   // Get a path from a CMake variable.
   if(const char* varPath = this->Makefile->GetDefinition(variable))
@@ -466,7 +433,7 @@ void cmFindCommon::AddPathInternal(std::string const& in_path,
   // Insert the path if has not already been emitted.
   if(this->SearchPathsEmitted.insert(fullPath).second)
     {
-    this->SearchPaths.push_back(fullPath.c_str());
+    this->SearchPaths.push_back(fullPath);
     }
 }
 

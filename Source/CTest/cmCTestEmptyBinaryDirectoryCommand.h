@@ -48,27 +48,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "ctest_empty_binary_directory";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "empties the binary directory";
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "  ctest_empty_binary_directory( directory )\n"
-      "Removes a binary directory. This command will perform some checks "
-      "prior to deleting the directory in an attempt to avoid malicious "
-      "or accidental directory deletion.";
-    }
+  virtual std::string GetName() const { return "ctest_empty_binary_directory";}
 
   cmTypeMacro(cmCTestEmptyBinaryDirectoryCommand, cmCTestCommand);
 

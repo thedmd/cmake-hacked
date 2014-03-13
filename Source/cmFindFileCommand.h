@@ -33,19 +33,9 @@ public:
     {
     return new cmFindFileCommand;
     }
-  virtual const char* GetName() const { return "find_file";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Find the full path to a file.";
-    }
+  virtual std::string GetName() const { return "find_file";}
 
   cmTypeMacro(cmFindFileCommand, cmFindPathCommand);
-protected:
-  virtual void GenerateDocumentation();
 };
 
 

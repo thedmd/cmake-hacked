@@ -5,7 +5,6 @@ project(ToClean)
 add_executable(toclean toclean.cxx)
 
 # List some build-time-generated files.
-get_target_property(TOCLEAN_FILES toclean LOCATION)
 set(TOCLEAN_FILES ${TOCLEAN_FILES}
   "${ToClean_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/toclean.dir/toclean.cxx${CMAKE_CXX_OUTPUT_EXTENSION}")
 
@@ -26,6 +25,18 @@ add_custom_command(OUTPUT ${ToClean_BINARY_DIR}/generated.txt
 add_custom_target(generate ALL DEPENDS ${ToClean_BINARY_DIR}/generated.txt)
 set(TOCLEAN_FILES ${TOCLEAN_FILES} "${ToClean_BINARY_DIR}/generated.txt")
 
+# Create a custom command whose output should be cleaned, but whose name
+# is not known until generate-time
+set(copied_exe "$<TARGET_FILE_DIR:toclean>/toclean_copy${CMAKE_EXECUTABLE_SUFFIX}")
+add_custom_command(TARGET toclean POST_BUILD
+  COMMAND ${CMAKE_COMMAND}
+  ARGS -E copy $<TARGET_FILE:toclean>
+               ${copied_exe}
+  )
+set_property(DIRECTORY APPEND PROPERTY
+  ADDITIONAL_MAKE_CLEAN_FILES ${copied_exe})
+list(APPEND TOCLEAN_FILES "${ToClean_BINARY_DIR}/toclean_copy${CMAKE_EXECUTABLE_SUFFIX}")
+
 # Configure a file listing these build-time-generated files.
 configure_file(${ToClean_SOURCE_DIR}/ToCleanFiles.cmake.in
-               ${ToClean_BINARY_DIR}/ToCleanFiles.cmake @ONLY IMMEDIATE)
+               ${ToClean_BINARY_DIR}/ToCleanFiles.cmake @ONLY)

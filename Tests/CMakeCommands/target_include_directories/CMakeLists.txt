@@ -11,9 +11,6 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/publicinclude/publicinclude.h" "#define 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/interfaceinclude")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/interfaceinclude/interfaceinclude.h" "#define INTERFACEINCLUDE_DEFINE\n")
 
-file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/importedinterfaceinclude")
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/importedinterfaceinclude/importedinterfaceinclude.h" "#define IMPORTEDINTERFACEINCLUDE_DEFINE\n")
-
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/poison")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/poison/common.h" "#error Should not be included\n")
 
@@ -33,12 +30,12 @@ target_include_directories(target_include_directories
   PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/poison"
 )
 target_include_directories(target_include_directories
-  BEFORE PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/cure"
+  BEFORE PUBLIC "$<$<STREQUAL:$<TARGET_PROPERTY:target_include_directories,TYPE>,EXECUTABLE>:${CMAKE_CURRENT_BINARY_DIR}/cure>"
 )
 
-add_library(importedlib UNKNOWN IMPORTED)
-target_include_directories(importedlib
-  INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/importedinterfaceinclude"
+# Has no effect because the target type is not SHARED_LIBRARY:
+target_include_directories(target_include_directories
+  BEFORE PUBLIC "$<$<STREQUAL:$<TARGET_PROPERTY:target_include_directories,TYPE>,SHARED_LIBRARY>:${CMAKE_CURRENT_BINARY_DIR}/poison>"
 )
 
 add_executable(consumer
@@ -46,5 +43,29 @@ add_executable(consumer
 )
 
 target_include_directories(consumer
-  PRIVATE target_include_directories importedlib
+  PRIVATE
+    $<TARGET_PROPERTY:target_include_directories,INTERFACE_INCLUDE_DIRECTORIES>
+    relative_dir
+    relative_dir/$<TARGET_PROPERTY:NAME>
 )
+
+# Test no items
+target_include_directories(consumer
+  PRIVATE
+)
+target_include_directories(consumer
+  BEFORE PRIVATE
+)
+target_include_directories(consumer
+  SYSTEM BEFORE PRIVATE
+)
+target_include_directories(consumer
+  SYSTEM PRIVATE
+)
+
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+add_library(imp UNKNOWN IMPORTED)
+get_target_property(_res imp INCLUDE_DIRECTORIES)
+if (_res)
+  message(SEND_ERROR "include_directories populated the INCLUDE_DIRECTORIES target property")
+endif()

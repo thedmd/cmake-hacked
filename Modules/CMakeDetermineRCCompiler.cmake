@@ -12,14 +12,14 @@
 # (To distribute this file outside of CMake, substitute the full
 #  License text for the above reference.)
 
-# determine the compiler to use for C programs
-# NOTE, a generator may set CMAKE_C_COMPILER before
+# determine the compiler to use for RC programs
+# NOTE, a generator may set CMAKE_RC_COMPILER before
 # loading this file to force a compiler.
-# use environment variable CCC first if defined by user, next use
-# the cmake variable CMAKE_GENERATOR_CC which can be defined by a generator
+# use environment variable RC first if defined by user, next use
+# the cmake variable CMAKE_GENERATOR_RC which can be defined by a generator
 # as a default compiler
 if(NOT CMAKE_RC_COMPILER)
-  # prefer the environment variable CC
+  # prefer the environment variable RC
   if($ENV{RC} MATCHES ".+")
     get_filename_component(CMAKE_RC_COMPILER_INIT $ENV{RC} PROGRAM PROGRAM_ARGS CMAKE_RC_FLAGS_ENV_INIT)
     if(CMAKE_RC_FLAGS_ENV_INIT)
@@ -63,5 +63,5 @@ endif()
 
 # configure variables set in this file for fast reload later on
 configure_file(${CMAKE_ROOT}/Modules/CMakeRCCompiler.cmake.in
-               ${CMAKE_PLATFORM_INFO_DIR}/CMakeRCCompiler.cmake IMMEDIATE)
+               ${CMAKE_PLATFORM_INFO_DIR}/CMakeRCCompiler.cmake)
 set(CMAKE_RC_COMPILER_ENV_VAR "RC")

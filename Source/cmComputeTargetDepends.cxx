@@ -143,12 +143,13 @@ bool cmComputeTargetDepends::Compute()
 
 //----------------------------------------------------------------------------
 void
-cmComputeTargetDepends::GetTargetDirectDepends(cmTarget* t,
+cmComputeTargetDepends::GetTargetDirectDepends(cmTarget const* t,
                                                cmTargetDependSet& deps)
 {
   // Lookup the index for this target.  All targets should be known by
   // this point.
-  std::map<cmTarget*, int>::const_iterator tii = this->TargetIndex.find(t);
+  std::map<cmTarget const*, int>::const_iterator tii
+                                                  = this->TargetIndex.find(t);
   assert(tii != this->TargetIndex.end());
   int i = tii->second;
 
@@ -156,7 +157,7 @@ cmComputeTargetDepends::GetTargetDirectDepends(cmTarget* t,
   EdgeList const& nl = this->FinalGraph[i];
   for(EdgeList::const_iterator ni = nl.begin(); ni != nl.end(); ++ni)
     {
-    cmTarget* dep = this->Targets[*ni];
+    cmTarget const* dep = this->Targets[*ni];
     cmTargetDependSet::iterator di = deps.insert(dep).first;
     di->SetType(ni->IsStrong());
     }
@@ -170,10 +171,11 @@ void cmComputeTargetDepends::CollectTargets()
     this->GlobalGenerator->GetLocalGenerators();
   for(unsigned int i = 0; i < lgens.size(); ++i)
     {
-    cmTargets& targets = lgens[i]->GetMakefile()->GetTargets();
-    for(cmTargets::iterator ti = targets.begin(); ti != targets.end(); ++ti)
+    const cmTargets& targets = lgens[i]->GetMakefile()->GetTargets();
+    for(cmTargets::const_iterator ti = targets.begin();
+        ti != targets.end(); ++ti)
       {
-      cmTarget* target = &ti->second;
+      cmTarget const* target = &ti->second;
       int index = static_cast<int>(this->Targets.size());
       this->TargetIndex[target] = index;
       this->Targets.push_back(target);
@@ -198,17 +200,21 @@ void cmComputeTargetDepends::CollectDepends()
 void cmComputeTargetDepends::CollectTargetDepends(int depender_index)
 {
   // Get the depender.
-  cmTarget* depender = this->Targets[depender_index];
+  cmTarget const* depender = this->Targets[depender_index];
+  if (depender->GetType() == cmTarget::INTERFACE_LIBRARY)
+    {
+    return;
+    }
 
   // Loop over all targets linked directly in all configs.
   // We need to make targets depend on the union of all config-specific
   // dependencies in all targets, because the generated build-systems can't
   // deal with config-specific dependencies.
   {
-  std::set<cmStdString> emitted;
+  std::set<std::string> emitted;
   {
   std::vector<std::string> tlibs;
-  depender->GetDirectLinkLibraries(0, tlibs, depender);
+  depender->GetDirectLinkLibraries("", tlibs, depender);
   // A target should not depend on itself.
   emitted.insert(depender->GetName());
   for(std::vector<std::string>::const_iterator lib = tlibs.begin();
@@ -217,8 +223,8 @@ void cmComputeTargetDepends::CollectTargetDepends(int depender_index)
     // Don't emit the same library twice for this target.
     if(emitted.insert(*lib).second)
       {
-      this->AddTargetDepend(depender_index, lib->c_str(), true);
-      this->AddInterfaceDepends(depender_index, lib->c_str(),
+      this->AddTargetDepend(depender_index, *lib, true);
+      this->AddInterfaceDepends(depender_index, *lib,
                                 true, emitted);
       }
     }
@@ -229,7 +235,8 @@ void cmComputeTargetDepends::CollectTargetDepends(int depender_index)
     it != configs.end(); ++it)
     {
     std::vector<std::string> tlibs;
-    depender->GetDirectLinkLibraries(it->c_str(), tlibs, depender);
+    depender->GetDirectLinkLibraries(*it, tlibs, depender);
+
     // A target should not depend on itself.
     emitted.insert(depender->GetName());
     for(std::vector<std::string>::const_iterator lib = tlibs.begin();
@@ -238,8 +245,8 @@ void cmComputeTargetDepends::CollectTargetDepends(int depender_index)
       // Don't emit the same library twice for this target.
       if(emitted.insert(*lib).second)
         {
-        this->AddTargetDepend(depender_index, lib->c_str(), true);
-        this->AddInterfaceDepends(depender_index, lib->c_str(),
+        this->AddTargetDepend(depender_index, *lib, true);
+        this->AddInterfaceDepends(depender_index, *lib,
                                   true, emitted);
         }
       }
@@ -248,17 +255,17 @@ void cmComputeTargetDepends::CollectTargetDepends(int depender_index)
 
   // Loop over all utility dependencies.
   {
-  std::set<cmStdString> const& tutils = depender->GetUtilities();
-  std::set<cmStdString> emitted;
+  std::set<std::string> const& tutils = depender->GetUtilities();
+  std::set<std::string> emitted;
   // A target should not depend on itself.
   emitted.insert(depender->GetName());
-  for(std::set<cmStdString>::const_iterator util = tutils.begin();
+  for(std::set<std::string>::const_iterator util = tutils.begin();
       util != tutils.end(); ++util)
     {
     // Don't emit the same utility twice for this target.
     if(emitted.insert(*util).second)
       {
-      this->AddTargetDepend(depender_index, util->c_str(), false);
+      this->AddTargetDepend(depender_index, *util, false);
       }
     }
   }
@@ -266,11 +273,11 @@ void cmComputeTargetDepends::CollectTargetDepends(int depender_index)
 
 //----------------------------------------------------------------------------
 void cmComputeTargetDepends::AddInterfaceDepends(int depender_index,
-                                                 cmTarget* dependee,
-                                                 const char *config,
-                                               std::set<cmStdString> &emitted)
+                                                 cmTarget const* dependee,
+                                                 const std::string& config,
+                                               std::set<std::string> &emitted)
 {
-  cmTarget* depender = this->Targets[depender_index];
+  cmTarget const* depender = this->Targets[depender_index];
   if(cmTarget::LinkInterface const* iface =
                                 dependee->GetLinkInterface(config, depender))
     {
@@ -281,7 +288,9 @@ void cmComputeTargetDepends::AddInterfaceDepends(int depender_index,
       // Don't emit the same library twice for this target.
       if(emitted.insert(*lib).second)
         {
-        this->AddTargetDepend(depender_index, lib->c_str(), true);
+        this->AddTargetDepend(depender_index, *lib, true);
+        this->AddInterfaceDepends(depender_index, *lib,
+                                  true, emitted);
         }
       }
     }
@@ -289,12 +298,12 @@ void cmComputeTargetDepends::AddInterfaceDepends(int depender_index,
 
 //----------------------------------------------------------------------------
 void cmComputeTargetDepends::AddInterfaceDepends(int depender_index,
-                                             const char* dependee_name,
+                                             const std::string& dependee_name,
                                              bool linking,
-                                             std::set<cmStdString> &emitted)
+                                             std::set<std::string> &emitted)
 {
-  cmTarget* depender = this->Targets[depender_index];
-  cmTarget* dependee =
+  cmTarget const* depender = this->Targets[depender_index];
+  cmTarget const* dependee =
     depender->GetMakefile()->FindTargetToUse(dependee_name);
   // Skip targets that will not really be linked.  This is probably a
   // name conflict between an external library and an executable
@@ -308,7 +317,7 @@ void cmComputeTargetDepends::AddInterfaceDepends(int depender_index,
 
   if(dependee)
     {
-    this->AddInterfaceDepends(depender_index, dependee, 0, emitted);
+    this->AddInterfaceDepends(depender_index, dependee, "", emitted);
     std::vector<std::string> configs;
     depender->GetMakefile()->GetConfigurations(configs);
     for (std::vector<std::string>::const_iterator it = configs.begin();
@@ -317,22 +326,61 @@ void cmComputeTargetDepends::AddInterfaceDepends(int depender_index,
       // A target should not depend on itself.
       emitted.insert(depender->GetName());
       this->AddInterfaceDepends(depender_index, dependee,
-                                it->c_str(), emitted);
+                                *it, emitted);
       }
     }
 }
 
 //----------------------------------------------------------------------------
 void cmComputeTargetDepends::AddTargetDepend(int depender_index,
-                                             const char* dependee_name,
+                                             const std::string& dependee_name,
                                              bool linking)
 {
   // Get the depender.
-  cmTarget* depender = this->Targets[depender_index];
+  cmTarget const* depender = this->Targets[depender_index];
 
   // Check the target's makefile first.
-  cmTarget* dependee =
+  cmTarget const* dependee =
     depender->GetMakefile()->FindTargetToUse(dependee_name);
+
+  if(!dependee && !linking &&
+    (depender->GetType() != cmTarget::GLOBAL_TARGET))
+    {
+    cmMakefile *makefile = depender->GetMakefile();
+    cmake::MessageType messageType = cmake::AUTHOR_WARNING;
+    bool issueMessage = false;
+    switch(depender->GetPolicyStatusCMP0046())
+      {
+      case cmPolicies::WARN:
+        issueMessage = true;
+      case cmPolicies::OLD:
+        break;
+      case cmPolicies::NEW:
+      case cmPolicies::REQUIRED_IF_USED:
+      case cmPolicies::REQUIRED_ALWAYS:
+        issueMessage = true;
+        messageType = cmake::FATAL_ERROR;
+      }
+    if(issueMessage)
+      {
+      cmake* cm = this->GlobalGenerator->GetCMakeInstance();
+      cmOStringStream e;
+      e << (makefile->GetPolicies()
+        ->GetPolicyWarning(cmPolicies::CMP0046)) << "\n";
+      e << "The dependency target \"" <<  dependee_name
+        << "\" of target \"" << depender->GetName() << "\" does not exist.";
+
+      cmListFileBacktrace nullBacktrace;
+      cmListFileBacktrace const* backtrace =
+        depender->GetUtilityBacktrace(dependee_name);
+      if(!backtrace)
+        {
+        backtrace = &nullBacktrace;
+        }
+
+      cm->IssueMessage(messageType, e.str(), *backtrace);
+      }
+    }
 
   // Skip targets that will not really be linked.  This is probably a
   // name conflict between an external library and an executable
@@ -352,18 +400,18 @@ void cmComputeTargetDepends::AddTargetDepend(int depender_index,
 
 //----------------------------------------------------------------------------
 void cmComputeTargetDepends::AddTargetDepend(int depender_index,
-                                             cmTarget* dependee,
+                                             cmTarget const* dependee,
                                              bool linking)
 {
   if(dependee->IsImported())
     {
     // Skip imported targets but follow their utility dependencies.
-    std::set<cmStdString> const& utils = dependee->GetUtilities();
-    for(std::set<cmStdString>::const_iterator i = utils.begin();
+    std::set<std::string> const& utils = dependee->GetUtilities();
+    for(std::set<std::string>::const_iterator i = utils.begin();
         i != utils.end(); ++i)
       {
-      if(cmTarget* transitive_dependee =
-         dependee->GetMakefile()->FindTargetToUse(i->c_str()))
+      if(cmTarget const* transitive_dependee =
+         dependee->GetMakefile()->FindTargetToUse(*i))
         {
         this->AddTargetDepend(depender_index, transitive_dependee, false);
         }
@@ -373,7 +421,7 @@ void cmComputeTargetDepends::AddTargetDepend(int depender_index,
     {
     // Lookup the index for this target.  All targets should be known by
     // this point.
-    std::map<cmTarget*, int>::const_iterator tii =
+    std::map<cmTarget const*, int>::const_iterator tii =
       this->TargetIndex.find(dependee);
     assert(tii != this->TargetIndex.end());
     int dependee_index = tii->second;
@@ -386,22 +434,23 @@ void cmComputeTargetDepends::AddTargetDepend(int depender_index,
 
 //----------------------------------------------------------------------------
 void
-cmComputeTargetDepends::DisplayGraph(Graph const& graph, const char* name)
+cmComputeTargetDepends::DisplayGraph(Graph const& graph,
+                                     const std::string& name)
 {
-  fprintf(stderr, "The %s target dependency graph is:\n", name);
+  fprintf(stderr, "The %s target dependency graph is:\n", name.c_str());
   int n = static_cast<int>(graph.size());
   for(int depender_index = 0; depender_index < n; ++depender_index)
     {
     EdgeList const& nl = graph[depender_index];
-    cmTarget* depender = this->Targets[depender_index];
+    cmTarget const* depender = this->Targets[depender_index];
     fprintf(stderr, "target %d is [%s]\n",
-            depender_index, depender->GetName());
+            depender_index, depender->GetName().c_str());
     for(EdgeList::const_iterator ni = nl.begin(); ni != nl.end(); ++ni)
       {
       int dependee_index = *ni;
-      cmTarget* dependee = this->Targets[dependee_index];
+      cmTarget const* dependee = this->Targets[dependee_index];
       fprintf(stderr, "  depends on target %d [%s] (%s)\n", dependee_index,
-              dependee->GetName(), ni->IsStrong()? "strong" : "weak");
+              dependee->GetName().c_str(), ni->IsStrong()? "strong" : "weak");
       }
     }
   fprintf(stderr, "\n");
@@ -423,7 +472,7 @@ cmComputeTargetDepends
       {
       int i = *ni;
       fprintf(stderr, "  contains target %d [%s]\n",
-              i, this->Targets[i]->GetName());
+              i, this->Targets[i]->GetName().c_str());
       }
     }
   fprintf(stderr, "\n");
@@ -486,7 +535,7 @@ cmComputeTargetDepends
     {
     // Get the depender.
     int i = *ci;
-    cmTarget* depender = this->Targets[i];
+    cmTarget const* depender = this->Targets[i];
 
     // Describe the depender.
     e << "  \"" << depender->GetName() << "\" of type "
@@ -499,7 +548,7 @@ cmComputeTargetDepends
       int j = *ni;
       if(cmap[j] == c)
         {
-        cmTarget* dependee = this->Targets[j];
+        cmTarget const* dependee = this->Targets[j];
         e << "    depends on \"" << dependee->GetName() << "\""
           << " (" << (ni->IsStrong()? "strong" : "weak") << ")\n";
         }

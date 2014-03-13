@@ -47,6 +47,12 @@ do.
 
 */
 
+#if defined(__CYGWIN__)
+/* Increase the file descriptor limit for select() before including
+   related system headers. (Default: 64) */
+# define FD_SETSIZE 16384
+#endif
+
 #include <stddef.h>    /* ptrdiff_t */
 #include <stdio.h>     /* snprintf */
 #include <stdlib.h>    /* malloc, free */
@@ -102,7 +108,7 @@ static inline void kwsysProcess_usleep(unsigned int msec)
  * pipes' file handles to be non-blocking and just poll them directly
  * without select().
  */
-#if !defined(__BEOS__) && !defined(__VMS)
+#if !defined(__BEOS__) && !defined(__VMS) && !defined(__MINT__)
 # define KWSYSPE_USE_SELECT 1
 #endif
 
@@ -418,9 +424,10 @@ int kwsysProcess_AddCommand(kwsysProcess* cp, char const* const* command)
        parse it.  */
     newCommands[cp->NumberOfCommands] =
       kwsysSystem_Parse_CommandForUnix(*command, 0);
-    if(!newCommands[cp->NumberOfCommands])
+    if(!newCommands[cp->NumberOfCommands] ||
+       !newCommands[cp->NumberOfCommands][0])
       {
-      /* Out of memory.  */
+      /* Out of memory or no command parsed.  */
       free(newCommands);
       return 0;
       }
@@ -2442,6 +2449,7 @@ static void kwsysProcessKill(pid_t process_id)
           if(f)
             {
             size_t nread = fread(buffer, 1, KWSYSPE_PIPE_BUFFER_SIZE, f);
+            fclose(f);
             buffer[nread] = '\0';
             if(nread > 0)
               {
@@ -2456,7 +2464,6 @@ static void kwsysProcessKill(pid_t process_id)
                   }
                 }
               }
-            fclose(f);
             }
           }
         }

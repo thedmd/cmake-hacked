@@ -11,8 +11,8 @@
 #error Expected MY_INTERFACE_DEFINE
 #endif
 
-#ifndef MY_IMPORTEDINTERFACE_DEFINE
-#error Expected MY_IMPORTEDINTERFACE_DEFINE
+#ifndef DASH_D_DEFINE
+#error Expected DASH_D_DEFINE
 #endif
 
 int main() { return 0; }

@@ -20,51 +20,6 @@ cmFindPathCommand::cmFindPathCommand()
   this->IncludeFileInPath = false;
 }
 
-void cmFindPathCommand::GenerateDocumentation()
-{
-  this->cmFindBase::GenerateDocumentation();
-  cmSystemTools::ReplaceString(this->GenericDocumentation,
-                               "FIND_XXX", "find_path");
-  cmSystemTools::ReplaceString(this->GenericDocumentation,
-                               "CMAKE_XXX_PATH", "CMAKE_INCLUDE_PATH");
-  cmSystemTools::ReplaceString(this->GenericDocumentation,
-                               "CMAKE_XXX_MAC_PATH",
-                               "CMAKE_FRAMEWORK_PATH");
-  cmSystemTools::ReplaceString(this->GenericDocumentation,
-                               "CMAKE_SYSTEM_XXX_MAC_PATH",
-                               "CMAKE_SYSTEM_FRAMEWORK_PATH");
-  cmSystemTools::ReplaceString(this->GenericDocumentation,
-                               "XXX_SYSTEM", "INCLUDE");
-  cmSystemTools::ReplaceString(this->GenericDocumentation,
-                               "CMAKE_SYSTEM_XXX_PATH",
-                               "CMAKE_SYSTEM_INCLUDE_PATH");
-  cmSystemTools::ReplaceString(this->GenericDocumentation,
-                               "SEARCH_XXX_DESC",
-                               "directory containing the named file");
-  cmSystemTools::ReplaceString(this->GenericDocumentation,
-                               "SEARCH_XXX", "file in a directory");
-  cmSystemTools::ReplaceString(this->GenericDocumentation,
-                               "XXX_SUBDIR", "include");
-  cmSystemTools::ReplaceString(
-    this->GenericDocumentation,
-    "XXX_EXTRA_PREFIX_ENTRY",
-    "   <prefix>/include/<arch> if CMAKE_LIBRARY_ARCHITECTURE is set, and\n");
-  cmSystemTools::ReplaceString(this->GenericDocumentation,
-                               "CMAKE_FIND_ROOT_PATH_MODE_XXX",
-                               "CMAKE_FIND_ROOT_PATH_MODE_INCLUDE");
-  if(!this->IncludeFileInPath)
-    {
-    this->GenericDocumentation +=
-      "\n"
-      "When searching for frameworks, if the file is specified as "
-      "A/b.h, then the framework search will look for "
-      "A.framework/Headers/b.h. "
-      "If that is found the path will be set to the path to the framework. "
-      "CMake will convert this to the correct -F option to include the "
-      "file. ";
-    }
-}
-
 // cmFindPathCommand
 bool cmFindPathCommand
 ::InitialPass(std::vector<std::string> const& argsIn, cmExecutionStatus &)
@@ -83,7 +38,7 @@ bool cmFindPathCommand
     if(this->AlreadyInCacheWithoutMetaInfo)
       {
       this->Makefile->AddCacheDefinition(
-        this->VariableName.c_str(), "",
+        this->VariableName, "",
         this->VariableDocumentation.c_str(),
         (this->IncludeFileInPath ?
          cmCacheManager::FILEPATH :cmCacheManager::PATH)
@@ -96,14 +51,14 @@ bool cmFindPathCommand
   if(result.size() != 0)
     {
     this->Makefile->AddCacheDefinition
-      (this->VariableName.c_str(), result.c_str(),
+      (this->VariableName, result.c_str(),
        this->VariableDocumentation.c_str(),
        (this->IncludeFileInPath) ?
        cmCacheManager::FILEPATH :cmCacheManager::PATH);
     return true;
     }
   this->Makefile->AddCacheDefinition
-    (this->VariableName.c_str(),
+    (this->VariableName,
      (this->VariableName + "-NOTFOUND").c_str(),
      this->VariableDocumentation.c_str(),
      (this->IncludeFileInPath) ?
@@ -134,9 +89,9 @@ std::string
 cmFindPathCommand::FindHeaderInFramework(std::string const& file,
                                          std::string const& dir)
 {
-  cmStdString fileName = file;
-  cmStdString frameWorkName;
-  cmStdString::size_type pos = fileName.find("/");
+  std::string fileName = file;
+  std::string frameWorkName;
+  std::string::size_type pos = fileName.find("/");
   // if there is a / in the name try to find the header as a framework
   // For example bar/foo.h would look for:
   // bar.framework/Headers/foo.h
@@ -173,7 +128,7 @@ cmFindPathCommand::FindHeaderInFramework(std::string const& file,
     }
   // if it is not found yet or not a framework header, then do a glob search
   // for all frameworks in the directory: dir/*.framework/Headers/<file>
-  cmStdString glob = dir;
+  std::string glob = dir;
   glob += "*.framework/Headers/";
   glob += file;
   cmsys::Glob globIt;
@@ -181,7 +136,7 @@ cmFindPathCommand::FindHeaderInFramework(std::string const& file,
   std::vector<std::string> files = globIt.GetFiles();
   if(files.size())
     {
-    cmStdString fheader = cmSystemTools::CollapseFullPath(files[0].c_str());
+    std::string fheader = cmSystemTools::CollapseFullPath(files[0].c_str());
     if(this->IncludeFileInPath)
       {
       return fheader;

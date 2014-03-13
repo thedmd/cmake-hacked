@@ -25,12 +25,14 @@
 #include <cmsys/RegularExpression.hxx>
 #include <cmsys/Directory.hxx>
 #include <cmsys/System.h>
+#include <cmsys/Encoding.hxx>
 #if defined(CMAKE_BUILD_WITH_CMAKE)
 # include "cmArchiveWrite.h"
 # include <cm_libarchive.h>
 # include <cmsys/Terminal.h>
 #endif
 #include <cmsys/stl/algorithm>
+#include <cmsys/FStream.hxx>
 
 #if defined(_WIN32)
 # include <windows.h>
@@ -41,6 +43,10 @@
 # include <unistd.h>
 # include <utime.h>
 # include <sys/wait.h>
+#endif
+
+#if defined(__APPLE__)
+# include <mach-o/dyld.h>
 #endif
 
 #include <sys/stat.h>
@@ -115,19 +121,6 @@ bool cmSystemTools::s_FatalErrorOccured = false;
 bool cmSystemTools::s_DisableMessages = false;
 bool cmSystemTools::s_ForceUnixPaths = false;
 
-std::string cmSystemTools::s_Windows9xComspecSubstitute = "command.com";
-void cmSystemTools::SetWindows9xComspecSubstitute(const char* str)
-{
-  if ( str )
-    {
-    cmSystemTools::s_Windows9xComspecSubstitute = str;
-    }
-}
-const char* cmSystemTools::GetWindows9xComspecSubstitute()
-{
-  return cmSystemTools::s_Windows9xComspecSubstitute.c_str();
-}
-
 void (*cmSystemTools::s_ErrorCallback)(const char*, const char*,
                                        bool&, void*);
 void (*cmSystemTools::s_StdoutCallback)(const char*, int len, void*);
@@ -186,10 +179,11 @@ void cmSystemTools::ExpandRegistryValues(std::string& source, KeyWOW64)
 }
 #endif
 
-std::string cmSystemTools::EscapeQuotes(const char* str)
+std::string cmSystemTools::EscapeQuotes(const std::string& str)
 {
-  std::string result = "";
-  for(const char* ch = str; *ch != '\0'; ++ch)
+  std::string result;
+  result.reserve(str.size());
+  for(const char* ch = str.c_str(); *ch != '\0'; ++ch)
     {
     if(*ch == '"')
       {
@@ -200,16 +194,23 @@ std::string cmSystemTools::EscapeQuotes(const char* str)
   return result;
 }
 
+std::string cmSystemTools::HelpFileName(std::string name)
+{
+  cmSystemTools::ReplaceString(name, "<", "");
+  cmSystemTools::ReplaceString(name, ">", "");
+  return name;
+}
+
 std::string cmSystemTools::TrimWhitespace(const std::string& s)
 {
   std::string::const_iterator start = s.begin();
-  while(start != s.end() && *start == ' ')
+  while(start != s.end() && *start <= ' ')
     ++start;
   if (start == s.end())
     return "";
 
   std::string::const_iterator stop = s.end()-1;
-  while(*stop == ' ')
+  while(*stop <= ' ')
     --stop;
   return std::string(start, stop+1);
 }
@@ -360,18 +361,11 @@ bool cmSystemTools::IsOn(const char* val)
 
 bool cmSystemTools::IsNOTFOUND(const char* val)
 {
-  size_t len = strlen(val);
-  const char* notfound = "-NOTFOUND";
-  const size_t lenNotFound = 9;
-  if(len < lenNotFound-1)
+  if(strcmp(val, "NOTFOUND") == 0)
     {
-    return false;
+    return true;
     }
-  if(len == lenNotFound-1)
-    {
-    return ( strcmp(val, "NOTFOUND") == 0);
-    }
-  return ((strncmp((val + (len - lenNotFound)), notfound, lenNotFound) == 0));
+  return cmHasLiteralSuffix(val, "-NOTFOUND");
 }
 
 
@@ -483,27 +477,11 @@ public:
       args.push_back(*arg);
       }
     }
-  void Store(std::vector<cmStdString>& args) const
-    {
-    for(char** arg = this->ArgV; arg && *arg; ++arg)
-      {
-      args.push_back(*arg);
-      }
-    }
 };
 
 //----------------------------------------------------------------------------
 void cmSystemTools::ParseUnixCommandLine(const char* command,
                                          std::vector<std::string>& args)
-{
-  // Invoke the underlying parser.
-  cmSystemToolsArgV argv = cmsysSystem_Parse_CommandForUnix(command, 0);
-  argv.Store(args);
-}
-
-//----------------------------------------------------------------------------
-void cmSystemTools::ParseUnixCommandLine(const char* command,
-                                         std::vector<cmStdString>& args)
 {
   // Invoke the underlying parser.
   cmSystemToolsArgV argv = cmsysSystem_Parse_CommandForUnix(command, 0);
@@ -529,9 +507,9 @@ std::string cmSystemTools::EscapeWindowsShellArgument(const char* arg,
   return result;
 }
 
-std::vector<cmStdString> cmSystemTools::ParseArguments(const char* command)
+std::vector<std::string> cmSystemTools::ParseArguments(const char* command)
 {
-  std::vector<cmStdString> args;
+  std::vector<std::string> args;
   std::string arg;
 
   bool win_path = false;
@@ -612,14 +590,14 @@ std::vector<cmStdString> cmSystemTools::ParseArguments(const char* command)
 }
 
 
-bool cmSystemTools::RunSingleCommand(std::vector<cmStdString>const& command,
+bool cmSystemTools::RunSingleCommand(std::vector<std::string>const& command,
                                      std::string* output ,
                                      int* retVal , const char* dir ,
                                      OutputOption outputflag ,
                                      double timeout )
 {
   std::vector<const char*> argv;
-  for(std::vector<cmStdString>::const_iterator a = command.begin();
+  for(std::vector<std::string>::const_iterator a = command.begin();
       a != command.end(); ++a)
     {
     argv.push_back(a->c_str());
@@ -638,6 +616,12 @@ bool cmSystemTools::RunSingleCommand(std::vector<cmStdString>const& command,
     cmsysProcess_SetOption(cp, cmsysProcess_Option_HideWindow, 1);
     }
 
+  if (outputflag == OUTPUT_PASSTHROUGH)
+    {
+    cmsysProcess_SetPipeShared(cp, cmsysProcess_Pipe_STDOUT, 1);
+    cmsysProcess_SetPipeShared(cp, cmsysProcess_Pipe_STDERR, 1);
+    }
+
   cmsysProcess_SetTimeout(cp, timeout);
   cmsysProcess_Execute(cp);
 
@@ -645,7 +629,7 @@ bool cmSystemTools::RunSingleCommand(std::vector<cmStdString>const& command,
   char* data;
   int length;
   int pipe;
-  if ( output || outputflag != OUTPUT_NONE )
+  if(outputflag != OUTPUT_PASSTHROUGH && (output || outputflag != OUTPUT_NONE))
     {
     while((pipe = cmsysProcess_WaitForData(cp, &data, &length, 0)) > 0)
       {
@@ -765,7 +749,7 @@ bool cmSystemTools::RunSingleCommand(
     outputflag = OUTPUT_NONE;
     }
 
-  std::vector<cmStdString> args = cmSystemTools::ParseArguments(command);
+  std::vector<std::string> args = cmSystemTools::ParseArguments(command);
 
   if(args.size() < 1)
     {
@@ -774,350 +758,22 @@ bool cmSystemTools::RunSingleCommand(
   return cmSystemTools::RunSingleCommand(args, output,retVal,
                                          dir, outputflag, timeout);
 }
-bool cmSystemTools::RunCommand(const char* command,
-                               std::string& output,
-                               const char* dir,
-                               bool verbose,
-                               int timeout)
+
+std::string
+cmSystemTools::PrintSingleCommand(std::vector<std::string> const& command)
 {
-  int dummy;
-  return cmSystemTools::RunCommand(command, output, dummy,
-                                   dir, verbose, timeout);
-}
-
-#if defined(WIN32) && !defined(__CYGWIN__)
-#include "cmWin32ProcessExecution.h"
-// use this for shell commands like echo and dir
-bool RunCommandViaWin32(const char* command,
-                        const char* dir,
-                        std::string& output,
-                        int& retVal,
-                        bool verbose,
-                        int timeout)
-{
-#if defined(__BORLANDC__)
-  return
-    cmWin32ProcessExecution::
-    BorlandRunCommand(command, dir, output,
-                      retVal,
-                      verbose, timeout,
-                      cmSystemTools::GetRunCommandHideConsole());
-#else // Visual studio
-  ::SetLastError(ERROR_SUCCESS);
-  if ( ! command )
+  std::string commandStr;
+  const char* sep = "";
+  for(std::vector<std::string>::const_iterator i = command.begin();
+      i != command.end(); ++i)
     {
-    cmSystemTools::Error("No command specified");
-    return false;
+    commandStr += sep;
+    commandStr += "\"";
+    commandStr += *i;
+    commandStr += "\"";
+    sep = " ";
     }
-  cmWin32ProcessExecution resProc;
-  if(cmSystemTools::GetRunCommandHideConsole())
-    {
-    resProc.SetHideWindows(true);
-    }
-
-  if ( cmSystemTools::GetWindows9xComspecSubstitute() )
-    {
-    resProc.SetConsoleSpawn(cmSystemTools::GetWindows9xComspecSubstitute() );
-    }
-  if ( !resProc.StartProcess(command, dir, verbose) )
-    {
-    output = resProc.GetOutput();
-    if(verbose)
-      {
-      cmSystemTools::Stdout(output.c_str());
-      }
-    return false;
-    }
-  resProc.Wait(timeout);
-  output = resProc.GetOutput();
-  retVal = resProc.GetExitValue();
-  return true;
-#endif
-}
-
-// use this for shell commands like echo and dir
-bool RunCommandViaSystem(const char* command,
-                         const char* dir,
-                         std::string& output,
-                         int& retVal,
-                         bool verbose)
-{
-  std::cout << "@@ " << command << std::endl;
-
-  std::string commandInDir;
-  if(dir)
-    {
-    commandInDir = "cd ";
-    commandInDir += cmSystemTools::ConvertToOutputPath(dir);
-    commandInDir += " && ";
-    commandInDir += command;
-    }
-  else
-    {
-    commandInDir = command;
-    }
-  command = commandInDir.c_str();
-  std::string commandToFile = command;
-  commandToFile += " > ";
-  std::string tempFile;
-  tempFile += _tempnam(0, "cmake");
-
-  commandToFile += tempFile;
-  retVal = system(commandToFile.c_str());
-  std::ifstream fin(tempFile.c_str());
-  if(!fin)
-    {
-    if(verbose)
-      {
-      std::string errormsg = "RunCommand produced no output: command: \"";
-      errormsg += command;
-      errormsg += "\"";
-      errormsg += "\nOutput file: ";
-      errormsg += tempFile;
-      cmSystemTools::Error(errormsg.c_str());
-      }
-    fin.close();
-    cmSystemTools::RemoveFile(tempFile.c_str());
-    return false;
-    }
-  bool multiLine = false;
-  std::string line;
-  while(cmSystemTools::GetLineFromStream(fin, line))
-    {
-    output += line;
-    if(multiLine)
-      {
-      output += "\n";
-      }
-    multiLine = true;
-    }
-  fin.close();
-  cmSystemTools::RemoveFile(tempFile.c_str());
-  return true;
-}
-
-#else // We have popen
-
-// BeOS seems to return from a successful pclose() before the process has
-//  legitimately exited, or at least before SIGCHLD is thrown...the signal may
-//  come quite some time after pclose returns! This causes havoc with later
-//  parts of CMake that expect to catch the signal from other child processes,
-//  so we explicitly wait to catch it here. This should be safe to do with
-//  popen() so long as we don't actually collect the zombie process ourselves.
-#ifdef __BEOS__
-#include <signal.h>
-#undef SIGBUS  // this is the same as SIGSEGV on BeOS and causes issues below.
-static volatile bool beos_seen_signal = false;
-static void beos_popen_workaround(int sig)
-{
-  beos_seen_signal = true;
-}
-#endif
-
-bool RunCommandViaPopen(const char* command,
-                        const char* dir,
-                        std::string& output,
-                        int& retVal,
-                        bool verbose,
-                        int /*timeout*/)
-{
-  // if only popen worked on windows.....
-  std::string commandInDir;
-  if(dir)
-    {
-    commandInDir = "cd \"";
-    commandInDir += dir;
-    commandInDir += "\" && ";
-    commandInDir += command;
-    }
-  else
-    {
-    commandInDir = command;
-    }
-#ifndef __VMS
-  commandInDir += " 2>&1";
-#endif
-  command = commandInDir.c_str();
-  const int BUFFER_SIZE = 4096;
-  char buffer[BUFFER_SIZE];
-  if(verbose)
-    {
-    cmSystemTools::Stdout("running ");
-    cmSystemTools::Stdout(command);
-    cmSystemTools::Stdout("\n");
-    }
-  fflush(stdout);
-  fflush(stderr);
-
-#ifdef __BEOS__
-  beos_seen_signal = false;
-  signal(SIGCHLD, beos_popen_workaround);
-#endif
-
-  FILE* cpipe = popen(command, "r");
-  if(!cpipe)
-    {
-#ifdef __BEOS__
-    signal(SIGCHLD, SIG_DFL);
-#endif
-    return false;
-    }
-  if (!fgets(buffer, BUFFER_SIZE, cpipe))
-    {
-    buffer[0] = 0;
-    }
-  while(!feof(cpipe))
-    {
-    if(verbose)
-      {
-      cmSystemTools::Stdout(buffer);
-      }
-    output += buffer;
-    if(!fgets(buffer, BUFFER_SIZE, cpipe))
-      {
-      buffer[0] = 0;
-      }
-    }
-
-  retVal = pclose(cpipe);
-
-#ifdef __BEOS__
-  for (int i = 0; (!beos_seen_signal) && (i < 3); i++)
-    {
-    ::sleep(1);   // signals should interrupt this...
-    }
-
-  if (!beos_seen_signal)
-    {
-    signal(SIGCHLD, SIG_DFL);  // oh well, didn't happen. Go on anyhow.
-    }
-#endif
-
-  if (WIFEXITED(retVal))
-    {
-    retVal = WEXITSTATUS(retVal);
-    return true;
-    }
-  if (WIFSIGNALED(retVal))
-    {
-    retVal = WTERMSIG(retVal);
-    cmOStringStream error;
-    error << "\nProcess terminated due to ";
-    switch (retVal)
-      {
-#ifdef SIGKILL
-      case SIGKILL:
-        error << "SIGKILL";
-        break;
-#endif
-#ifdef SIGFPE
-      case SIGFPE:
-        error << "SIGFPE";
-        break;
-#endif
-#ifndef __HAIKU__
-#ifdef SIGBUS
-      case SIGBUS:
-        error << "SIGBUS";
-        break;
-#endif
-#endif
-#ifdef SIGSEGV
-      case SIGSEGV:
-        error << "SIGSEGV";
-        break;
-#endif
-      default:
-        error << "signal " << retVal;
-        break;
-      }
-    output += error.str();
-    }
-  return false;
-}
-
-#endif  // endif WIN32 not CYGWIN
-
-
-// run a command unix uses popen (easy)
-// windows uses system and ShortPath
-bool cmSystemTools::RunCommand(const char* command,
-                               std::string& output,
-                               int &retVal,
-                               const char* dir,
-                               bool verbose,
-                               int timeout)
-{
-  if(s_DisableRunCommandOutput)
-    {
-    verbose = false;
-    }
-
-#if defined(WIN32) && !defined(__CYGWIN__)
-  // if the command does not start with a quote, then
-  // try to find the program, and if the program can not be
-  // found use system to run the command as it must be a built in
-  // shell command like echo or dir
-  int count = 0;
-  if(command[0] == '\"')
-    {
-    // count the number of quotes
-    for(const char* s = command; *s != 0; ++s)
-      {
-      if(*s == '\"')
-        {
-        count++;
-        if(count > 2)
-          {
-          break;
-          }
-        }
-      }
-    // if there are more than two double quotes use
-    // GetShortPathName, the cmd.exe program in windows which
-    // is used by system fails to execute if there are more than
-    // one set of quotes in the arguments
-    if(count > 2)
-      {
-      cmsys::RegularExpression quoted("^\"([^\"]*)\"[ \t](.*)");
-      if(quoted.find(command))
-        {
-        std::string shortCmd;
-        std::string cmd = quoted.match(1);
-        std::string args = quoted.match(2);
-        if(! cmSystemTools::FileExists(cmd.c_str()) )
-          {
-          shortCmd = cmd;
-          }
-        else if(!cmSystemTools::GetShortPath(cmd.c_str(), shortCmd))
-          {
-         cmSystemTools::Error("GetShortPath failed for " , cmd.c_str());
-          return false;
-          }
-        shortCmd += " ";
-        shortCmd += args;
-
-        //return RunCommandViaSystem(shortCmd.c_str(), dir,
-        //                           output, retVal, verbose);
-        //return WindowsRunCommand(shortCmd.c_str(), dir,
-        //output, retVal, verbose);
-        return RunCommandViaWin32(shortCmd.c_str(), dir,
-                                  output, retVal, verbose, timeout);
-        }
-      else
-        {
-        cmSystemTools::Error("Could not parse command line with quotes ",
-                             command);
-        }
-      }
-    }
-  // if there is only one set of quotes or no quotes then just run the command
-  //return RunCommandViaSystem(command, dir, output, retVal, verbose);
-  //return WindowsRunCommand(command, dir, output, retVal, verbose);
-  return ::RunCommandViaWin32(command, dir, output, retVal, verbose, timeout);
-#else
-  return ::RunCommandViaPopen(command, dir, output, retVal, verbose, timeout);
-#endif
+  return commandStr;
 }
 
 bool cmSystemTools::DoesFileExistWithExtensions(
@@ -1177,56 +833,87 @@ bool cmSystemTools::CopyFileIfDifferent(const char* source,
 }
 
 //----------------------------------------------------------------------------
+#ifdef _WIN32
+cmSystemTools::WindowsFileRetry cmSystemTools::GetWindowsFileRetry()
+{
+  static WindowsFileRetry retry = {0,0};
+  if(!retry.Count)
+    {
+    unsigned int data[2] = {0,0};
+    HKEY const keys[2] = {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    wchar_t const* const values[2] = {L"FilesystemRetryCount",
+                                      L"FilesystemRetryDelay"};
+    for(int k=0; k < 2; ++k)
+      {
+      HKEY hKey;
+      if(RegOpenKeyExW(keys[k], L"Software\\Kitware\\CMake\\Config",
+                       0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
+        {
+        for(int v=0; v < 2; ++v)
+          {
+          DWORD dwData, dwType, dwSize = 4;
+          if(!data[v] &&
+             RegQueryValueExW(hKey, values[v], 0, &dwType, (BYTE *)&dwData,
+                              &dwSize) == ERROR_SUCCESS &&
+             dwType == REG_DWORD && dwSize == 4)
+            {
+            data[v] = static_cast<unsigned int>(dwData);
+            }
+          }
+        RegCloseKey(hKey);
+        }
+      }
+    retry.Count = data[0]? data[0] : 5;
+    retry.Delay = data[1]? data[1] : 500;
+    }
+  return retry;
+}
+#endif
+
+//----------------------------------------------------------------------------
 bool cmSystemTools::RenameFile(const char* oldname, const char* newname)
 {
 #ifdef _WIN32
-  /* On Windows the move functions will not replace existing files.
-     Check if the destination exists.  */
-  struct stat newFile;
-  if(stat(newname, &newFile) == 0)
+# ifndef INVALID_FILE_ATTRIBUTES
+#  define INVALID_FILE_ATTRIBUTES ((DWORD)-1)
+# endif
+  /* Windows MoveFileEx may not replace read-only or in-use files.  If it
+     fails then remove the read-only attribute from any existing destination.
+     Try multiple times since we may be racing against another process
+     creating/opening the destination file just before our MoveFileEx.  */
+  WindowsFileRetry retry = cmSystemTools::GetWindowsFileRetry();
+  while(!MoveFileExW(cmsys::Encoding::ToWide(oldname).c_str(),
+                     cmsys::Encoding::ToWide(newname).c_str(),
+                     MOVEFILE_REPLACE_EXISTING) && --retry.Count)
     {
-    /* The destination exists.  We have to replace it carefully.  The
-       MoveFileEx function does what we need but is not available on
-       Win9x.  */
-    OSVERSIONINFO osv;
-    DWORD attrs;
-
-    /* Make sure the destination is not read only.  */
-    attrs = GetFileAttributes(newname);
-    if(attrs & FILE_ATTRIBUTE_READONLY)
+    // Try again only if failure was due to access permissions.
+    if(GetLastError() != ERROR_ACCESS_DENIED)
       {
-      SetFileAttributes(newname, attrs & ~FILE_ATTRIBUTE_READONLY);
+      return false;
       }
-
-    /* Check the windows version number.  */
-    osv.dwOSVersionInfoSize = sizeof(osv);
-    GetVersionEx(&osv);
-    if(osv.dwPlatformId == VER_PLATFORM_WIN32_WINDOWS)
+    DWORD attrs =
+      GetFileAttributesW(cmsys::Encoding::ToWide(newname).c_str());
+    if((attrs != INVALID_FILE_ATTRIBUTES) &&
+       (attrs & FILE_ATTRIBUTE_READONLY))
       {
-      /* This is Win9x.  There is no MoveFileEx implementation.  We
-         cannot quite rename the file atomically.  Just delete the
-         destination and then move the file.  */
-      DeleteFile(newname);
-      return MoveFile(oldname, newname) != 0;
+      // Remove the read-only attribute from the destination file.
+      SetFileAttributesW(cmsys::Encoding::ToWide(newname).c_str(),
+                         attrs & ~FILE_ATTRIBUTE_READONLY);
       }
     else
       {
-      /* This is not Win9x.  Use the MoveFileEx implementation.  */
-      return MoveFileEx(oldname, newname, MOVEFILE_REPLACE_EXISTING) != 0;
+      // The file may be temporarily in use so wait a bit.
+      cmSystemTools::Delay(retry.Delay);
       }
     }
-  else
-    {
-    /* The destination does not exist.  Just move the file.  */
-    return MoveFile(oldname, newname) != 0;
-    }
+  return retry.Count > 0;
 #else
   /* On UNIX we have an OS-provided call to do this atomically.  */
   return rename(oldname, newname) == 0;
 #endif
 }
 
-bool cmSystemTools::ComputeFileMD5(const char* source, char* md5out)
+bool cmSystemTools::ComputeFileMD5(const std::string& source, char* md5out)
 {
 #if defined(CMAKE_BUILD_WITH_CMAKE)
   cmCryptoHashMD5 md5;
@@ -1241,7 +928,7 @@ bool cmSystemTools::ComputeFileMD5(const char* source, char* md5out)
 #endif
 }
 
-std::string cmSystemTools::ComputeStringMD5(const char* input)
+std::string cmSystemTools::ComputeStringMD5(const std::string& input)
 {
 #if defined(CMAKE_BUILD_WITH_CMAKE)
   cmCryptoHashMD5 md5;
@@ -1253,13 +940,14 @@ std::string cmSystemTools::ComputeStringMD5(const char* input)
 #endif
 }
 
-void cmSystemTools::Glob(const char *directory, const char *regexp,
+void cmSystemTools::Glob(const std::string& directory,
+                         const std::string& regexp,
                          std::vector<std::string>& files)
 {
   cmsys::Directory d;
-  cmsys::RegularExpression reg(regexp);
+  cmsys::RegularExpression reg(regexp.c_str());
 
-  if (d.Load(directory))
+  if (d.Load(directory.c_str()))
     {
     size_t numf;
         unsigned int i;
@@ -1276,14 +964,13 @@ void cmSystemTools::Glob(const char *directory, const char *regexp,
 }
 
 
-void cmSystemTools::GlobDirs(const char *fullPath,
+void cmSystemTools::GlobDirs(const std::string& path,
                              std::vector<std::string>& files)
 {
-  std::string path = fullPath;
   std::string::size_type pos = path.find("/*");
   if(pos == std::string::npos)
     {
-    files.push_back(fullPath);
+    files.push_back(path);
     return;
     }
   std::string startPath = path.substr(0, pos);
@@ -1303,7 +990,7 @@ void cmSystemTools::GlobDirs(const char *fullPath,
         if(cmSystemTools::FileIsDirectory(fname.c_str()))
           {
           fname += finishPath;
-          cmSystemTools::GlobDirs(fname.c_str(), files);
+          cmSystemTools::GlobDirs(fname, files);
           }
         }
       }
@@ -1326,7 +1013,7 @@ void cmSystemTools::ExpandListArgument(const std::string& arg,
                                        bool emptyArgs)
 {
   // If argument is empty, it is an empty list.
-  if(arg.length() == 0 && !emptyArgs)
+  if(!emptyArgs && arg.empty())
     {
     return;
     }
@@ -1336,10 +1023,11 @@ void cmSystemTools::ExpandListArgument(const std::string& arg,
     newargs.push_back(arg);
     return;
     }
-  std::vector<char> newArgVec;
+  std::string newArg;
+  const char *last = arg.c_str();
   // Break the string at non-escaped semicolons not nested in [].
   int squareNesting = 0;
-  for(const char* c = arg.c_str(); *c; ++c)
+  for(const char* c = last; *c; ++c)
     {
     switch(*c)
       {
@@ -1347,34 +1035,21 @@ void cmSystemTools::ExpandListArgument(const std::string& arg,
         {
         // We only want to allow escaping of semicolons.  Other
         // escapes should not be processed here.
-        ++c;
-        if(*c == ';')
+        const char* next = c + 1;
+        if(*next == ';')
           {
-          newArgVec.push_back(*c);
-          }
-        else
-          {
-          newArgVec.push_back('\\');
-          if(*c)
-            {
-            newArgVec.push_back(*c);
-            }
-          else
-            {
-            // Terminate the loop properly.
-            --c;
-            }
+          newArg.append(last, c - last);
+          // Skip over the escape character
+          last = c = next;
           }
         } break;
       case '[':
         {
         ++squareNesting;
-        newArgVec.push_back(*c);
         } break;
       case ']':
         {
         --squareNesting;
-        newArgVec.push_back(*c);
         } break;
       case ';':
         {
@@ -1382,36 +1057,33 @@ void cmSystemTools::ExpandListArgument(const std::string& arg,
         // brackets.
         if(squareNesting == 0)
           {
-          if ( newArgVec.size() || emptyArgs )
+          newArg.append(last, c - last);
+          // Skip over the semicolon
+          last = c + 1;
+          if ( !newArg.empty() || emptyArgs )
             {
             // Add the last argument if the string is not empty.
-            newArgVec.push_back(0);
-            newargs.push_back(&*newArgVec.begin());
-            newArgVec.clear();
+            newargs.push_back(newArg);
+            newArg = "";
             }
-          }
-        else
-          {
-          newArgVec.push_back(*c);
           }
         } break;
       default:
         {
         // Just append this character.
-        newArgVec.push_back(*c);
         } break;
       }
     }
-  if ( newArgVec.size() || emptyArgs )
+  newArg.append(last);
+  if ( !newArg.empty() || emptyArgs )
     {
     // Add the last argument if the string is not empty.
-    newArgVec.push_back(0);
-    newargs.push_back(&*newArgVec.begin());
+    newargs.push_back(newArg);
     }
 }
 
-bool cmSystemTools::SimpleGlob(const cmStdString& glob,
-                               std::vector<cmStdString>& files,
+bool cmSystemTools::SimpleGlob(const std::string& glob,
+                               std::vector<std::string>& files,
                                int type /* = 0 */)
 {
   files.clear();
@@ -1529,7 +1201,7 @@ cmSystemTools::FileFormat cmSystemTools::GetFileFormat(const char* cext)
   return cmSystemTools::UNKNOWN_FILE_FORMAT;
 }
 
-bool cmSystemTools::Split(const char* s, std::vector<cmStdString>& l)
+bool cmSystemTools::Split(const char* s, std::vector<std::string>& l)
 {
   std::vector<std::string> temp;
   bool res = Superclass::Split(s, temp);
@@ -1605,6 +1277,40 @@ std::string cmSystemTools::RelativePath(const char* local, const char* remote)
   return cmsys::SystemTools::RelativePath(local, remote);
 }
 
+std::string cmSystemTools::CollapseCombinedPath(std::string const& dir,
+                                                std::string const& file)
+{
+  if(dir.empty() || dir == ".")
+    {
+    return file;
+    }
+
+  std::vector<std::string> dirComponents;
+  std::vector<std::string> fileComponents;
+  cmSystemTools::SplitPath(dir.c_str(), dirComponents);
+  cmSystemTools::SplitPath(file.c_str(), fileComponents);
+
+  if(fileComponents.empty())
+    {
+    return dir;
+    }
+  if(fileComponents[0] != "")
+    {
+    // File is not a relative path.
+    return file;
+    }
+
+  std::vector<std::string>::iterator i = fileComponents.begin()+1;
+  while(i != fileComponents.end() && *i == ".." && dirComponents.size() > 1)
+    {
+    ++i; // Remove ".." file component.
+    dirComponents.pop_back(); // Remove last dir component.
+    }
+
+  dirComponents.insert(dirComponents.end(), i, fileComponents.end());
+  return cmSystemTools::JoinPath(dirComponents);
+}
+
 #ifdef CMAKE_BUILD_WITH_CMAKE
 //----------------------------------------------------------------------
 bool cmSystemTools::UnsetEnv(const char* value)
@@ -1673,6 +1379,7 @@ cmSystemTools::SaveRestoreEnvironment::~SaveRestoreEnvironment()
 
 void cmSystemTools::EnableVSConsoleOutput()
 {
+#ifdef _WIN32
   // Visual Studio 8 2005 (devenv.exe or VCExpress.exe) will not
   // display output to the console unless this environment variable is
   // set.  We need it to capture the output of these build tools.
@@ -1680,8 +1387,15 @@ void cmSystemTools::EnableVSConsoleOutput()
   // either of these executables where NAME is created with
   // CreateNamedPipe.  This would bypass the internal buffering of the
   // output and allow it to be captured on the fly.
-#ifdef _WIN32
   cmSystemTools::PutEnv("vsconsoleoutput=1");
+
+# ifdef CMAKE_BUILD_WITH_CMAKE
+  // VS sets an environment variable to tell MS tools like "cl" to report
+  // output through a backdoor pipe instead of stdout/stderr.  Unset the
+  // environment variable to close this backdoor for any path of process
+  // invocations that passes through CMake so we can capture the output.
+  cmSystemTools::UnsetEnv("VS_UNICODE_OUTPUT");
+# endif
 #endif
 }
 
@@ -1699,12 +1413,12 @@ bool cmSystemTools::IsPathToFramework(const char* path)
 }
 
 bool cmSystemTools::CreateTar(const char* outFileName,
-                              const std::vector<cmStdString>& files,
+                              const std::vector<std::string>& files,
                               bool gzip, bool bzip2, bool verbose)
 {
 #if defined(CMAKE_BUILD_WITH_CMAKE)
   std::string cwd = cmSystemTools::GetCurrentWorkingDirectory();
-  std::ofstream fout(outFileName, std::ios::out | cmsys_ios_binary);
+  cmsys::ofstream fout(outFileName, std::ios::out | cmsys_ios_binary);
   if(!fout)
     {
     std::string e = "Cannot open output file \"";
@@ -1719,7 +1433,7 @@ bool cmSystemTools::CreateTar(const char* outFileName,
                            cmArchiveWrite::CompressNone)),
                            cmArchiveWrite::TypeTAR);
   a.SetVerbose(verbose);
-  for(std::vector<cmStdString>::const_iterator i = files.begin();
+  for(std::vector<std::string>::const_iterator i = files.begin();
       i != files.end(); ++i)
     {
     std::string path = *i;
@@ -1933,18 +1647,23 @@ bool extract_tar(const char* outFileName, bool verbose,
                            archive_error_string(a));
       break;
       }
-    if (verbose && extract)
+    if(verbose)
       {
-      cmSystemTools::Stdout("x ");
-      cmSystemTools::Stdout(archive_entry_pathname(entry));
-      }
-    if(verbose && !extract)
-      {
-      list_item_verbose(stdout, entry);
+      if(extract)
+        {
+        cmSystemTools::Stdout("x ");
+        cmSystemTools::Stdout(archive_entry_pathname(entry));
+        }
+      else
+        {
+        list_item_verbose(stdout, entry);
+        }
+      cmSystemTools::Stdout("\n");
       }
     else if(!extract)
       {
       cmSystemTools::Stdout(archive_entry_pathname(entry));
+      cmSystemTools::Stdout("\n");
       }
     if(extract)
       {
@@ -1958,15 +1677,7 @@ bool extract_tar(const char* outFileName, bool verbose,
         }
 
       r = archive_write_header(ext, entry);
-      if (r != ARCHIVE_OK)
-        {
-        cmSystemTools::Error("Problem with archive_write_header(): ",
-                             archive_error_string(ext));
-        cmSystemTools::Error("Current file:",
-                             archive_entry_pathname(entry));
-        break;
-        }
-      else
+      if (r == ARCHIVE_OK)
         {
         copy_data(a, ext);
         r = archive_write_finish_entry(ext);
@@ -1977,10 +1688,22 @@ bool extract_tar(const char* outFileName, bool verbose,
           break;
           }
         }
-      }
-    if (verbose || !extract)
-      {
-      cmSystemTools::Stdout("\n");
+#ifdef _WIN32
+      else if(const char* linktext = archive_entry_symlink(entry))
+        {
+        std::cerr << "cmake -E tar: warning: skipping symbolic link \""
+                  << archive_entry_pathname(entry) << "\" -> \""
+                  << linktext << "\"." << std::endl;
+        }
+#endif
+      else
+        {
+        cmSystemTools::Error("Problem with archive_write_header(): ",
+                             archive_error_string(ext));
+        cmSystemTools::Error("Current file: ",
+                             archive_entry_pathname(entry));
+        break;
+        }
       }
     }
   archive_read_close(a);
@@ -2152,10 +1875,12 @@ bool cmSystemTools::CopyFileTime(const char* fromFile, const char* toFile)
 {
 #if defined(_WIN32) && !defined(__CYGWIN__)
   cmSystemToolsWindowsHandle hFrom =
-    CreateFile(fromFile, GENERIC_READ, FILE_SHARE_READ, 0,
-               OPEN_EXISTING, 0, 0);
+    CreateFileW(cmsys::Encoding::ToWide(fromFile).c_str(),
+                GENERIC_READ, FILE_SHARE_READ, 0,
+                OPEN_EXISTING, 0, 0);
   cmSystemToolsWindowsHandle hTo =
-    CreateFile(toFile, GENERIC_WRITE, 0, 0, OPEN_EXISTING, 0, 0);
+    CreateFileW(cmsys::Encoding::ToWide(toFile).c_str(),
+                GENERIC_WRITE, 0, 0, OPEN_EXISTING, 0, 0);
   if(!hFrom || !hTo)
     {
     return false;
@@ -2206,7 +1931,8 @@ bool cmSystemTools::FileTimeGet(const char* fname, cmSystemToolsFileTime* t)
 {
 #if defined(_WIN32) && !defined(__CYGWIN__)
   cmSystemToolsWindowsHandle h =
-    CreateFile(fname, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+    CreateFileW(cmsys::Encoding::ToWide(fname).c_str(),
+                GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
   if(!h)
     {
     return false;
@@ -2232,7 +1958,8 @@ bool cmSystemTools::FileTimeSet(const char* fname, cmSystemToolsFileTime* t)
 {
 #if defined(_WIN32) && !defined(__CYGWIN__)
   cmSystemToolsWindowsHandle h =
-    CreateFile(fname, GENERIC_WRITE, 0, 0, OPEN_EXISTING, 0, 0);
+    CreateFileW(cmsys::Encoding::ToWide(fname).c_str(),
+                GENERIC_WRITE, 0, 0, OPEN_EXISTING, 0, 0);
   if(!h)
     {
     return false;
@@ -2296,7 +2023,7 @@ unsigned int cmSystemTools::RandomSeed()
   } seed;
 
   // Try using a real random source.
-  std::ifstream fin("/dev/urandom");
+  cmsys::ifstream fin("/dev/urandom");
   if(fin && fin.read(seed.bytes, sizeof(seed)) &&
      fin.gcount() == sizeof(seed))
     {
@@ -2316,16 +2043,60 @@ unsigned int cmSystemTools::RandomSeed()
 }
 
 //----------------------------------------------------------------------------
-static std::string cmSystemToolsExecutableDirectory;
-void cmSystemTools::FindExecutableDirectory(const char* argv0)
+static std::string cmSystemToolsCMakeCommand;
+static std::string cmSystemToolsCTestCommand;
+static std::string cmSystemToolsCPackCommand;
+static std::string cmSystemToolsCMakeCursesCommand;
+static std::string cmSystemToolsCMakeGUICommand;
+static std::string cmSystemToolsCMakeRoot;
+void cmSystemTools::FindCMakeResources(const char* argv0)
 {
+  std::string exe_dir;
 #if defined(_WIN32) && !defined(__CYGWIN__)
   (void)argv0; // ignore this on windows
-  char modulepath[_MAX_PATH];
-  ::GetModuleFileName(NULL, modulepath, sizeof(modulepath));
-  cmSystemToolsExecutableDirectory =
-    cmSystemTools::GetFilenamePath(modulepath);
-  return;
+  wchar_t modulepath[_MAX_PATH];
+  ::GetModuleFileNameW(NULL, modulepath, sizeof(modulepath));
+  exe_dir =
+    cmSystemTools::GetFilenamePath(cmsys::Encoding::ToNarrow(modulepath));
+#elif defined(__APPLE__)
+  (void)argv0; // ignore this on OS X
+# define CM_EXE_PATH_LOCAL_SIZE 16384
+  char exe_path_local[CM_EXE_PATH_LOCAL_SIZE];
+# if defined(MAC_OS_X_VERSION_10_3) && !defined(MAC_OS_X_VERSION_10_4)
+  unsigned long exe_path_size = CM_EXE_PATH_LOCAL_SIZE;
+# else
+  uint32_t exe_path_size = CM_EXE_PATH_LOCAL_SIZE;
+# endif
+# undef CM_EXE_PATH_LOCAL_SIZE
+  char* exe_path = exe_path_local;
+  if(_NSGetExecutablePath(exe_path, &exe_path_size) < 0)
+    {
+    exe_path = (char*)malloc(exe_path_size);
+    _NSGetExecutablePath(exe_path, &exe_path_size);
+    }
+  exe_dir =
+    cmSystemTools::GetFilenamePath(
+      cmSystemTools::GetRealPath(exe_path));
+  if(exe_path != exe_path_local)
+    {
+    free(exe_path);
+    }
+  if(cmSystemTools::GetFilenameName(exe_dir) == "MacOS")
+    {
+    // The executable is inside an application bundle.
+    // Look for ../bin (install tree) and then fall back to
+    // ../../../bin (build tree).
+    exe_dir = cmSystemTools::GetFilenamePath(exe_dir);
+    if(cmSystemTools::FileExists((exe_dir+"/bin/cmake").c_str()))
+      {
+      exe_dir += "/bin";
+      }
+    else
+      {
+      exe_dir = cmSystemTools::GetFilenamePath(exe_dir);
+      exe_dir = cmSystemTools::GetFilenamePath(exe_dir);
+      }
+    }
 #else
   std::string errorMsg;
   std::string exe;
@@ -2333,20 +2104,107 @@ void cmSystemTools::FindExecutableDirectory(const char* argv0)
     {
     // remove symlinks
     exe = cmSystemTools::GetRealPath(exe.c_str());
-    cmSystemToolsExecutableDirectory =
-      cmSystemTools::GetFilenamePath(exe.c_str());
+    exe_dir =
+      cmSystemTools::GetFilenamePath(exe);
     }
   else
     {
     // ???
     }
 #endif
+  cmSystemToolsCMakeCommand = exe_dir;
+  cmSystemToolsCMakeCommand += "/cmake";
+  cmSystemToolsCMakeCommand += cmSystemTools::GetExecutableExtension();
+  cmSystemToolsCTestCommand = exe_dir;
+  cmSystemToolsCTestCommand += "/ctest";
+  cmSystemToolsCTestCommand += cmSystemTools::GetExecutableExtension();
+  cmSystemToolsCPackCommand = exe_dir;
+  cmSystemToolsCPackCommand += "/cpack";
+  cmSystemToolsCPackCommand += cmSystemTools::GetExecutableExtension();
+  cmSystemToolsCMakeGUICommand = exe_dir;
+  cmSystemToolsCMakeGUICommand += "/cmake-gui";
+  cmSystemToolsCMakeGUICommand += cmSystemTools::GetExecutableExtension();
+  if(!cmSystemTools::FileExists(cmSystemToolsCMakeGUICommand.c_str()))
+    {
+    cmSystemToolsCMakeGUICommand = "";
+    }
+  cmSystemToolsCMakeCursesCommand = exe_dir;
+  cmSystemToolsCMakeCursesCommand += "/ccmake";
+  cmSystemToolsCMakeCursesCommand += cmSystemTools::GetExecutableExtension();
+  if(!cmSystemTools::FileExists(cmSystemToolsCMakeCursesCommand.c_str()))
+    {
+    cmSystemToolsCMakeCursesCommand = "";
+    }
+
+#ifdef CMAKE_BUILD_WITH_CMAKE
+  // Install tree has "<prefix>/bin/cmake" and "<prefix><CMAKE_DATA_DIR>".
+  std::string dir = cmSystemTools::GetFilenamePath(exe_dir);
+  cmSystemToolsCMakeRoot = dir + CMAKE_DATA_DIR;
+  if(!cmSystemTools::FileExists(
+       (cmSystemToolsCMakeRoot+"/Modules/CMake.cmake").c_str()))
+    {
+    // Build tree has "<build>/bin[/<config>]/cmake" and
+    // "<build>/CMakeFiles/CMakeSourceDir.txt".
+    std::string src_dir_txt = dir + "/CMakeFiles/CMakeSourceDir.txt";
+    cmsys::ifstream fin(src_dir_txt.c_str());
+    std::string src_dir;
+    if(fin && cmSystemTools::GetLineFromStream(fin, src_dir) &&
+       cmSystemTools::FileIsDirectory(src_dir.c_str()))
+      {
+      cmSystemToolsCMakeRoot = src_dir;
+      }
+    else
+      {
+      dir = cmSystemTools::GetFilenamePath(dir);
+      src_dir_txt = dir + "/CMakeFiles/CMakeSourceDir.txt";
+      cmsys::ifstream fin2(src_dir_txt.c_str());
+      if(fin2 && cmSystemTools::GetLineFromStream(fin2, src_dir) &&
+         cmSystemTools::FileIsDirectory(src_dir.c_str()))
+        {
+        cmSystemToolsCMakeRoot = src_dir;
+        }
+      }
+    }
+#else
+  // Bootstrap build knows its source.
+  cmSystemToolsCMakeRoot = CMAKE_ROOT_DIR;
+#endif
 }
 
 //----------------------------------------------------------------------------
-const char* cmSystemTools::GetExecutableDirectory()
+std::string const& cmSystemTools::GetCMakeCommand()
 {
-  return cmSystemToolsExecutableDirectory.c_str();
+  return cmSystemToolsCMakeCommand;
+}
+
+//----------------------------------------------------------------------------
+std::string const& cmSystemTools::GetCTestCommand()
+{
+  return cmSystemToolsCTestCommand;
+}
+
+//----------------------------------------------------------------------------
+std::string const& cmSystemTools::GetCPackCommand()
+{
+  return cmSystemToolsCPackCommand;
+}
+
+//----------------------------------------------------------------------------
+std::string const& cmSystemTools::GetCMakeCursesCommand()
+{
+  return cmSystemToolsCMakeCursesCommand;
+}
+
+//----------------------------------------------------------------------------
+std::string const& cmSystemTools::GetCMakeGUICommand()
+{
+  return cmSystemToolsCMakeGUICommand;
+}
+
+//----------------------------------------------------------------------------
+std::string const& cmSystemTools::GetCMakeRoot()
+{
+  return cmSystemToolsCMakeRoot;
 }
 
 //----------------------------------------------------------------------------
@@ -2418,6 +2276,38 @@ bool cmSystemTools::GuessLibrarySOName(std::string const& fullPath,
   if(soname.length() > name.length() &&
      soname.substr(0, name.length()) == name)
     {
+    return true;
+    }
+  return false;
+}
+
+//----------------------------------------------------------------------------
+bool cmSystemTools::GuessLibraryInstallName(std::string const& fullPath,
+                                       std::string& soname)
+{
+  std::vector<std::string> cmds;
+  cmds.push_back("otool");
+  cmds.push_back("-D");
+  cmds.push_back(fullPath);
+
+  std::string output;
+  if(!RunSingleCommand(cmds, &output, 0, 0, OUTPUT_NONE))
+    {
+    cmds.insert(cmds.begin(), "-r");
+    cmds.insert(cmds.begin(), "xcrun");
+    if(!RunSingleCommand(cmds, &output, 0, 0, OUTPUT_NONE))
+      {
+      return false;
+      }
+    }
+
+  std::vector<std::string> strs = cmSystemTools::tokenize(output, "\n");
+  // otool returns extra lines reporting multiple install names
+  // in case the binary is multi-arch and none of the architectures
+  // is native (e.g. i386;ppc on x86_64)
+  if(strs.size() >= 2)
+    {
+    soname = strs[1];
     return true;
     }
   return false;
@@ -2602,7 +2492,7 @@ bool cmSystemTools::ChangeRPath(std::string const& file,
 
   {
   // Open the file for update.
-  std::ofstream f(file.c_str(),
+  cmsys::ofstream f(file.c_str(),
                   std::ios::in | std::ios::out | std::ios::binary);
   if(!f)
     {
@@ -2670,13 +2560,18 @@ bool cmSystemTools::ChangeRPath(std::string const& file,
 bool cmSystemTools::VersionCompare(cmSystemTools::CompareOp op,
                                    const char* lhss, const char* rhss)
 {
-  unsigned int lhs[4] = {0,0,0,0};
-  unsigned int rhs[4] = {0,0,0,0};
-  sscanf(lhss, "%u.%u.%u.%u", &lhs[0], &lhs[1], &lhs[2], &lhs[3]);
-  sscanf(rhss, "%u.%u.%u.%u", &rhs[0], &rhs[1], &rhs[2], &rhs[3]);
+  // Parse out up to 8 components.
+  unsigned int lhs[8] = {0,0,0,0,0,0,0,0};
+  unsigned int rhs[8] = {0,0,0,0,0,0,0,0};
+  sscanf(lhss, "%u.%u.%u.%u.%u.%u.%u.%u",
+         &lhs[0], &lhs[1], &lhs[2], &lhs[3],
+         &lhs[4], &lhs[5], &lhs[6], &lhs[7]);
+  sscanf(rhss, "%u.%u.%u.%u.%u.%u.%u.%u",
+         &rhs[0], &rhs[1], &rhs[2], &rhs[3],
+         &rhs[4], &rhs[5], &rhs[6], &rhs[7]);
 
   // Do component-wise comparison.
-  for(unsigned int i=0; i < 4; ++i)
+  for(unsigned int i=0; i < 8; ++i)
     {
     if(lhs[i] < rhs[i])
       {
@@ -2795,7 +2690,7 @@ bool cmSystemTools::RemoveRPath(std::string const& file, std::string* emsg,
   }
 
   // Open the file for update.
-  std::ofstream f(file.c_str(),
+  cmsys::ofstream f(file.c_str(),
                   std::ios::in | std::ios::out | std::ios::binary);
   if(!f)
     {

@@ -23,15 +23,17 @@ class cmTarget;
 struct cmGeneratorExpressionContext
 {
   cmListFileBacktrace Backtrace;
-  std::set<cmTarget*> Targets;
-  std::set<cmStdString> SeenTargetProperties;
+  std::set<cmTarget*> DependTargets;
+  std::set<cmTarget const*> AllTargets;
+  std::set<std::string> SeenTargetProperties;
   cmMakefile *Makefile;
-  const char *Config;
-  cmTarget *HeadTarget; // The target whose property is being evaluated.
-  cmTarget *CurrentTarget; // The dependent of HeadTarget which appears
-                           // directly or indirectly in the property.
+  std::string Config;
+  cmTarget const* HeadTarget; // The target whose property is being evaluated.
+  cmTarget const* CurrentTarget; // The dependent of HeadTarget which appears
+                                 // directly or indirectly in the property.
   bool Quiet;
   bool HadError;
+  bool HadContextSensitiveCondition;
 };
 
 struct cmGeneratorExpressionDAGChecker;
@@ -61,7 +63,7 @@ private:
 
 struct TextContent : public cmGeneratorExpressionEvaluator
 {
-  TextContent(const char *start, unsigned int length)
+  TextContent(const char *start, size_t length)
     : Content(start), Length(length)
   {
 
@@ -78,25 +80,25 @@ struct TextContent : public cmGeneratorExpressionEvaluator
     return cmGeneratorExpressionEvaluator::Text;
   }
 
-  void Extend(unsigned int length)
+  void Extend(size_t length)
   {
     this->Length += length;
   }
 
-  unsigned int GetLength()
+  size_t GetLength()
   {
     return this->Length;
   }
 
 private:
   const char *Content;
-  unsigned int Length;
+  size_t Length;
 };
 
 //----------------------------------------------------------------------------
 struct GeneratorExpressionContent : public cmGeneratorExpressionEvaluator
 {
-  GeneratorExpressionContent(const char *startContent, unsigned int length);
+  GeneratorExpressionContent(const char *startContent, size_t length);
   void SetIdentifier(std::vector<cmGeneratorExpressionEvaluator*> identifier)
   {
     this->IdentifierChildren = identifier;
@@ -127,11 +129,19 @@ private:
                                  cmGeneratorExpressionDAGChecker *dagChecker,
                                  std::vector<std::string> &parameters) const;
 
+  std::string ProcessArbitraryContent(
+    const cmGeneratorExpressionNode *node,
+    const std::string &identifier,
+    cmGeneratorExpressionContext *context,
+    cmGeneratorExpressionDAGChecker *dagChecker,
+    std::vector<std::vector<cmGeneratorExpressionEvaluator*> >::const_iterator
+    pit) const;
+
 private:
   std::vector<cmGeneratorExpressionEvaluator*> IdentifierChildren;
   std::vector<std::vector<cmGeneratorExpressionEvaluator*> > ParamChildren;
   const char *StartContent;
-  unsigned int ContentLength;
+  size_t ContentLength;
 };
 
 #endif

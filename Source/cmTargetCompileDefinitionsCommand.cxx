@@ -11,8 +11,6 @@
 ============================================================================*/
 #include "cmTargetCompileDefinitionsCommand.h"
 
-#include "cmMakefileIncludeDirectoriesEntry.h"
-
 bool cmTargetCompileDefinitionsCommand
 ::InitialPass(std::vector<std::string> const& args, cmExecutionStatus &)
 {
@@ -20,13 +18,11 @@ bool cmTargetCompileDefinitionsCommand
 }
 
 void cmTargetCompileDefinitionsCommand
-::HandleImportedTargetInvalidScope(const std::string &scope,
-                                   const std::string &tgt)
+::HandleImportedTarget(const std::string &tgt)
 {
   cmOStringStream e;
-  e << "Cannot specify " << scope << " compile definitions for imported "
-       "target \"" << tgt << "\".  Compile definitions can only be "
-       "specified for an imported target in the INTERFACE mode.";
+  e << "Cannot specify compile definitions for imported target \""
+    << tgt << "\".";
   this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
 }
 
@@ -39,19 +35,32 @@ void cmTargetCompileDefinitionsCommand
   this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
 }
 
-bool cmTargetCompileDefinitionsCommand
-::HandleNonTargetArg(std::string &content,
-                   const std::string &sep,
-                   const std::string &entry,
-                   const std::string &)
+//----------------------------------------------------------------------------
+std::string cmTargetCompileDefinitionsCommand
+::Join(const std::vector<std::string> &content)
 {
-  content += sep + entry;
-  return true;
+  std::string defs;
+  std::string sep;
+  for(std::vector<std::string>::const_iterator it = content.begin();
+    it != content.end(); ++it)
+    {
+    if (cmHasLiteralPrefix(it->c_str(), "-D"))
+      {
+      defs += sep + it->substr(2);
+      }
+    else
+      {
+      defs += sep + *it;
+      }
+    sep = ";";
+    }
+  return defs;
 }
 
+//----------------------------------------------------------------------------
 void cmTargetCompileDefinitionsCommand
-::HandleDirectContent(cmTarget *tgt, const std::string &content,
-                                   bool)
+::HandleDirectContent(cmTarget *tgt, const std::vector<std::string> &content,
+                                   bool, bool)
 {
-  tgt->AppendProperty("COMPILE_DEFINITIONS", content.c_str());
+  tgt->AppendProperty("COMPILE_DEFINITIONS", this->Join(content).c_str());
 }

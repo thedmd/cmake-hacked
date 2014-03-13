@@ -124,17 +124,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const = 0;
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const = 0;
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const = 0;
+  virtual std::string GetName() const = 0;
 
   /**
    * Enable the command.
@@ -176,11 +166,30 @@ public:
   /**
    * Set the error message
    */
-  void SetError(const char* e)
+  void SetError(const std::string& e)
     {
     this->Error = this->GetName();
     this->Error += " ";
     this->Error += e;
+    }
+
+  /** Check if the command is disallowed by a policy.  */
+  bool Disallowed(cmPolicies::PolicyID pol, const char* e)
+    {
+    switch(this->Makefile->GetPolicyStatus(pol))
+      {
+      case cmPolicies::WARN:
+        this->Makefile->IssueMessage(cmake::AUTHOR_WARNING,
+          this->Makefile->GetPolicies()->GetPolicyWarning(pol));
+      case cmPolicies::OLD:
+        return false;
+      case cmPolicies::REQUIRED_IF_USED:
+      case cmPolicies::REQUIRED_ALWAYS:
+      case cmPolicies::NEW:
+        this->Makefile->IssueMessage(cmake::FATAL_ERROR, e);
+        break;
+      }
+    return true;
     }
 
 protected:

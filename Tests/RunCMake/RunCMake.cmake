@@ -26,22 +26,47 @@ function(run_cmake test)
     endif()
   endforeach()
   set(RunCMake_TEST_SOURCE_DIR "${top_src}")
-  set(RunCMake_TEST_BINARY_DIR "${top_bin}/${test}-build")
-  file(REMOVE_RECURSE "${RunCMake_TEST_BINARY_DIR}")
+  if(NOT RunCMake_TEST_BINARY_DIR)
+    set(RunCMake_TEST_BINARY_DIR "${top_bin}/${test}-build")
+  endif()
+  if(NOT RunCMake_TEST_NO_CLEAN)
+    file(REMOVE_RECURSE "${RunCMake_TEST_BINARY_DIR}")
+  endif()
   file(MAKE_DIRECTORY "${RunCMake_TEST_BINARY_DIR}")
-  execute_process(
-    COMMAND ${CMAKE_COMMAND} "${RunCMake_TEST_SOURCE_DIR}"
-              -G "${RunCMake_GENERATOR}" -DRunCMake_TEST=${test}
-    WORKING_DIRECTORY "${RunCMake_TEST_BINARY_DIR}"
-    OUTPUT_VARIABLE actual_stdout
-    ERROR_VARIABLE actual_stderr
-    RESULT_VARIABLE actual_result
-    )
+  if(NOT DEFINED RunCMake_TEST_OPTIONS)
+    set(RunCMake_TEST_OPTIONS "")
+  endif()
+  if(APPLE)
+    list(APPEND RunCMake_TEST_OPTIONS -DCMAKE_POLICY_DEFAULT_CMP0025=NEW)
+  endif()
+  if(RunCMake_TEST_COMMAND)
+    execute_process(
+      COMMAND ${RunCMake_TEST_COMMAND}
+      WORKING_DIRECTORY "${RunCMake_TEST_BINARY_DIR}"
+      OUTPUT_VARIABLE actual_stdout
+      ERROR_VARIABLE actual_stderr
+      RESULT_VARIABLE actual_result
+      )
+  else()
+    execute_process(
+      COMMAND ${CMAKE_COMMAND} "${RunCMake_TEST_SOURCE_DIR}"
+                -G "${RunCMake_GENERATOR}"
+                -T "${RunCMake_GENERATOR_TOOLSET}"
+                -DRunCMake_TEST=${test}
+                --no-warn-unused-cli
+                ${RunCMake_TEST_OPTIONS}
+      WORKING_DIRECTORY "${RunCMake_TEST_BINARY_DIR}"
+      OUTPUT_VARIABLE actual_stdout
+      ERROR_VARIABLE actual_stderr
+      RESULT_VARIABLE actual_result
+      )
+  endif()
   set(msg "")
   if(NOT "${actual_result}" STREQUAL "${expect_result}")
     set(msg "${msg}Result is [${actual_result}], not [${expect_result}].\n")
   endif()
   foreach(o out err)
+    string(REGEX REPLACE "(^|\n)(==[0-9]+==[^\n]*\n)+" "\\1" actual_std${o} "${actual_std${o}}")
     string(REGEX REPLACE "\n+$" "" actual_std${o} "${actual_std${o}}")
     set(expect_${o} "")
     if(DEFINED expect_std${o})
@@ -71,4 +96,9 @@ function(run_cmake test)
   else()
     message(STATUS "${test} - PASSED")
   endif()
+endfunction()
+
+function(run_cmake_command test)
+  set(RunCMake_TEST_COMMAND "${ARGN}")
+  run_cmake(${test})
 endfunction()

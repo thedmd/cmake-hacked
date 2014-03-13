@@ -69,6 +69,41 @@ public:
     /// POSITION_INDEPENDENT_CODE property and *_COMPILE_OPTIONS_PI{E,C}
     /// instead.
     CMP0019, ///< No variable re-expansion in include and link info
+    CMP0020, ///< Automatically link Qt executables to qtmain target
+    CMP0021, ///< Fatal error on relative paths in INCLUDE_DIRECTORIES
+    /// target property
+    CMP0022, ///< INTERFACE_LINK_LIBRARIES defines the link interface
+    CMP0023, ///< Disallow mixing keyword and plain tll signatures
+    CMP0024, ///< Disallow including export() result.
+    CMP0025, ///< Compiler id for Apple Clang is now AppleClang
+    CMP0026, ///< Disallow use of the LOCATION target property.
+    CMP0027, ///< Conditionally linked imported targets with missing include
+    /// directories.
+    CMP0028, ///< Double colon in target name means ALIAS or IMPORTED target.
+    CMP0029, ///< Disallow command: subdir_depends
+    CMP0030, ///< Disallow command: use_mangled_mesa
+    CMP0031, ///< Disallow command: load_command
+    CMP0032, ///< Disallow command: output_required_files
+    CMP0033, ///< Disallow command: export_library_dependencies
+    CMP0034, ///< Disallow command: utility_source
+    CMP0035, ///< Disallow command: variable_requires
+    CMP0036, ///< Disallow command: build_name
+    CMP0037, ///< Target names should not be reserved and
+    /// should match a validity pattern.
+    CMP0038, ///< Targets may not link directly to themselves
+    CMP0039, ///< Utility targets may not have link dependencies
+    CMP0040, ///< The target in the TARGET signature of
+    /// add_custom_command() must exist.
+    CMP0041, ///< Error on relative include with generator expression
+    CMP0042, ///< Enable MACOSX_RPATH by default
+    CMP0043, ///< Ignore COMPILE_DEFINITIONS_<Config> properties
+    CMP0044, ///< Case sensitive <LANG>_COMPILER_ID generator expressions
+    CMP0045, ///< Error on non-existent target in get_target_property
+    CMP0046, ///< Error on non-existent dependency in add_dependencies
+    CMP0047, ///< Use QCC compiler id for the qcc drivers on QNX.
+    CMP0048, ///< project() command manages VERSION variables
+    CMP0049, ///< Do not expand variables in target source entries
+    CMP0050, ///< Disallow add_custom_command SOURCE signatures
 
     /** \brief Always the last entry.
      *
@@ -89,11 +124,9 @@ public:
   void DefinePolicy(cmPolicies::PolicyID id,
                     const char *stringID,
                     const char *shortDescription,
-                    const char *longDescription,
                     unsigned int majorVersionIntroduced,
                     unsigned int minorVersionIntroduced,
                     unsigned int patchVersionIntroduced,
-                    unsigned int tweakVersionIntroduced,
                     cmPolicies::PolicyStatus status);
 
   ///! Set a policy level for this listfile
@@ -107,9 +140,6 @@ public:
 
   ///! return an error string for when a required policy is unspecified
   std::string GetRequiredAlwaysPolicyError(cmPolicies::PolicyID id);
-
-  ///! Get docs for policies
-  void GetDocumentation(std::vector<cmDocumentationEntry>& v);
 
   /** Represent a set of policy values.  */
   typedef std::map<PolicyID, PolicyStatus> PolicyMap;

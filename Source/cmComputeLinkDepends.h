@@ -32,14 +32,15 @@ class cmake;
 class cmComputeLinkDepends
 {
 public:
-  cmComputeLinkDepends(cmTarget* target, const char* config, cmTarget *head);
+  cmComputeLinkDepends(cmTarget const* target, const std::string& config,
+                       cmTarget const* head);
   ~cmComputeLinkDepends();
 
   // Basic information about each link item.
   struct LinkEntry
   {
     std::string Item;
-    cmTarget* Target;
+    cmTarget const* Target;
     bool IsSharedDep;
     bool IsFlag;
     LinkEntry(): Item(), Target(0), IsSharedDep(false), IsFlag(false) {}
@@ -52,22 +53,23 @@ public:
   EntryVector const& Compute();
 
   void SetOldLinkDirMode(bool b);
-  std::set<cmTarget*> const& GetOldWrongConfigItems() const
+  std::set<cmTarget const*> const& GetOldWrongConfigItems() const
     { return this->OldWrongConfigItems; }
 
 private:
 
   // Context information.
-  cmTarget* Target;
-  cmTarget* HeadTarget;
+  cmTarget const* Target;
+  cmTarget const* HeadTarget;
   cmMakefile* Makefile;
   cmLocalGenerator* LocalGenerator;
-  cmGlobalGenerator* GlobalGenerator;
+  cmGlobalGenerator const* GlobalGenerator;
   cmake* CMakeInstance;
   bool DebugMode;
 
   // Configuration information.
-  const char* Config;
+  bool HasConfig;
+  std::string Config;
   cmTarget::LinkLibraryType LinkType;
 
   // Output information.
@@ -75,18 +77,19 @@ private:
 
   typedef cmTarget::LinkLibraryVectorType LinkLibraryVectorType;
 
-  std::map<cmStdString, int>::iterator
+  std::map<std::string, int>::iterator
   AllocateLinkEntry(std::string const& item);
   int AddLinkEntry(int depender_index, std::string const& item);
   void AddVarLinkEntries(int depender_index, const char* value);
   void AddDirectLinkEntries();
   void AddLinkEntries(int depender_index,
                       std::vector<std::string> const& libs);
-  cmTarget* FindTargetToLink(int depender_index, const char* name);
+  cmTarget const* FindTargetToLink(int depender_index,
+                                   const std::string& name);
 
   // One entry for each unique item.
   std::vector<LinkEntry> EntryList;
-  std::map<cmStdString, int> LinkEntryIndex;
+  std::map<std::string, int> LinkEntryIndex;
 
   // BFS of initial dependencies.
   struct BFSEntry
@@ -163,7 +166,7 @@ private:
   // Compatibility help.
   bool OldLinkDirMode;
   void CheckWrongConfigItem(int depender_index, std::string const& item);
-  std::set<cmTarget*> OldWrongConfigItems;
+  std::set<cmTarget const*> OldWrongConfigItems;
 };
 
 #endif

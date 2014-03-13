@@ -20,9 +20,12 @@ class cmGlobalVisualStudio11Generator:
   public cmGlobalVisualStudio10Generator
 {
 public:
-  cmGlobalVisualStudio11Generator(const char* name,
-    const char* architectureId, const char* additionalPlatformDefinition);
+  cmGlobalVisualStudio11Generator(const std::string& name,
+    const std::string& platformName,
+    const std::string& additionalPlatformDefinition);
   static cmGlobalGeneratorFactory* NewFactory();
+
+  virtual bool MatchesGeneratorName(const std::string& name) const;
 
   virtual void WriteSLNHeader(std::ostream& fout);
 
@@ -34,7 +37,9 @@ public:
 protected:
   virtual const char* GetIDEVersion() { return "11.0"; }
   bool UseFolderProperty();
+  static std::set<std::string> GetInstalledWindowsCESDKs();
 private:
   class Factory;
+  friend class Factory;
 };
 #endif

@@ -1,20 +1,32 @@
-# - Find Ruby
-# This module finds if Ruby is installed and determines where the include files
-# and libraries are. Ruby 1.8 and 1.9 are supported.
+#.rst:
+# FindRuby
+# --------
+#
+# Find Ruby
+#
+# This module finds if Ruby is installed and determines where the
+# include files and libraries are.  Ruby 1.8, 1.9, 2.0 and 2.1 are
+# supported.
 #
 # The minimum required version of Ruby can be specified using the
-# standard syntax, e.g. find_package(Ruby 1.8)
+# standard syntax, e.g.  find_package(Ruby 1.8)
 #
-# It also determines what the name of the library is. This
-# code sets the following variables:
+# It also determines what the name of the library is.  This code sets
+# the following variables:
 #
-#  RUBY_EXECUTABLE   = full path to the ruby binary
-#  RUBY_INCLUDE_DIRS = include dirs to be used when using the ruby library
-#  RUBY_LIBRARY      = full path to the ruby library
-#  RUBY_VERSION      = the version of ruby which was found, e.g. "1.8.7"
-#  RUBY_FOUND        = set to true if ruby ws found successfully
+# ::
 #
-#  RUBY_INCLUDE_PATH = same as RUBY_INCLUDE_DIRS, only provided for compatibility reasons, don't use it
+#   RUBY_EXECUTABLE   = full path to the ruby binary
+#   RUBY_INCLUDE_DIRS = include dirs to be used when using the ruby library
+#   RUBY_LIBRARY      = full path to the ruby library
+#   RUBY_VERSION      = the version of ruby which was found, e.g. "1.8.7"
+#   RUBY_FOUND        = set to true if ruby ws found successfully
+#
+#
+#
+# ::
+#
+#   RUBY_INCLUDE_PATH = same as RUBY_INCLUDE_DIRS, only provided for compatibility reasons, don't use it
 
 #=============================================================================
 # Copyright 2004-2009 Kitware, Inc.
@@ -46,19 +58,29 @@ set(_RUBY_POSSIBLE_EXECUTABLE_NAMES ruby)
 # if 1.9 is required, don't look for ruby18 and ruby1.8, default to version 1.8
 if(Ruby_FIND_VERSION_MAJOR  AND  Ruby_FIND_VERSION_MINOR)
    set(Ruby_FIND_VERSION_SHORT_NODOT "${Ruby_FIND_VERSION_MAJOR}${RUBY_FIND_VERSION_MINOR}")
+   # we can't construct that if only major version is given
+   set(_RUBY_POSSIBLE_EXECUTABLE_NAMES
+       ruby${Ruby_FIND_VERSION_MAJOR}.${Ruby_FIND_VERSION_MINOR}
+       ruby${Ruby_FIND_VERSION_MAJOR}${Ruby_FIND_VERSION_MINOR}
+       ${_RUBY_POSSIBLE_EXECUTABLE_NAMES})
 else()
    set(Ruby_FIND_VERSION_SHORT_NODOT "18")
 endif()
 
-set(_RUBY_POSSIBLE_EXECUTABLE_NAMES ${_RUBY_POSSIBLE_EXECUTABLE_NAMES} ruby1.9 ruby19)
+if(NOT Ruby_FIND_VERSION_EXACT)
+  list(APPEND _RUBY_POSSIBLE_EXECUTABLE_NAMES ruby2.1 ruby21)
+  list(APPEND _RUBY_POSSIBLE_EXECUTABLE_NAMES ruby2.0 ruby20)
+  list(APPEND _RUBY_POSSIBLE_EXECUTABLE_NAMES ruby1.9 ruby19)
 
-# if we want a version below 1.9, also look for ruby 1.8
-if("${Ruby_FIND_VERSION_SHORT_NODOT}" VERSION_LESS "19")
-   set(_RUBY_POSSIBLE_EXECUTABLE_NAMES ${_RUBY_POSSIBLE_EXECUTABLE_NAMES} ruby1.8 ruby18)
+  # if we want a version below 1.9, also look for ruby 1.8
+  if("${Ruby_FIND_VERSION_SHORT_NODOT}" VERSION_LESS "19")
+    list(APPEND _RUBY_POSSIBLE_EXECUTABLE_NAMES ruby1.8 ruby18)
+  endif()
+
+  list(REMOVE_DUPLICATES _RUBY_POSSIBLE_EXECUTABLE_NAMES)
 endif()
 
 find_program(RUBY_EXECUTABLE NAMES ${_RUBY_POSSIBLE_EXECUTABLE_NAMES})
-
 
 if(RUBY_EXECUTABLE  AND NOT  RUBY_VERSION_MAJOR)
   function(_RUBY_CONFIG_VAR RBVAR OUTVAR)
@@ -85,6 +107,7 @@ if(RUBY_EXECUTABLE  AND NOT  RUBY_VERSION_MAJOR)
    _RUBY_CONFIG_VAR("archdir" RUBY_ARCH_DIR)
    _RUBY_CONFIG_VAR("arch" RUBY_ARCH)
    _RUBY_CONFIG_VAR("rubyhdrdir" RUBY_HDR_DIR)
+   _RUBY_CONFIG_VAR("rubyarchhdrdir" RUBY_ARCHHDR_DIR)
    _RUBY_CONFIG_VAR("libdir" RUBY_POSSIBLE_LIB_DIR)
    _RUBY_CONFIG_VAR("rubylibdir" RUBY_RUBY_LIB_DIR)
 
@@ -106,7 +129,8 @@ if(RUBY_EXECUTABLE  AND NOT  RUBY_VERSION_MAJOR)
    set(RUBY_VERSION_MINOR    ${RUBY_VERSION_MINOR}    CACHE PATH "The Ruby minor version" FORCE)
    set(RUBY_VERSION_PATCH    ${RUBY_VERSION_PATCH}    CACHE PATH "The Ruby patch version" FORCE)
    set(RUBY_ARCH_DIR         ${RUBY_ARCH_DIR}         CACHE PATH "The Ruby arch dir" FORCE)
-   set(RUBY_HDR_DIR          ${RUBY_HDR_DIR}          CACHE PATH "The Ruby header dir (1.9)" FORCE)
+   set(RUBY_HDR_DIR          ${RUBY_HDR_DIR}          CACHE PATH "The Ruby header dir (1.9+)" FORCE)
+   set(RUBY_ARCHHDR_DIR      ${RUBY_ARCHHDR_DIR}      CACHE PATH "The Ruby arch header dir (2.0+)" FORCE)
    set(RUBY_POSSIBLE_LIB_DIR ${RUBY_POSSIBLE_LIB_DIR} CACHE PATH "The Ruby lib dir" FORCE)
    set(RUBY_RUBY_LIB_DIR     ${RUBY_RUBY_LIB_DIR}     CACHE PATH "The Ruby ruby-lib dir" FORCE)
    set(RUBY_SITEARCH_DIR     ${RUBY_SITEARCH_DIR}     CACHE PATH "The Ruby site arch dir" FORCE)
@@ -119,6 +143,7 @@ if(RUBY_EXECUTABLE  AND NOT  RUBY_VERSION_MAJOR)
      RUBY_ARCH_DIR
      RUBY_ARCH
      RUBY_HDR_DIR
+     RUBY_ARCHHDR_DIR
      RUBY_POSSIBLE_LIB_DIR
      RUBY_RUBY_LIB_DIR
      RUBY_SITEARCH_DIR
@@ -140,9 +165,19 @@ if(RUBY_EXECUTABLE AND NOT RUBY_VERSION_MAJOR)
    set(RUBY_VERSION_MINOR 8)
    set(RUBY_VERSION_PATCH 0)
    # check whether we found 1.9.x
-   if(${RUBY_EXECUTABLE} MATCHES "ruby1.?9"  OR  RUBY_HDR_DIR)
+   if(${RUBY_EXECUTABLE} MATCHES "ruby1.?9")
       set(RUBY_VERSION_MAJOR 1)
       set(RUBY_VERSION_MINOR 9)
+   endif()
+   # check whether we found 2.0.x
+   if(${RUBY_EXECUTABLE} MATCHES "ruby2.?0")
+      set(RUBY_VERSION_MAJOR 2)
+      set(RUBY_VERSION_MINOR 0)
+   endif()
+   # check whether we found 2.1.x
+   if(${RUBY_EXECUTABLE} MATCHES "ruby2.?1")
+      set(RUBY_VERSION_MAJOR 2)
+      set(RUBY_VERSION_MINOR 1)
    endif()
 endif()
 
@@ -169,6 +204,7 @@ if( "${Ruby_FIND_VERSION_SHORT_NODOT}" GREATER 18  OR  "${_RUBY_VERSION_SHORT_NO
      HINTS
      ${RUBY_HDR_DIR}/${RUBY_ARCH}
      ${RUBY_ARCH_DIR}
+     ${RUBY_ARCHHDR_DIR}
      )
 
    set(RUBY_INCLUDE_DIRS ${RUBY_INCLUDE_DIRS} ${RUBY_CONFIG_INCLUDE_DIR} )

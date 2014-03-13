@@ -44,7 +44,7 @@ bool cmBuildCommand
   // Parse remaining arguments.
   const char* configuration = 0;
   const char* project_name = 0;
-  const char* target = 0;
+  std::string target;
   enum Doing { DoingNone, DoingConfiguration, DoingProjectName, DoingTarget };
   Doing doing = DoingNone;
   for(unsigned int i=1; i < args.size(); ++i)
@@ -74,21 +74,18 @@ bool cmBuildCommand
     else if(doing == DoingTarget)
       {
       doing = DoingNone;
-      target = args[i].c_str();
+      target = args[i];
       }
     else
       {
       cmOStringStream e;
       e << "unknown argument \"" << args[i] << "\"";
-      this->SetError(e.str().c_str());
+      this->SetError(e.str());
       return false;
       }
     }
 
-  const char* makeprogram
-    = this->Makefile->GetDefinition("CMAKE_MAKE_PROGRAM");
-
-  // If null/empty CONFIGURATION argument, GenerateBuildCommand uses 'Debug'
+  // If null/empty CONFIGURATION argument, cmake --build uses 'Debug'
   // in the currently implemented multi-configuration global generators...
   // so we put this code here to end up with the same default configuration
   // as the original 2-arg build_command signature:
@@ -102,19 +99,15 @@ bool cmBuildCommand
     configuration = "Release";
     }
 
-  // If null/empty PROJECT_NAME argument, use the Makefile's project name:
-  //
-  if(!project_name || !*project_name)
+  if(project_name && *project_name)
     {
-    project_name = this->Makefile->GetProjectName();
+    this->Makefile->IssueMessage(cmake::AUTHOR_WARNING,
+      "Ignoring PROJECT_NAME option because it has no effect.");
     }
 
-  // If null/empty TARGET argument, GenerateBuildCommand omits any mention
-  // of a target name on the build command line...
-  //
   std::string makecommand = this->Makefile->GetLocalGenerator()
-    ->GetGlobalGenerator()->GenerateBuildCommand
-    (makeprogram, project_name, 0, target, configuration, true, false);
+    ->GetGlobalGenerator()->GenerateCMakeBuildCommand(target, configuration,
+                                                      "", true);
 
   this->Makefile->AddDefinition(variable, makecommand.c_str());
 
@@ -134,7 +127,6 @@ bool cmBuildCommand
   const char* define = args[0].c_str();
   const char* cacheValue
     = this->Makefile->GetDefinition(define);
-  std::string makeprogram = args[1];
 
   std::string configType = "Release";
   const char* cfg = getenv("CMAKE_CONFIG_TYPE");
@@ -144,9 +136,8 @@ bool cmBuildCommand
     }
 
   std::string makecommand = this->Makefile->GetLocalGenerator()
-    ->GetGlobalGenerator()->GenerateBuildCommand
-    (makeprogram.c_str(), this->Makefile->GetProjectName(), 0,
-     0, configType.c_str(), true, false);
+    ->GetGlobalGenerator()->GenerateCMakeBuildCommand("", configType,
+                                                      "", true);
 
   if(cacheValue)
     {

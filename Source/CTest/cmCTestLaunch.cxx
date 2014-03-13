@@ -19,6 +19,7 @@
 #include <cmsys/MD5.h>
 #include <cmsys/Process.h>
 #include <cmsys/RegularExpression.hxx>
+#include <cmsys/FStream.hxx>
 
 //----------------------------------------------------------------------------
 cmCTestLaunch::cmCTestLaunch(int argc, const char* const* argv)
@@ -64,7 +65,8 @@ bool cmCTestLaunch::ParseArguments(int argc, const char* const* argv)
                DoingTargetName,
                DoingTargetType,
                DoingBuildDir,
-               DoingCount };
+               DoingCount,
+               DoingFilterPrefix };
   Doing doing = DoingNone;
   int arg0 = 0;
   for(int i=1; !arg0 && i < argc; ++i)
@@ -97,6 +99,10 @@ bool cmCTestLaunch::ParseArguments(int argc, const char* const* argv)
     else if(strcmp(arg, "--build-dir") == 0)
       {
       doing = DoingBuildDir;
+      }
+    else if(strcmp(arg, "--filter-prefix") == 0)
+      {
+      doing = DoingFilterPrefix;
       }
     else if(doing == DoingOutput)
       {
@@ -132,6 +138,11 @@ bool cmCTestLaunch::ParseArguments(int argc, const char* const* argv)
       this->OptionBuildDir = arg;
       doing = DoingNone;
       }
+    else if(doing == DoingFilterPrefix)
+      {
+      this->OptionFilterPrefix = arg;
+      doing = DoingNone;
+      }
     }
 
   // Extract the real command line.
@@ -161,7 +172,7 @@ void cmCTestLaunch::HandleRealArg(const char* arg)
   // Expand response file arguments.
   if(arg[0] == '@' && cmSystemTools::FileExists(arg+1))
     {
-    std::ifstream fin(arg+1);
+    cmsys::ifstream fin(arg+1);
     std::string line;
     while(cmSystemTools::GetLineFromStream(fin, line))
       {
@@ -231,8 +242,8 @@ void cmCTestLaunch::RunChild()
   cmsysProcess* cp = this->Process;
   cmsysProcess_SetCommand(cp, this->RealArgV);
 
-  std::ofstream fout;
-  std::ofstream ferr;
+  cmsys::ofstream fout;
+  cmsys::ofstream ferr;
   if(this->Passthru)
     {
     // In passthru mode we just share the output pipes.
@@ -320,7 +331,7 @@ void cmCTestLaunch::LoadLabels()
   cmSystemTools::ConvertToUnixSlashes(source);
 
   // Load the labels file.
-  std::ifstream fin(fname.c_str(), std::ios::in | std::ios::binary);
+  cmsys::ifstream fin(fname.c_str(), std::ios::in | std::ios::binary);
   if(!fin) { return; }
   bool inTarget = true;
   bool inSource = false;
@@ -556,7 +567,7 @@ void cmCTestLaunch::WriteXMLLabels(std::ostream& fxml)
     fxml << "\n";
     fxml << "\t\t<!-- Interested parties -->\n";
     fxml << "\t\t<Labels>\n";
-    for(std::set<cmStdString>::const_iterator li = this->Labels.begin();
+    for(std::set<std::string>::const_iterator li = this->Labels.begin();
         li != this->Labels.end(); ++li)
       {
       fxml << "\t\t\t<Label>" << cmXMLSafe(*li) << "</Label>\n";
@@ -569,12 +580,18 @@ void cmCTestLaunch::WriteXMLLabels(std::ostream& fxml)
 void cmCTestLaunch::DumpFileToXML(std::ostream& fxml,
                                   std::string const& fname)
 {
-  std::ifstream fin(fname.c_str(), std::ios::in | std::ios::binary);
+  cmsys::ifstream fin(fname.c_str(), std::ios::in | std::ios::binary);
 
   std::string line;
   const char* sep = "";
+
   while(cmSystemTools::GetLineFromStream(fin, line))
     {
+    if(MatchesFilterPrefix(line))
+      {
+      continue;
+      }
+
     fxml << sep << cmXMLSafe(line).Quotes(false);
     sep = "\n";
     }
@@ -635,7 +652,7 @@ cmCTestLaunch
   fname += "Custom";
   fname += purpose;
   fname += ".txt";
-  std::ifstream fin(fname.c_str(), std::ios::in | std::ios::binary);
+  cmsys::ifstream fin(fname.c_str(), std::ios::in | std::ios::binary);
   std::string line;
   cmsys::RegularExpression rex;
   while(cmSystemTools::GetLineFromStream(fin, line))
@@ -654,12 +671,17 @@ bool cmCTestLaunch::ScrapeLog(std::string const& fname)
 
   // Look for log file lines matching warning expressions but not
   // suppression expressions.
-  std::ifstream fin(fname.c_str(), std::ios::in | std::ios::binary);
+  cmsys::ifstream fin(fname.c_str(), std::ios::in | std::ios::binary);
   std::string line;
   while(cmSystemTools::GetLineFromStream(fin, line))
     {
-    if(this->Match(line.c_str(), this->RegexWarning) &&
-       !this->Match(line.c_str(), this->RegexWarningSuppress))
+    if(MatchesFilterPrefix(line))
+      {
+      continue;
+      }
+
+    if(this->Match(line, this->RegexWarning) &&
+       !this->Match(line, this->RegexWarningSuppress))
       {
       return true;
       }
@@ -678,6 +700,17 @@ bool cmCTestLaunch::Match(std::string const& line,
       {
       return true;
       }
+    }
+  return false;
+}
+
+//----------------------------------------------------------------------------
+bool cmCTestLaunch::MatchesFilterPrefix(std::string const& line) const
+{
+  if(this->OptionFilterPrefix.size() && cmSystemTools::StringStartsWith(
+      line.c_str(), this->OptionFilterPrefix.c_str()))
+    {
+    return true;
     }
   return false;
 }

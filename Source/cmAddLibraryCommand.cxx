@@ -43,41 +43,123 @@ bool cmAddLibraryCommand
   // the type of library.  Otherwise, it is treated as a source or
   // source list name. There may be two keyword arguments, check for them
   bool haveSpecifiedType = false;
+  bool isAlias = false;
   while ( s != args.end() )
     {
     std::string libType = *s;
     if(libType == "STATIC")
       {
+      if (type == cmTarget::INTERFACE_LIBRARY)
+        {
+        cmOStringStream e;
+        e << "INTERFACE library specified with conflicting STATIC type.";
+        this->SetError(e.str());
+        return false;
+        }
       ++s;
       type = cmTarget::STATIC_LIBRARY;
       haveSpecifiedType = true;
       }
     else if(libType == "SHARED")
       {
+      if (type == cmTarget::INTERFACE_LIBRARY)
+        {
+        cmOStringStream e;
+        e << "INTERFACE library specified with conflicting SHARED type.";
+        this->SetError(e.str());
+        return false;
+        }
       ++s;
       type = cmTarget::SHARED_LIBRARY;
       haveSpecifiedType = true;
       }
     else if(libType == "MODULE")
       {
+      if (type == cmTarget::INTERFACE_LIBRARY)
+        {
+        cmOStringStream e;
+        e << "INTERFACE library specified with conflicting MODULE type.";
+        this->SetError(e.str());
+        return false;
+        }
       ++s;
       type = cmTarget::MODULE_LIBRARY;
       haveSpecifiedType = true;
       }
     else if(libType == "OBJECT")
       {
+      if (type == cmTarget::INTERFACE_LIBRARY)
+        {
+        cmOStringStream e;
+        e << "INTERFACE library specified with conflicting OBJECT type.";
+        this->SetError(e.str());
+        return false;
+        }
       ++s;
       type = cmTarget::OBJECT_LIBRARY;
       haveSpecifiedType = true;
       }
     else if(libType == "UNKNOWN")
       {
+      if (type == cmTarget::INTERFACE_LIBRARY)
+        {
+        cmOStringStream e;
+        e << "INTERFACE library specified with conflicting UNKNOWN type.";
+        this->SetError(e.str());
+        return false;
+        }
       ++s;
       type = cmTarget::UNKNOWN_LIBRARY;
       haveSpecifiedType = true;
       }
+    else if(libType == "ALIAS")
+      {
+      if (type == cmTarget::INTERFACE_LIBRARY)
+        {
+        cmOStringStream e;
+        e << "INTERFACE library specified with conflicting ALIAS type.";
+        this->SetError(e.str());
+        return false;
+        }
+      ++s;
+      isAlias = true;
+      }
+    else if(libType == "INTERFACE")
+      {
+      if (haveSpecifiedType)
+        {
+        cmOStringStream e;
+        e << "INTERFACE library specified with conflicting/multiple types.";
+        this->SetError(e.str());
+        return false;
+        }
+      if (isAlias)
+        {
+        cmOStringStream e;
+        e << "INTERFACE library specified with conflicting ALIAS type.";
+        this->SetError(e.str());
+        return false;
+        }
+      if (excludeFromAll)
+        {
+        cmOStringStream e;
+        e << "INTERFACE library may not be used with EXCLUDE_FROM_ALL.";
+        this->SetError(e.str());
+        return false;
+        }
+      ++s;
+      type = cmTarget::INTERFACE_LIBRARY;
+      haveSpecifiedType = true;
+      }
     else if(*s == "EXCLUDE_FROM_ALL")
       {
+      if (type == cmTarget::INTERFACE_LIBRARY)
+        {
+        cmOStringStream e;
+        e << "INTERFACE library may not be used with EXCLUDE_FROM_ALL.";
+        this->SetError(e.str());
+        return false;
+        }
       ++s;
       excludeFromAll = true;
       }
@@ -91,10 +173,152 @@ bool cmAddLibraryCommand
       ++s;
       importGlobal = true;
       }
+    else if(type == cmTarget::INTERFACE_LIBRARY && *s == "GLOBAL")
+      {
+      cmOStringStream e;
+      e << "GLOBAL option may only be used with IMPORTED libraries.";
+      this->SetError(e.str());
+      return false;
+      }
     else
       {
       break;
       }
+    }
+
+  if (type == cmTarget::INTERFACE_LIBRARY)
+    {
+    if (s != args.end())
+      {
+      cmOStringStream e;
+      e << "INTERFACE library requires no source arguments.";
+      this->SetError(e.str());
+      return false;
+      }
+    if (importGlobal && !importTarget)
+      {
+      cmOStringStream e;
+      e << "INTERFACE library specified as GLOBAL, but not as IMPORTED.";
+      this->SetError(e.str());
+      return false;
+      }
+    }
+
+  bool nameOk = cmGeneratorExpression::IsValidTargetName(libName) &&
+    !cmGlobalGenerator::IsReservedTarget(libName);
+
+  if (nameOk && !importTarget && !isAlias)
+    {
+    nameOk = libName.find(":") == std::string::npos;
+    }
+  if (!nameOk)
+    {
+    cmake::MessageType messageType = cmake::AUTHOR_WARNING;
+    bool issueMessage = false;
+    switch(this->Makefile->GetPolicyStatus(cmPolicies::CMP0037))
+      {
+      case cmPolicies::WARN:
+        issueMessage = type != cmTarget::INTERFACE_LIBRARY;
+      case cmPolicies::OLD:
+        break;
+      case cmPolicies::NEW:
+      case cmPolicies::REQUIRED_IF_USED:
+      case cmPolicies::REQUIRED_ALWAYS:
+        issueMessage = true;
+        messageType = cmake::FATAL_ERROR;
+      }
+    if (issueMessage)
+      {
+      cmOStringStream e;
+      e << (this->Makefile->GetPolicies()
+            ->GetPolicyWarning(cmPolicies::CMP0037)) << "\n";
+      e << "The target name \"" << libName <<
+          "\" is reserved or not valid for certain "
+          "CMake features, such as generator expressions, and may result "
+          "in undefined behavior.";
+      this->Makefile->IssueMessage(messageType, e.str());
+
+      if (messageType == cmake::FATAL_ERROR)
+        {
+        return false;
+        }
+      }
+    }
+
+  if (isAlias)
+    {
+    if(!cmGeneratorExpression::IsValidTargetName(libName))
+      {
+      this->SetError("Invalid name for ALIAS: " + libName);
+      return false;
+      }
+    if(excludeFromAll)
+      {
+      this->SetError("EXCLUDE_FROM_ALL with ALIAS makes no sense.");
+      return false;
+      }
+    if(importTarget || importGlobal)
+      {
+      this->SetError("IMPORTED with ALIAS is not allowed.");
+      return false;
+      }
+    if(args.size() != 3)
+      {
+      cmOStringStream e;
+      e << "ALIAS requires exactly one target argument.";
+      this->SetError(e.str());
+      return false;
+      }
+
+    const char *aliasedName = s->c_str();
+    if(this->Makefile->IsAlias(aliasedName))
+      {
+      cmOStringStream e;
+      e << "cannot create ALIAS target \"" << libName
+        << "\" because target \"" << aliasedName << "\" is itself an ALIAS.";
+      this->SetError(e.str());
+      return false;
+      }
+    cmTarget *aliasedTarget =
+                    this->Makefile->FindTargetToUse(aliasedName, true);
+    if(!aliasedTarget)
+      {
+      cmOStringStream e;
+      e << "cannot create ALIAS target \"" << libName
+        << "\" because target \"" << aliasedName << "\" does not already "
+        "exist.";
+      this->SetError(e.str());
+      return false;
+      }
+    cmTarget::TargetType aliasedType = aliasedTarget->GetType();
+    if(aliasedType != cmTarget::SHARED_LIBRARY
+        && aliasedType != cmTarget::STATIC_LIBRARY
+        && aliasedType != cmTarget::MODULE_LIBRARY
+        && aliasedType != cmTarget::OBJECT_LIBRARY
+        && aliasedType != cmTarget::INTERFACE_LIBRARY)
+      {
+      cmOStringStream e;
+      e << "cannot create ALIAS target \"" << libName
+        << "\" because target \"" << aliasedName << "\" is not a library.";
+      this->SetError(e.str());
+      return false;
+      }
+    if(aliasedTarget->IsImported())
+      {
+      cmOStringStream e;
+      e << "cannot create ALIAS target \"" << libName
+        << "\" because target \"" << aliasedName << "\" is IMPORTED.";
+      this->SetError(e.str());
+      return false;
+      }
+    this->Makefile->AddAlias(libName, aliasedTarget);
+    return true;
+    }
+
+  if(importTarget && excludeFromAll)
+    {
+    this->SetError("excludeFromAll with IMPORTED target makes no sense.");
+    return false;
     }
 
   /* ideally we should check whether for the linker language of the target
@@ -103,6 +327,7 @@ bool cmAddLibraryCommand
     yet its linker language. */
   if ((type != cmTarget::STATIC_LIBRARY) &&
       (type != cmTarget::OBJECT_LIBRARY) &&
+      (type != cmTarget::INTERFACE_LIBRARY) &&
        (this->Makefile->GetCMakeInstance()->GetPropertyAsBool(
                                       "TARGET_SUPPORTS_SHARED_LIBS") == false))
     {
@@ -133,19 +358,29 @@ bool cmAddLibraryCommand
         );
       return true;
       }
+    if(type == cmTarget::INTERFACE_LIBRARY)
+      {
+      if (!cmGeneratorExpression::IsValidTargetName(libName))
+        {
+        cmOStringStream e;
+        e << "Invalid name for IMPORTED INTERFACE library target: " << libName;
+        this->SetError(e.str());
+        return false;
+        }
+      }
 
     // Make sure the target does not already exist.
-    if(this->Makefile->FindTargetToUse(libName.c_str()))
+    if(this->Makefile->FindTargetToUse(libName))
       {
       cmOStringStream e;
       e << "cannot create imported target \"" << libName
         << "\" because another target with the same name already exists.";
-      this->SetError(e.str().c_str());
+      this->SetError(e.str());
       return false;
       }
 
     // Create the imported target.
-    this->Makefile->AddImportedTarget(libName.c_str(), type, importGlobal);
+    this->Makefile->AddImportedTarget(libName, type, importGlobal);
     return true;
     }
 
@@ -164,10 +399,30 @@ bool cmAddLibraryCommand
   std::string msg;
   if(!this->Makefile->EnforceUniqueName(libName, msg))
     {
-    this->SetError(msg.c_str());
+    this->SetError(msg);
     return false;
     }
   }
+
+  std::vector<std::string> srclists;
+
+  if(type == cmTarget::INTERFACE_LIBRARY)
+    {
+    if (!cmGeneratorExpression::IsValidTargetName(libName)
+        || libName.find("::") != std::string::npos)
+      {
+      cmOStringStream e;
+      e << "Invalid name for INTERFACE library target: " << libName;
+      this->SetError(e.str());
+      return false;
+      }
+
+    this->Makefile->AddLibrary(libName,
+                               type,
+                               srclists,
+                               excludeFromAll);
+    return true;
+    }
 
   if (s == args.end())
     {
@@ -178,14 +433,13 @@ bool cmAddLibraryCommand
     cmSystemTools::Message(msg.c_str() ,"Warning");
     }
 
-  std::vector<std::string> srclists;
   while (s != args.end())
     {
     srclists.push_back(*s);
     ++s;
     }
 
-  this->Makefile->AddLibrary(libName.c_str(), type, srclists, excludeFromAll);
+  this->Makefile->AddLibrary(libName, type, srclists, excludeFromAll);
 
   return true;
 }

@@ -12,15 +12,23 @@ target_compile_definitions(target_compile_definitions
   INTERFACE MY_INTERFACE_DEFINE
 )
 
-add_library(importedlib UNKNOWN IMPORTED)
-target_compile_definitions(importedlib
-  INTERFACE MY_IMPORTEDINTERFACE_DEFINE
-)
-
 add_executable(consumer
   "${CMAKE_CURRENT_SOURCE_DIR}/consumer.cpp"
 )
 
 target_compile_definitions(consumer
-  PRIVATE target_compile_definitions importedlib
+  PRIVATE $<TARGET_PROPERTY:target_compile_definitions,INTERFACE_COMPILE_DEFINITIONS>
+  -DDASH_D_DEFINE
 )
+
+# Test no items
+target_compile_definitions(consumer
+  PRIVATE
+)
+
+add_definitions(-DSOME_DEF)
+add_library(imp UNKNOWN IMPORTED)
+get_target_property(_res imp COMPILE_DEFINITIONS)
+if (_res)
+  message(SEND_ERROR "add_definitions populated the COMPILE_DEFINITIONS target property")
+endif()

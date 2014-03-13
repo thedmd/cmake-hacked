@@ -22,17 +22,19 @@ class cmGlobalVisualStudio9Generator::Factory
   : public cmGlobalGeneratorFactory
 {
 public:
-  virtual cmGlobalGenerator* CreateGlobalGenerator(const char* name) const {
-    if(strstr(name, vs9generatorName) != name)
+  virtual cmGlobalGenerator* CreateGlobalGenerator(
+                                              const std::string& name) const {
+    if(strncmp(name.c_str(), vs9generatorName,
+               sizeof(vs9generatorName) - 1) != 0)
       {
       return 0;
       }
 
-    const char* p = name + sizeof(vs9generatorName) - 1;
+    const char* p = name.c_str() + sizeof(vs9generatorName) - 1;
     if(p[0] == '\0')
       {
       return new cmGlobalVisualStudio9Generator(
-        name, NULL, NULL);
+        name, "", "");
       }
 
     if(p[0] != ' ')
@@ -62,8 +64,7 @@ public:
       }
 
     cmGlobalVisualStudio9Generator* ret = new cmGlobalVisualStudio9Generator(
-      name, parser.GetArchitectureFamily(), NULL);
-    ret->PlatformName = p;
+      name, p, NULL);
     ret->WindowsCEVersion = parser.GetOSVersion();
     return ret;
   }
@@ -71,11 +72,6 @@ public:
   virtual void GetDocumentation(cmDocumentationEntry& entry) const {
     entry.Name = vs9generatorName;
     entry.Brief = "Generates Visual Studio 9 2008 project files.";
-    entry.Full =
-      "It is possible to append a space followed by the platform name "
-      "to create project files for a specific target platform. E.g. "
-      "\"Visual Studio 9 2008 Win64\" will create project files for "
-      "the x64 processor; \"Visual Studio 9 2008 IA64\" for Itanium.";
   }
 
   virtual void GetGenerators(std::vector<std::string>& names) const {
@@ -102,12 +98,11 @@ cmGlobalGeneratorFactory* cmGlobalVisualStudio9Generator::NewFactory()
 
 //----------------------------------------------------------------------------
 cmGlobalVisualStudio9Generator::cmGlobalVisualStudio9Generator(
-  const char* name, const char* architectureId,
-  const char* additionalPlatformDefinition)
-  : cmGlobalVisualStudio8Generator(name, architectureId,
+  const std::string& name, const std::string& platformName,
+  const std::string& additionalPlatformDefinition)
+  : cmGlobalVisualStudio8Generator(name, platformName,
                                    additionalPlatformDefinition)
 {
-  this->FindMakeProgramFile = "CMakeVS9FindMake.cmake";
 }
 
 //----------------------------------------------------------------------------

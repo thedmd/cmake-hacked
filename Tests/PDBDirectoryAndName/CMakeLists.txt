@@ -6,6 +6,13 @@ if(NOT MSVC AND NOT "${CMAKE_C_COMPILER_ID}" MATCHES "^(Intel)$")
   message(FATAL_ERROR "The PDBDirectoryAndName test works only with MSVC or Intel")
 endif()
 
+# Intel 11.1 does not support /Fd but Intel 14.0 does.
+# TODO: Did a version in between these add it?
+if(CMAKE_C_COMPILER_ID STREQUAL Intel AND
+   CMAKE_C_COMPILER_VERSION VERSION_LESS 14.0)
+  set(NO_COMPILE_PDB 1)
+endif()
+
 set(my_targets "")
 
 add_library(mylibA SHARED mylibA.c)
@@ -17,10 +24,12 @@ list(APPEND my_targets mylibA)
 
 add_library(mylibB STATIC mylibB.c)
 set_target_properties(mylibB PROPERTIES
-    PDB_NAME "mylibB_Special"
-    PDB_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mylibB_PDB"
+    COMPILE_PDB_NAME "mylibB_Special"
+    COMPILE_PDB_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mylibB_PDB"
 )
-list(APPEND my_targets mylibB)
+if(NOT NO_COMPILE_PDB)
+  list(APPEND my_targets mylibB)
+endif()
 
 add_library(mylibC SHARED mylibC.c)
 set_target_properties(mylibC PROPERTIES
@@ -30,9 +39,11 @@ list(APPEND my_targets mylibC)
 
 add_library(mylibD STATIC mylibD.c)
 set_target_properties(mylibD PROPERTIES
-    PDB_NAME "mylibD_Special"
+    COMPILE_PDB_NAME "mylibD_Special"
 )
-list(APPEND my_targets mylibD)
+if(NOT NO_COMPILE_PDB)
+  list(APPEND my_targets mylibD)
+endif()
 
 add_executable(myexe myexe.c)
 set_target_properties(myexe PROPERTIES
@@ -58,15 +69,17 @@ target_link_libraries(myexe2 mylibA mylibD)
 if("${CMAKE_GENERATOR}" MATCHES "Visual Studio 6")
   return()
 endif()
-# PDB output not fully implemented for Intel
-if("${CMAKE_C_COMPILER_ID}" MATCHES "^(Intel)$")
-  return()
-endif()
 
 set(pdbs "")
 foreach(t ${my_targets})
   get_property(pdb_name TARGET ${t} PROPERTY PDB_NAME)
   get_property(pdb_dir TARGET ${t} PROPERTY PDB_OUTPUT_DIRECTORY)
+  if(NOT pdb_name)
+    get_property(pdb_name TARGET ${t} PROPERTY COMPILE_PDB_NAME)
+  endif()
+  if(NOT pdb_dir)
+    get_property(pdb_dir TARGET ${t} PROPERTY COMPILE_PDB_OUTPUT_DIRECTORY)
+  endif()
   if(NOT pdb_dir)
     set(pdb_dir ${CMAKE_CURRENT_BINARY_DIR})
   endif()

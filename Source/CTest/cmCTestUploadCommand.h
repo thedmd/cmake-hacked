@@ -43,26 +43,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "ctest_upload";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Upload files to a dashboard server.";
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "  ctest_upload(FILES ...)\n"
-      "Pass a list of files to be sent along with the build results to "
-      "the dashboard server.\n";
-    }
+  virtual std::string GetName() const { return "ctest_upload";}
 
   cmTypeMacro(cmCTestUploadCommand, cmCTestHandlerCommand);
 

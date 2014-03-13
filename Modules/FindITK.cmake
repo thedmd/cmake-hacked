@@ -1,4 +1,8 @@
-# - Find an ITK installation or build tree.
+#.rst:
+# FindITK
+# -------
+#
+# Find an ITK installation or build tree.
 
 # When ITK is found, the ITKConfig.cmake file is sourced to setup the
 # location and configuration of ITK.  Please read this file, or
@@ -17,7 +21,7 @@
 #
 #  USE_ITK_FILE - The full path to the UseITK.cmake file.
 #                 This is provided for backward
-#                 compatability.  Use ITK_USE_FILE
+#                 compatibility.  Use ITK_USE_FILE
 #                 instead.
 
 #=============================================================================
@@ -52,6 +56,6 @@ if(NOT ITK_FOUND)
 endif()
 
 if(ITK_FOUND)
-  # Set USE_ITK_FILE for backward-compatability.
+  # Set USE_ITK_FILE for backward-compatibility.
   set(USE_ITK_FILE ${ITK_USE_FILE})
 endif()

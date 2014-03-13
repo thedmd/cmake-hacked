@@ -18,6 +18,7 @@
 #include <cmsys/RegularExpression.hxx>
 #include <cmsys/ios/sstream>
 #include <cmsys/Process.h>
+#include <cmsys/FStream.hxx>
 
 #include <sys/types.h>
 #include <time.h>
@@ -68,7 +69,7 @@ std::string cmCTestGIT::GetWorkingRevision()
 {
   // Run plumbing "git rev-list" to get work tree revision.
   const char* git = this->CommandLineTool.c_str();
-  const char* git_rev_list[] = {git, "rev-list", "-n", "1", "HEAD", 0};
+  const char* git_rev_list[] = {git, "rev-list", "-n", "1", "HEAD", "--", 0};
   std::string rev;
   OneLineParser out(this, "rl-out> ", rev);
   OutputLogger err(this->Log, "rl-err> ");
@@ -178,8 +179,8 @@ bool cmCTestGIT::UpdateByFetchAndReset()
     {
     opts = this->CTest->GetCTestConfiguration("GITUpdateOptions");
     }
-  std::vector<cmStdString> args = cmSystemTools::ParseArguments(opts.c_str());
-  for(std::vector<cmStdString>::const_iterator ai = args.begin();
+  std::vector<std::string> args = cmSystemTools::ParseArguments(opts.c_str());
+  for(std::vector<std::string>::const_iterator ai = args.begin();
       ai != args.end(); ++ai)
     {
     git_fetch.push_back(ai->c_str());
@@ -200,7 +201,7 @@ bool cmCTestGIT::UpdateByFetchAndReset()
   std::string sha1;
   {
   std::string fetch_head = this->FindGitDir() + "/FETCH_HEAD";
-  std::ifstream fin(fetch_head.c_str(), std::ios::in | std::ios::binary);
+  cmsys::ifstream fin(fetch_head.c_str(), std::ios::in | std::ios::binary);
   if(!fin)
     {
     this->Log << "Unable to open " << fetch_head << "\n";
@@ -536,11 +537,11 @@ private:
   void DoHeaderLine()
     {
     // Look for header fields that we need.
-    if(strncmp(this->Line.c_str(), "commit ", 7) == 0)
+    if(cmHasLiteralPrefix(this->Line.c_str(), "commit "))
       {
       this->Rev.Rev = this->Line.c_str()+7;
       }
-    else if(strncmp(this->Line.c_str(), "author ", 7) == 0)
+    else if(cmHasLiteralPrefix(this->Line.c_str(), "author "))
       {
       Person author;
       this->ParsePerson(this->Line.c_str()+7, author);
@@ -548,7 +549,7 @@ private:
       this->Rev.EMail = author.EMail;
       this->Rev.Date = this->FormatDateTime(author);
       }
-    else if(strncmp(this->Line.c_str(), "committer ", 10) == 0)
+    else if(cmHasLiteralPrefix(this->Line.c_str(), "committer "))
       {
       Person committer;
       this->ParsePerson(this->Line.c_str()+10, committer);
@@ -639,7 +640,7 @@ void cmCTestGIT::LoadModifications()
   this->RunChild(git_update_index, &ui_out, &ui_err);
 
   // Use 'git diff-index' to get modified files.
-  const char* git_diff_index[] = {git, "diff-index", "-z", "HEAD", 0};
+  const char* git_diff_index[] = {git, "diff-index", "-z", "HEAD", "--", 0};
   DiffParser out(this, "di-out> ");
   OutputLogger err(this->Log, "di-err> ");
   this->RunChild(git_diff_index, &out, &err);

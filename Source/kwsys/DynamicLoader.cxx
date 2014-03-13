@@ -186,13 +186,12 @@ namespace KWSYS_NAMESPACE
 DynamicLoader::LibraryHandle DynamicLoader::OpenLibrary(const char* libname)
 {
   DynamicLoader::LibraryHandle lh;
-#ifdef UNICODE
-  wchar_t libn[MB_CUR_MAX];
-  mbstowcs(libn, libname, MB_CUR_MAX);
-  lh = LoadLibrary(libn);
-#else
-  lh = LoadLibrary(libname);
-#endif
+  int length = MultiByteToWideChar(CP_UTF8, 0, libname, -1, NULL, 0);
+  wchar_t* wchars = new wchar_t[length+1];
+  wchars[0] = '\0';
+  MultiByteToWideChar(CP_UTF8, 0, libname, -1, wchars, length);
+  lh = LoadLibraryW(wchars);
+  delete [] wchars;
   return lh;
 }
 
@@ -238,13 +237,7 @@ DynamicLoader::SymbolPointer DynamicLoader::GetSymbolAddress(
 #else
   const char *rsym = sym;
 #endif
-#ifdef UNICODE
-  wchar_t wsym[MB_CUR_MAX];
-  mbstowcs(wsym, rsym, MB_CUR_MAX);
-  result = GetProcAddress(lib, wsym);
-#else
   result = (void*)GetProcAddress(lib, rsym);
-#endif
 #if defined(__BORLANDC__) || defined(__WATCOMC__)
   delete[] rsym;
 #endif
@@ -424,6 +417,58 @@ const char* DynamicLoader::LastError()
   {
   return "General error";
   }
+
+} // namespace KWSYS_NAMESPACE
+#endif
+
+#ifdef __MINT__
+#define DYNAMICLOADER_DEFINED 1
+#define _GNU_SOURCE /* for program_invocation_name */
+#include <string.h>
+#include <malloc.h>
+#include <errno.h>
+#include <dld.h>
+
+namespace KWSYS_NAMESPACE
+{
+
+//----------------------------------------------------------------------------
+DynamicLoader::LibraryHandle DynamicLoader::OpenLibrary(const char* libname )
+{
+  char *name = (char *)calloc(1, strlen(libname) + 1);
+  dld_init(program_invocation_name);
+  strncpy(name, libname, strlen(libname));
+  dld_link(libname);
+  return (void *)name;
+}
+
+//----------------------------------------------------------------------------
+int DynamicLoader::CloseLibrary(DynamicLoader::LibraryHandle lib)
+{
+  dld_unlink_by_file((char *)lib, 0);
+  free(lib);
+  return 0;
+}
+
+//----------------------------------------------------------------------------
+DynamicLoader::SymbolPointer DynamicLoader::GetSymbolAddress(
+  DynamicLoader::LibraryHandle lib, const char* sym)
+{
+  // Hack to cast pointer-to-data to pointer-to-function.
+  union
+  {
+    void* pvoid;
+    DynamicLoader::SymbolPointer psym;
+  } result;
+  result.pvoid = dld_get_symbol(sym);
+  return result.psym;
+}
+
+//----------------------------------------------------------------------------
+const char* DynamicLoader::LastError()
+{
+  return dld_strerror(dld_errno);
+}
 
 } // namespace KWSYS_NAMESPACE
 #endif

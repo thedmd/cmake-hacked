@@ -444,13 +444,13 @@ int cmCPackDebGenerator::createDeb()
     std::string tmpFile = this->GetOption("CPACK_TOPLEVEL_DIRECTORY");
     tmpFile += "/Deb.log";
     cmGeneratedFileStream ofs(tmpFile.c_str());
-    ofs << "# Run command: " << cmd.c_str() << std::endl
+    ofs << "# Run command: " << cmd << std::endl
       << "# Working directory: " << toplevel << std::endl
       << "# Output:" << std::endl
-      << output.c_str() << std::endl;
+      << output << std::endl;
     cmCPackLogger(cmCPackLog::LOG_ERROR, "Problem running tar command: "
-      << cmd.c_str() << std::endl
-      << "Please check " << tmpFile.c_str() << " for errors" << std::endl);
+      << cmd << std::endl
+      << "Please check " << tmpFile << " for errors" << std::endl);
     return 0;
     }
 
@@ -506,7 +506,7 @@ int cmCPackDebGenerator::createDeb()
           controlExtraList.begin(); i != controlExtraList.end(); ++i)
       {
       std::string filenamename =
-        cmsys::SystemTools::GetFilenameName(i->c_str());
+        cmsys::SystemTools::GetFilenameName(*i);
       std::string localcopy = this->GetOption("WDIR");
       localcopy += "/";
       localcopy += filenamename;
@@ -528,13 +528,13 @@ int cmCPackDebGenerator::createDeb()
     std::string tmpFile = this->GetOption("CPACK_TOPLEVEL_DIRECTORY");
     tmpFile += "/Deb.log";
     cmGeneratedFileStream ofs(tmpFile.c_str());
-    ofs << "# Run command: " << cmd.c_str() << std::endl
+    ofs << "# Run command: " << cmd << std::endl
       << "# Working directory: " << toplevel << std::endl
       << "# Output:" << std::endl
-      << output.c_str() << std::endl;
+      << output << std::endl;
     cmCPackLogger(cmCPackLog::LOG_ERROR, "Problem running tar command: "
-      << cmd.c_str() << std::endl
-      << "Please check " << tmpFile.c_str() << " for errors" << std::endl);
+      << cmd << std::endl
+      << "Please check " << tmpFile << " for errors" << std::endl);
     return 0;
     }
 
@@ -588,9 +588,9 @@ std::string cmCPackDebGenerator::GetComponentInstallDirNameSuffix(
   // the current COMPONENT belongs to.
   std::string groupVar = "CPACK_COMPONENT_" +
         cmSystemTools::UpperCase(componentName) + "_GROUP";
-    if (NULL != GetOption(groupVar.c_str()))
+    if (NULL != GetOption(groupVar))
       {
-      return std::string(GetOption(groupVar.c_str()));
+      return std::string(GetOption(groupVar));
       }
     else
       {
@@ -771,13 +771,13 @@ static int put_arobj(CF *cfp, struct stat *sb)
     }
   if (lname > sizeof(hdr->ar_name) || strchr(name, ' '))
     (void)sprintf(ar_hb, HDR1, AR_EFMT1, (int)lname,
-                  (long int)sb->st_mtime, uid, gid, sb->st_mode,
-                  (long long)sb->st_size + lname, ARFMAG);
+                  (long int)sb->st_mtime, (unsigned)uid, (unsigned)gid,
+                  sb->st_mode, (long long)sb->st_size + lname, ARFMAG);
     else {
       lname = 0;
       (void)sprintf(ar_hb, HDR2, name,
-                    (long int)sb->st_mtime, uid, gid, sb->st_mode,
-                    (long long)sb->st_size, ARFMAG);
+                    (long int)sb->st_mtime, (unsigned)uid, (unsigned)gid,
+                    sb->st_mode, (long long)sb->st_size, ARFMAG);
       }
     off_t size = sb->st_size;
 
@@ -803,7 +803,7 @@ static int put_arobj(CF *cfp, struct stat *sb)
 static int ar_append(const char* archive,const std::vector<std::string>& files)
 {
   int eval = 0;
-  FILE* aFile = fopen(archive, "wb+");
+  FILE* aFile = cmSystemTools::Fopen(archive, "wb+");
   if (aFile!=NULL) {
     fwrite(ARMAG, SARMAG, 1, aFile);
     if (fseek(aFile, 0, SEEK_END) != -1) {
@@ -814,7 +814,7 @@ static int ar_append(const char* archive,const std::vector<std::string>& files)
       for(std::vector<std::string>::const_iterator fileIt = files.begin();
           fileIt!=files.end(); ++fileIt) {
         const char* filename = fileIt->c_str();
-        FILE* file = fopen(filename, "rb");
+        FILE* file = cmSystemTools::Fopen(filename, "rb");
         if (file == NULL) {
           eval = -1;
           continue;

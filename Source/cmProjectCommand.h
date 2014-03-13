@@ -43,36 +43,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const {return "project";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Set a name for the entire project.";
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "  project(<projectname> [languageName1 languageName2 ... ] )\n"
-      "Sets the name of the project.  "
-      "Additionally this sets the variables <projectName>_BINARY_DIR and "
-      "<projectName>_SOURCE_DIR to the respective values.\n"
-      "Optionally you can specify which languages your project supports.  "
-      "Example languages are CXX (i.e. C++), C, Fortran, etc. "
-      "By default C and CXX are enabled.  E.g. if you do not have a "
-      "C++ compiler, you can disable the check for it by explicitly listing "
-      "the languages you want to support, e.g. C.  By using the special "
-      "language \"NONE\" all checks for any language can be disabled. "
-      "If a variable exists called CMAKE_PROJECT_<projectName>_INCLUDE, "
-      "the file pointed to by that variable will be included as the last step "
-      "of the project command.";
-    }
+  virtual std::string GetName() const {return "project";}
 
   cmTypeMacro(cmProjectCommand, cmCommand);
 };

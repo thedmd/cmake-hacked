@@ -31,10 +31,12 @@ public:
                            const std::vector<std::string>& configurations,
                            const char* component,
                            const char* filename, const char* name_space,
-                           cmMakefile* mf);
+                           bool exportOld, cmMakefile* mf);
   ~cmInstallExportGenerator();
 
   cmExportSet* GetExportSet() {return this->ExportSet;}
+
+  cmMakefile* GetMakefile() const { return this->Makefile; }
 
   const std::string& GetNamespace() const { return this->Namespace; }
 
@@ -50,6 +52,7 @@ protected:
   std::string FilePermissions;
   std::string FileName;
   std::string Namespace;
+  bool ExportOld;
   cmMakefile* Makefile;
 
   std::string TempDir;

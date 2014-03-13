@@ -29,13 +29,10 @@ if(EXISTS "${CMAKE_ROOT}/Modules/CPack.cmake")
   set(CPACK_PACKAGE_VENDOR "Kitware")
   set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/Copyright.txt")
   set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/Copyright.txt")
-  set(CPACK_PACKAGE_VERSION "${CMake_VERSION}")
-  set(CPACK_PACKAGE_INSTALL_DIRECTORY "CMake ${CMake_VERSION_MAJOR}.${CMake_VERSION_MINOR}")
-  set(CPACK_SOURCE_PACKAGE_FILE_NAME "cmake-${CMake_VERSION}")
-
-  # Make this explicit here, rather than accepting the CPack default value,
-  # so we can refer to it:
   set(CPACK_PACKAGE_NAME "${CMAKE_PROJECT_NAME}")
+  set(CPACK_PACKAGE_VERSION "${CMake_VERSION}")
+  set(CPACK_PACKAGE_INSTALL_DIRECTORY "${CPACK_PACKAGE_NAME}")
+  set(CPACK_SOURCE_PACKAGE_FILE_NAME "cmake-${CMake_VERSION}")
 
   # Installers for 32- vs. 64-bit CMake:
   #  - Root install directory (displayed to end user at installer-run time)
@@ -43,13 +40,12 @@ if(EXISTS "${CMAKE_ROOT}/Modules/CPack.cmake")
   #  - Registry key used to store info about the installation
   if(CMAKE_CL_64)
     set(CPACK_NSIS_INSTALL_ROOT "$PROGRAMFILES64")
-    set(CPACK_NSIS_PACKAGE_NAME "${CPACK_PACKAGE_INSTALL_DIRECTORY} (Win64)")
-    set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "${CPACK_PACKAGE_NAME} ${CPACK_PACKAGE_VERSION} (Win64)")
+    set(CPACK_NSIS_PACKAGE_NAME "${CPACK_PACKAGE_NAME} ${CPACK_PACKAGE_VERSION} (Win64)")
   else()
     set(CPACK_NSIS_INSTALL_ROOT "$PROGRAMFILES")
-    set(CPACK_NSIS_PACKAGE_NAME "${CPACK_PACKAGE_INSTALL_DIRECTORY}")
-    set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "${CPACK_PACKAGE_NAME} ${CPACK_PACKAGE_VERSION}")
+    set(CPACK_NSIS_PACKAGE_NAME "${CPACK_PACKAGE_NAME} ${CPACK_PACKAGE_VERSION}")
   endif()
+  set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "${CPACK_NSIS_PACKAGE_NAME}")
 
   if(NOT DEFINED CPACK_SYSTEM_NAME)
     # make sure package is not Cygwin-unknown, for Cygwin just
@@ -112,6 +108,8 @@ if(EXISTS "${CMAKE_ROOT}/Modules/CPack.cmake")
     # this file uses some of the package file name variables
     include(Utilities/Release/Cygwin/CMakeLists.txt)
   endif()
+
+  set(CPACK_WIX_UPGRADE_GUID "8ffd1d72-b7f1-11e2-8ee5-00238bca4991")
 
   # Set the options file that needs to be included inside CMakeCPackOptions.cmake
   set(QT_DIALOG_CPACK_OPTIONS_FILE ${CMake_BINARY_DIR}/Source/QtDialog/QtDialogCPack.cmake)

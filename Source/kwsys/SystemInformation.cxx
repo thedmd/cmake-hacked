@@ -18,6 +18,10 @@
 # include <winsock.h> // WSADATA, include before sys/types.h
 #endif
 
+#if (defined(__GNUC__) || defined(__PGI)) && !defined(_GNU_SOURCE)
+# define _GNU_SOURCE
+#endif
+
 // TODO:
 // We need an alternative implementation for many functions in this file
 // when USE_ASM_INSTRUCTIONS gets defined as 0.
@@ -84,11 +88,24 @@ typedef int siginfo_t;
 #  include <ifaddrs.h>
 #  define KWSYS_SYSTEMINFORMATION_IMPLEMENT_FQDN
 # endif
+# if defined(KWSYS_SYSTEMINFORMATION_HAS_BACKTRACE)
+#  include <execinfo.h>
+#  if defined(KWSYS_SYSTEMINFORMATION_HAS_CPP_DEMANGLE)
+#    include <cxxabi.h>
+#  endif
+#  if defined(KWSYS_SYSTEMINFORMATION_HAS_SYMBOL_LOOKUP)
+#    include <dlfcn.h>
+#  endif
+# endif
 #endif
 
 #if defined(__OpenBSD__) || defined(__NetBSD__)
 # include <sys/param.h>
 # include <sys/sysctl.h>
+#endif
+
+#if defined(KWSYS_SYS_HAS_MACHINE_CPU_H)
+# include <machine/cpu.h>
 #endif
 
 #if defined(__DragonFly__)
@@ -110,8 +127,15 @@ typedef int siginfo_t;
 #  define KWSYS_SYSTEMINFORMATION_IMPLEMENT_FQDN
 # endif
 # if __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__-0 >= 1050
-#  include <execinfo.h>
-#  define KWSYS_SYSTEMINFORMATION_HAVE_BACKTRACE
+#  if defined(KWSYS_SYSTEMINFORMATION_HAS_BACKTRACE)
+#   include <execinfo.h>
+#   if defined(KWSYS_SYSTEMINFORMATION_HAS_CPP_DEMANGLE)
+#     include <cxxabi.h>
+#   endif
+#   if defined(KWSYS_SYSTEMINFORMATION_HAS_SYMBOL_LOOKUP)
+#     include <dlfcn.h>
+#   endif
+#  endif
 # endif
 #endif
 
@@ -126,10 +150,13 @@ typedef int siginfo_t;
 #   define KWSYS_SYSTEMINFORMATION_IMPLEMENT_FQDN
 #  endif
 # endif
-# if defined(__GNUG__)
+# if defined(KWSYS_SYSTEMINFORMATION_HAS_BACKTRACE)
 #  include <execinfo.h>
-#  if !(defined(__LSB_VERSION__) && __LSB_VERSION__ < 41)
-#   define KWSYS_SYSTEMINFORMATION_HAVE_BACKTRACE
+#  if defined(KWSYS_SYSTEMINFORMATION_HAS_CPP_DEMANGLE)
+#    include <cxxabi.h>
+#  endif
+#  if defined(KWSYS_SYSTEMINFORMATION_HAS_SYMBOL_LOOKUP)
+#    include <dlfcn.h>
 #  endif
 # endif
 # if defined(KWSYS_CXX_HAS_RLIMIT64)
@@ -198,7 +225,7 @@ typedef struct rlimit ResourceLimitType;
 #define USE_CPUID_INTRINSICS 0
 #endif
 
-#if USE_ASM_INSTRUCTIONS || USE_CPUID_INTRINSICS
+#if USE_ASM_INSTRUCTIONS || USE_CPUID_INTRINSICS || defined(KWSYS_CXX_HAS_BORLAND_ASM_CPUID)
 # define USE_CPUID 1
 #else
 # define USE_CPUID 0
@@ -220,12 +247,13 @@ static bool call_cpuid(int select, int result[4])
   return true;
 #else
   int tmp[4];
+#if defined(_MSC_VER)
   // Use SEH to determine CPUID presence
   __try {
     _asm {
 #ifdef CPUID_AWARE_COMPILER
       ; we must push/pop the registers <<CPUID>> writes to, as the
-      ; optimiser doesn't know about <<CPUID>>, and so doesn't expect
+      ; optimiser does not know about <<CPUID>>, and so does not expect
       ; these registers to change.
       push eax
       push ebx
@@ -258,7 +286,24 @@ static bool call_cpuid(int select, int result[4])
     return false;
     }
 
-  memcpy(result, tmp, sizeof(tmp));
+    memcpy(result, tmp, sizeof(tmp));
+#elif defined(KWSYS_CXX_HAS_BORLAND_ASM_CPUID)
+  unsigned int a, b, c, d;
+  __asm {
+    mov EAX, select;
+    cpuid
+    mov a, EAX;
+    mov b, EBX;
+    mov c, ECX;
+    mov d, EDX;
+  }
+
+  result[0] = a;
+  result[1] = b;
+  result[2] = c;
+  result[3] = d;
+#endif
+
   // The cpuid instruction succeeded.
   return true;
 #endif
@@ -334,6 +379,10 @@ public:
   // enable/disable stack trace signal handler.
   static
   void SetStackTraceOnError(int enable);
+
+  // get current stack
+  static
+  kwsys_stl::string GetProgramStack(int firstFrame, int wholePath);
 
   /** Run the different checks */
   void RunCPUCheck();
@@ -428,7 +477,7 @@ protected:
   int CPUCount();
   unsigned char LogicalCPUPerPhysicalCPU();
   unsigned char GetAPICId();
-  unsigned int IsHyperThreadingSupported();
+  bool IsHyperThreadingSupported();
   static LongLong GetCyclesDifference(DELAY_FUNC, unsigned int);
 
   // For Linux and Cygwin, /proc/cpuinfo formats are slightly different
@@ -452,7 +501,8 @@ protected:
   kwsys_stl::string SysCtlBuffer;
 
   // For Solaris
-  bool QuerySolarisInfo();
+  bool QuerySolarisMemory();
+  bool QuerySolarisProcessor();
   kwsys_stl::string ParseValueFromKStat(const char* arguments);
   kwsys_stl::string RunProcess(kwsys_stl::vector<const char*> args);
 
@@ -477,9 +527,11 @@ protected:
   //For AIX
   bool QueryAIXMemory();
 
+  bool QueryProcessorBySysconf();
   bool QueryProcessor();
 
   // Evaluate the memory information.
+  bool QueryMemoryBySysconf();
   bool QueryMemory();
   size_t TotalVirtualMemory;
   size_t AvailableVirtualMemory;
@@ -787,6 +839,11 @@ void SystemInformation::SetStackTraceOnError(int enable)
   SystemInformationImplementation::SetStackTraceOnError(enable);
 }
 
+kwsys_stl::string SystemInformation::GetProgramStack(int firstFrame, int wholePath)
+{
+  return SystemInformationImplementation::GetProgramStack(firstFrame, wholePath);
+}
+
 /** Run the different checks */
 void SystemInformation::RunCPUCheck()
 {
@@ -882,6 +939,12 @@ int LoadLines(
         clearerr(file);
         }
       continue;
+      }
+    char *pBuf=buf;
+    while(*pBuf)
+      {
+      if (*pBuf=='\n') *pBuf='\0';
+      pBuf+=1;
       }
     lines.push_back(buf);
     ++nRead;
@@ -1021,12 +1084,29 @@ void StacktraceSignalHandler(
 #if defined(__linux) || defined(__APPLE__)
   kwsys_ios::ostringstream oss;
   oss
+     << kwsys_ios::endl
      << "=========================================================" << kwsys_ios::endl
      << "Process id " << getpid() << " ";
   switch (sigNo)
     {
+    case SIGINT:
+      oss << "Caught SIGINT";
+      break;
+
+    case SIGTERM:
+      oss << "Caught SIGTERM";
+      break;
+
+    case SIGABRT:
+      oss << "Caught SIGABRT";
+      break;
+
     case SIGFPE:
-      oss << "Caught SIGFPE ";
+      oss
+        << "Caught SIGFPE at "
+        << (sigInfo->si_addr==0?"0x":"")
+        << sigInfo->si_addr
+        <<  " ";
       switch (sigInfo->si_code)
         {
 # if defined(FPE_INTDIV)
@@ -1074,7 +1154,11 @@ void StacktraceSignalHandler(
       break;
 
     case SIGSEGV:
-      oss << "Caught SIGSEGV ";
+      oss
+        << "Caught SIGSEGV at "
+        << (sigInfo->si_addr==0?"0x":"")
+        << sigInfo->si_addr
+        <<  " ";
       switch (sigInfo->si_code)
         {
         case SEGV_MAPERR:
@@ -1091,16 +1175,12 @@ void StacktraceSignalHandler(
         }
       break;
 
-    case SIGINT:
-      oss << "Caught SIGTERM";
-      break;
-
-    case SIGTERM:
-      oss << "Caught SIGTERM";
-      break;
-
     case SIGBUS:
-      oss << "Caught SIGBUS type ";
+      oss
+        << "Caught SIGBUS at "
+        << (sigInfo->si_addr==0?"0x":"")
+        << sigInfo->si_addr
+        <<  " ";
       switch (sigInfo->si_code)
         {
         case BUS_ADRALN:
@@ -1109,13 +1189,25 @@ void StacktraceSignalHandler(
 
 # if defined(BUS_ADRERR)
         case BUS_ADRERR:
-          oss << "non-exestent physical address";
+          oss << "nonexistent physical address";
           break;
 # endif
 
 # if defined(BUS_OBJERR)
         case BUS_OBJERR:
-          oss << "object specific hardware error";
+          oss << "object-specific hardware error";
+          break;
+# endif
+
+# if defined(BUS_MCEERR_AR)
+        case BUS_MCEERR_AR:
+          oss << "Hardware memory error consumed on a machine check; action required.";
+          break;
+# endif
+
+# if defined(BUS_MCEERR_AO)
+        case BUS_MCEERR_AO:
+          oss << "Hardware memory error detected in process but not consumed; action optional.";
           break;
 # endif
 
@@ -1126,7 +1218,11 @@ void StacktraceSignalHandler(
       break;
 
     case SIGILL:
-      oss << "Caught SIGILL ";
+      oss
+        << "Caught SIGILL at "
+        << (sigInfo->si_addr==0?"0x":"")
+        << sigInfo->si_addr
+        <<  " ";
       switch (sigInfo->si_code)
         {
         case ILL_ILLOPC:
@@ -1180,20 +1276,16 @@ void StacktraceSignalHandler(
       oss << "Caught " << sigNo << " code " << sigInfo->si_code;
       break;
     }
-  oss << kwsys_ios::endl;
-#if defined(KWSYS_SYSTEMINFORMATION_HAVE_BACKTRACE)
-  oss << "Program Stack:" << kwsys_ios::endl;
-  void *stackSymbols[128];
-  int n=backtrace(stackSymbols,128);
-  char **stackText=backtrace_symbols(stackSymbols,n);
-  for (int i=0; i<n; ++i)
-    {
-    oss << "  " << stackText[i] << kwsys_ios::endl;
-    }
-#endif
   oss
-     << "=========================================================" << kwsys_ios::endl;
+    << kwsys_ios::endl
+    << "Program Stack:" << kwsys_ios::endl
+    << SystemInformationImplementation::GetProgramStack(2,0)
+    << "=========================================================" << kwsys_ios::endl;
   kwsys_ios::cerr << oss.str() << kwsys_ios::endl;
+
+  // restore the previously registered handlers
+  // and abort
+  SystemInformationImplementation::SetStackTraceOnError(0);
   abort();
 #else
   // avoid warning C4100
@@ -1202,7 +1294,212 @@ void StacktraceSignalHandler(
 #endif
 }
 #endif
+
+#if defined(KWSYS_SYSTEMINFORMATION_HAS_BACKTRACE)
+#define safes(_arg)((_arg)?(_arg):"???")
+
+// Description:
+// A container for symbol properties. Each instance
+// must be Initialized.
+class SymbolProperties
+{
+public:
+  SymbolProperties();
+
+  // Description:
+  // The SymbolProperties instance must be initialized by
+  // passing a stack address.
+  void Initialize(void *address);
+
+  // Description:
+  // Get the symbol's stack address.
+  void *GetAddress() const { return this->Address; }
+
+  // Description:
+  // If not set paths will be removed. eg, from a binary
+  // or source file.
+  void SetReportPath(int rp){ this->ReportPath=rp; }
+
+  // Description:
+  // Set/Get the name of the binary file that the symbol
+  // is found in.
+  void SetBinary(const char *binary)
+    { this->Binary=safes(binary); }
+
+  kwsys_stl::string GetBinary() const;
+
+  // Description:
+  // Set the name of the function that the symbol is found in.
+  // If c++ demangling is supported it will be demangled.
+  void SetFunction(const char *function)
+    { this->Function=this->Demangle(function); }
+
+  kwsys_stl::string GetFunction() const
+    { return this->Function; }
+
+  // Description:
+  // Set/Get the name of the source file where the symbol
+  // is defined.
+  void SetSourceFile(const char *sourcefile)
+    { this->SourceFile=safes(sourcefile); }
+
+  kwsys_stl::string GetSourceFile() const
+    { return this->GetFileName(this->SourceFile); }
+
+  // Description:
+  // Set/Get the line number where the symbol is defined
+  void SetLineNumber(long linenumber){ this->LineNumber=linenumber; }
+  long GetLineNumber() const { return this->LineNumber; }
+
+  // Description:
+  // Set the address where the biinary image is mapped
+  // into memory.
+  void SetBinaryBaseAddress(void *address)
+    { this->BinaryBaseAddress=address; }
+
+private:
+  void *GetRealAddress() const
+    { return (void*)((char*)this->Address-(char*)this->BinaryBaseAddress); }
+
+  kwsys_stl::string GetFileName(const kwsys_stl::string &path) const;
+  kwsys_stl::string Demangle(const char *symbol) const;
+
+private:
+  kwsys_stl::string Binary;
+  void *BinaryBaseAddress;
+  void *Address;
+  kwsys_stl::string SourceFile;
+  kwsys_stl::string Function;
+  long LineNumber;
+  int ReportPath;
+};
+
+// --------------------------------------------------------------------------
+kwsys_ios::ostream &operator<<(
+      kwsys_ios::ostream &os,
+      const SymbolProperties &sp)
+{
+#if defined(KWSYS_SYSTEMINFORMATION_HAS_SYMBOL_LOOKUP)
+  os
+    << kwsys_ios::hex << sp.GetAddress() << " : "
+    << sp.GetFunction()
+    << " [(" << sp.GetBinary() << ") "
+    << sp.GetSourceFile() << ":"
+    << kwsys_ios::dec << sp.GetLineNumber() << "]";
+#elif defined(KWSYS_SYSTEMINFORMATION_HAS_BACKTRACE)
+  void *addr = sp.GetAddress();
+  char **syminfo = backtrace_symbols(&addr,1);
+  os << safes(syminfo[0]);
+  free(syminfo);
+#else
+  (void)os;
+  (void)sp;
+#endif
+  return os;
+}
+
+// --------------------------------------------------------------------------
+SymbolProperties::SymbolProperties()
+{
+  // not using an initializer list
+  // to avoid some PGI compiler warnings
+  this->SetBinary("???");
+  this->SetBinaryBaseAddress(NULL);
+  this->Address = NULL;
+  this->SetSourceFile("???");
+  this->SetFunction("???");
+  this->SetLineNumber(-1);
+  this->SetReportPath(0);
+  // avoid PGI compiler warnings
+  this->GetRealAddress();
+  this->GetFunction();
+  this->GetSourceFile();
+  this->GetLineNumber();
+}
+
+// --------------------------------------------------------------------------
+kwsys_stl::string SymbolProperties::GetFileName(const kwsys_stl::string &path) const
+{
+  kwsys_stl::string file(path);
+  if (!this->ReportPath)
+    {
+    size_t at = file.rfind("/");
+    if (at!=kwsys_stl::string::npos)
+      {
+      file = file.substr(at+1,kwsys_stl::string::npos);
+      }
+    }
+  return file;
+}
+
+// --------------------------------------------------------------------------
+kwsys_stl::string SymbolProperties::GetBinary() const
+{
+// only linux has proc fs
+#if defined(__linux__)
+  if (this->Binary=="/proc/self/exe")
+    {
+    kwsys_stl::string binary;
+    char buf[1024]={'\0'};
+    ssize_t ll=0;
+    if ((ll=readlink("/proc/self/exe",buf,1024))>0)
+      {
+      buf[ll]='\0';
+      binary=buf;
+      }
+    else
+      {
+      binary="/proc/self/exe";
+      }
+    return this->GetFileName(binary);
+    }
+#endif
+  return this->GetFileName(this->Binary);
+}
+
+// --------------------------------------------------------------------------
+kwsys_stl::string SymbolProperties::Demangle(const char *symbol) const
+{
+  kwsys_stl::string result = safes(symbol);
+#if defined(KWSYS_SYSTEMINFORMATION_HAS_CPP_DEMANGLE)
+  int status = 0;
+  size_t bufferLen = 1024;
+  char *buffer = (char*)malloc(1024);
+  char *demangledSymbol =
+    abi::__cxa_demangle(symbol, buffer, &bufferLen, &status);
+  if (!status)
+    {
+    result = demangledSymbol;
+    }
+  free(buffer);
+#else
+  (void)symbol;
+#endif
+  return result;
+}
+
+// --------------------------------------------------------------------------
+void SymbolProperties::Initialize(void *address)
+{
+  this->Address = address;
+#if defined(KWSYS_SYSTEMINFORMATION_HAS_SYMBOL_LOOKUP)
+  // first fallback option can demangle c++ functions
+  Dl_info info;
+  int ierr=dladdr(this->Address,&info);
+  if (ierr && info.dli_sname && info.dli_saddr)
+    {
+    this->SetBinary(info.dli_fname);
+    this->SetFunction(info.dli_sname);
+    }
+#else
+  // second fallback use builtin backtrace_symbols
+  // to decode the bactrace.
+#endif
+}
+#endif // don't define this class if we're not using it
+
 } // anonymous namespace
+
 
 SystemInformationImplementation::SystemInformationImplementation()
 {
@@ -1283,7 +1580,7 @@ void SystemInformationImplementation::RunCPUCheck()
 #elif defined(__APPLE__)
   this->ParseSysCtl();
 #elif defined (__SVR4) && defined (__sun)
-  this->QuerySolarisInfo();
+  this->QuerySolarisProcessor();
 #elif defined(__HAIKU__)
   this->QueryHaikuInfo();
 #elif defined(__QNX__)
@@ -1309,7 +1606,7 @@ void SystemInformationImplementation::RunMemoryCheck()
 #if defined(__APPLE__)
   this->ParseSysCtl();
 #elif defined (__SVR4) && defined (__sun)
-  this->QuerySolarisInfo();
+  this->QuerySolarisMemory();
 #elif defined(__HAIKU__)
   this->QueryHaikuInfo();
 #elif defined(__QNX__)
@@ -1446,12 +1743,12 @@ int SystemInformationImplementation::GetFullyQualifiedDomainName(
       {
       char host[NI_MAXHOST]={'\0'};
 
-      int addrlen
+      const size_t addrlen
         = (fam==AF_INET?sizeof(struct sockaddr_in):sizeof(struct sockaddr_in6));
 
       ierr=getnameinfo(
             ifa->ifa_addr,
-            addrlen,
+            static_cast<socklen_t>(addrlen),
             host,
             NI_MAXHOST,
             NULL,
@@ -2157,8 +2454,8 @@ bool SystemInformationImplementation::RetrieveCPUClockSpeed()
   if (!retrieved)
     {
     HKEY hKey = NULL;
-    LONG err = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
-      "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", 0,
+    LONG err = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+      L"HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", 0,
       KEY_READ, &hKey);
 
     if (ERROR_SUCCESS == err)
@@ -2167,7 +2464,7 @@ bool SystemInformationImplementation::RetrieveCPUClockSpeed()
       DWORD data = 0;
       DWORD dwSize = sizeof(DWORD);
 
-      err = RegQueryValueEx(hKey, "~MHz", 0,
+      err = RegQueryValueExW(hKey, L"~MHz", 0,
         &dwType, (LPBYTE) &data, &dwSize);
 
       if (ERROR_SUCCESS == err)
@@ -2441,7 +2738,9 @@ bool SystemInformationImplementation::RetrieveCPUPowerManagement()
 #endif
 }
 
-void SystemInformationStripLeadingSpace(kwsys_stl::string& str)
+#if USE_CPUID
+// Used only in USE_CPUID implementation below.
+static void SystemInformationStripLeadingSpace(kwsys_stl::string& str)
 {
   // Because some manufacturers have leading white space - we have to post-process the name.
   kwsys_stl::string::size_type pos = str.find_first_not_of(" ");
@@ -2450,6 +2749,7 @@ void SystemInformationStripLeadingSpace(kwsys_stl::string& str)
     str = str.substr(pos);
     }
 }
+#endif
 
 /** */
 bool SystemInformationImplementation::RetrieveExtendedCPUIdentity()
@@ -2862,8 +3162,17 @@ bool SystemInformationImplementation::RetreiveInformationFromCpuInfoFile()
   kwsys_stl::string cores =
                         this->ExtractValueFromCpuInfoFile(buffer,"cpu cores");
   int numberOfCoresPerCPU=atoi(cores.c_str());
-  this->NumberOfPhysicalCPU=static_cast<unsigned int>(
-    numberOfCoresPerCPU*(maxId+1));
+  if (maxId > 0)
+    {
+    this->NumberOfPhysicalCPU=static_cast<unsigned int>(
+      numberOfCoresPerCPU*(maxId+1));
+    }
+  else
+    {
+    // Linux Sparc: get cpu count
+    this->NumberOfPhysicalCPU=
+            atoi(this->ExtractValueFromCpuInfoFile(buffer,"ncpus active").c_str());
+    }
 
 #else // __CYGWIN__
   // does not have "physical id" entries, neither "cpu cores"
@@ -2885,7 +3194,19 @@ bool SystemInformationImplementation::RetreiveInformationFromCpuInfoFile()
 
   // CPU speed (checking only the first processor)
   kwsys_stl::string CPUSpeed = this->ExtractValueFromCpuInfoFile(buffer,"cpu MHz");
-  this->CPUSpeedInMHz = static_cast<float>(atof(CPUSpeed.c_str()));
+  if(!CPUSpeed.empty())
+    {
+    this->CPUSpeedInMHz = static_cast<float>(atof(CPUSpeed.c_str()));
+    }
+#ifdef __linux
+  else
+    {
+    // Linux Sparc: CPU speed is in Hz and encoded in hexadecimal
+    CPUSpeed = this->ExtractValueFromCpuInfoFile(buffer,"Cpu0ClkTck");
+    this->CPUSpeedInMHz = static_cast<float>(
+                                 strtoull(CPUSpeed.c_str(),0,16))/1000000.0f;
+    }
+#endif
 
   // Chip family
   kwsys_stl::string familyStr =
@@ -3012,7 +3333,7 @@ bool SystemInformationImplementation::RetreiveInformationFromCpuInfoFile()
   return true;
 }
 
-bool SystemInformationImplementation::QueryProcessor()
+bool SystemInformationImplementation::QueryProcessorBySysconf()
 {
 #if defined(_SC_NPROC_ONLN) && !defined(_SC_NPROCESSORS_ONLN)
 // IRIX names this slightly different
@@ -3026,13 +3347,18 @@ bool SystemInformationImplementation::QueryProcessor()
     return false;
     }
 
-  this->NumberOfPhysicalCPU = c;
+  this->NumberOfPhysicalCPU = static_cast<unsigned int>(c);
   this->NumberOfLogicalCPU = this->NumberOfPhysicalCPU;
 
   return true;
 #else
   return false;
 #endif
+}
+
+bool SystemInformationImplementation::QueryProcessor()
+{
+  return this->QueryProcessorBySysconf();
 }
 
 /**
@@ -3303,12 +3629,61 @@ SystemInformationImplementation::GetProcessId()
 }
 
 /**
+return current program stack in a string
+demangle cxx symbols if possible.
+*/
+kwsys_stl::string SystemInformationImplementation::GetProgramStack(
+      int firstFrame,
+      int wholePath)
+{
+  kwsys_stl::string programStack = ""
+#if !defined(KWSYS_SYSTEMINFORMATION_HAS_BACKTRACE)
+    "WARNING: The stack could not be examined "
+    "because backtrace is not supported.\n"
+#elif !defined(KWSYS_SYSTEMINFORMATION_HAS_DEBUG_BUILD)
+    "WARNING: The stack trace will not use advanced "
+    "capabilities because this is a release build.\n"
+#else
+# if !defined(KWSYS_SYSTEMINFORMATION_HAS_SYMBOL_LOOKUP)
+    "WARNING: Function names will not be demangled because "
+    "dladdr is not available.\n"
+# endif
+# if !defined(KWSYS_SYSTEMINFORMATION_HAS_CPP_DEMANGLE)
+    "WARNING: Function names will not be demangled "
+    "because cxxabi is not available.\n"
+# endif
+#endif
+    ;
+
+  kwsys_ios::ostringstream oss;
+#if defined(KWSYS_SYSTEMINFORMATION_HAS_BACKTRACE)
+  void *stackSymbols[256];
+  int nFrames=backtrace(stackSymbols,256);
+  for (int i=firstFrame; i<nFrames; ++i)
+    {
+    SymbolProperties symProps;
+    symProps.SetReportPath(wholePath);
+    symProps.Initialize(stackSymbols[i]);
+    oss << symProps << kwsys_ios::endl;
+    }
+#else
+  (void)firstFrame;
+  (void)wholePath;
+#endif
+  programStack += oss.str();
+
+  return programStack;
+}
+
+
+/**
 when set print stack trace in response to common signals.
 */
 void SystemInformationImplementation::SetStackTraceOnError(int enable)
 {
 #if !defined(_WIN32) && !defined(__MINGW32__) && !defined(__CYGWIN__)
   static int saOrigValid=0;
+  static struct sigaction saABRTOrig;
   static struct sigaction saSEGVOrig;
   static struct sigaction saTERMOrig;
   static struct sigaction saINTOrig;
@@ -3316,9 +3691,11 @@ void SystemInformationImplementation::SetStackTraceOnError(int enable)
   static struct sigaction saBUSOrig;
   static struct sigaction saFPEOrig;
 
+
   if (enable && !saOrigValid)
     {
     // save the current actions
+    sigaction(SIGABRT,0,&saABRTOrig);
     sigaction(SIGSEGV,0,&saSEGVOrig);
     sigaction(SIGTERM,0,&saTERMOrig);
     sigaction(SIGINT,0,&saINTOrig);
@@ -3332,9 +3709,10 @@ void SystemInformationImplementation::SetStackTraceOnError(int enable)
     // install ours
     struct sigaction sa;
     sa.sa_sigaction=(SigAction)StacktraceSignalHandler;
-    sa.sa_flags=SA_SIGINFO|SA_RESTART;
+    sa.sa_flags=SA_SIGINFO|SA_RESTART|SA_RESETHAND;
     sigemptyset(&sa.sa_mask);
 
+    sigaction(SIGABRT,&sa,0);
     sigaction(SIGSEGV,&sa,0);
     sigaction(SIGTERM,&sa,0);
     sigaction(SIGINT,&sa,0);
@@ -3346,6 +3724,7 @@ void SystemInformationImplementation::SetStackTraceOnError(int enable)
   if (!enable && saOrigValid)
     {
     // restore previous actions
+    sigaction(SIGABRT,&saABRTOrig,0);
     sigaction(SIGSEGV,&saSEGVOrig,0);
     sigaction(SIGTERM,&saTERMOrig,0);
     sigaction(SIGINT,&saINTOrig,0);
@@ -3454,7 +3833,7 @@ bool SystemInformationImplementation::QueryLinuxMemory()
     bool have[6] = { false, false, false, false, false, false };
     unsigned long value[6];
     int count = 0;
-    while(fgets(buffer, sizeof(buffer), fd))
+    while(fgets(buffer, static_cast<int>(sizeof(buffer)), fd))
       {
       for(int i=0; i < 6; ++i)
         {
@@ -3487,7 +3866,8 @@ bool SystemInformationImplementation::QueryLinuxMemory()
     unsigned long temp;
     unsigned long cachedMem;
     unsigned long buffersMem;
-    char *r=fgets(buffer, sizeof(buffer), fd); // Skip "total: used:..."
+    // Skip "total: used:..."
+    char *r=fgets(buffer, static_cast<int>(sizeof(buffer)), fd);
     int status=0;
     if(r==buffer)
       {
@@ -3555,8 +3935,7 @@ bool SystemInformationImplementation::QueryAIXMemory()
 #endif
 }
 
-/** Query for the memory status */
-bool SystemInformationImplementation::QueryMemory()
+bool SystemInformationImplementation::QueryMemoryBySysconf()
 {
 #if defined(_SC_PHYS_PAGES) && defined(_SC_PAGESIZE)
   // Assume the mmap() granularity as returned by _SC_PAGESIZE is also
@@ -3591,6 +3970,12 @@ bool SystemInformationImplementation::QueryMemory()
 #else
   return false;
 #endif
+}
+
+/** Query for the memory status */
+bool SystemInformationImplementation::QueryMemory()
+{
+  return this->QueryMemoryBySysconf();
 }
 
 /** */
@@ -3725,8 +4110,13 @@ unsigned char SystemInformationImplementation::LogicalCPUPerPhysicalCPU(void)
 
 
 /** Works only for windows */
-unsigned int SystemInformationImplementation::IsHyperThreadingSupported()
+bool SystemInformationImplementation::IsHyperThreadingSupported()
 {
+  if (this->Features.ExtendedFeatures.SupportsHyperthreading)
+    {
+    return true;
+    }
+
 #if USE_CPUID
   int Regs[4] = { 0, 0, 0, 0 },
              VendorId[4] = { 0, 0, 0, 0 };
@@ -3744,13 +4134,15 @@ unsigned int SystemInformationImplementation::IsHyperThreadingSupported()
 
   if (((Regs[0] & FAMILY_ID) == PENTIUM4_ID) || (Regs[0] & EXT_FAMILY_ID))
     {
-    if (VendorId[1] == 'uneG')
+    if (VendorId[1] == 0x756e6547) // 'uneG'
       {
-      if (VendorId[3] == 'Ieni')
+      if (VendorId[3] == 0x49656e69) // 'Ieni'
         {
-        if (VendorId[2] == 'letn')
+        if (VendorId[2] == 0x6c65746e) // 'letn'
           {
-          return(Regs[3] & HT_BIT);    // Genuine Intel with hyper-Threading technology
+          // Genuine Intel with hyper-Threading technology
+          this->Features.ExtendedFeatures.SupportsHyperthreading = ((Regs[3] & HT_BIT) != 0);
+          return this->Features.ExtendedFeatures.SupportsHyperthreading;
           }
         }
       }
@@ -4000,6 +4392,81 @@ bool SystemInformationImplementation::ParseSysCtl()
     len = sizeof(value);
     err = sysctlbyname("machdep.cpu.model", &value, &len, NULL, 0);
     this->ChipID.Model = static_cast< int >( value );
+
+    // Chip Stepping
+    len = sizeof(value);
+    value = 0;
+    err = sysctlbyname("machdep.cpu.stepping", &value, &len, NULL, 0);
+    if (!err)
+      {
+      this->ChipID.Revision = static_cast< int >( value );
+      }
+
+    // feature string
+    char *buf = 0;
+    size_t allocSize = 128;
+
+    err = 0;
+    len = 0;
+
+    // sysctlbyname() will return with err==0 && len==0 if the buffer is too small
+    while (err == 0 && len == 0)
+      {
+      delete[] buf;
+      allocSize *= 2;
+      buf = new char[allocSize];
+      if (!buf)
+        {
+        break;
+        }
+      buf[0] = ' ';
+      len = allocSize - 2; // keep space for leading and trailing space
+      err = sysctlbyname("machdep.cpu.features", buf + 1, &len, NULL, 0);
+      }
+    if (!err && buf && len)
+      {
+      // now we can match every flags as space + flag + space
+      buf[len + 1] = ' ';
+      kwsys_stl::string cpuflags(buf, len + 2);
+
+      if ((cpuflags.find(" FPU ")!=kwsys_stl::string::npos))
+        {
+        this->Features.HasFPU = true;
+        }
+      if ((cpuflags.find(" TSC ")!=kwsys_stl::string::npos))
+        {
+        this->Features.HasTSC = true;
+        }
+      if ((cpuflags.find(" MMX ")!=kwsys_stl::string::npos))
+        {
+        this->Features.HasMMX = true;
+        }
+      if ((cpuflags.find(" SSE ")!=kwsys_stl::string::npos))
+        {
+        this->Features.HasSSE = true;
+        }
+      if ((cpuflags.find(" SSE2 ")!=kwsys_stl::string::npos))
+        {
+        this->Features.HasSSE2 = true;
+        }
+      if ((cpuflags.find(" APIC ")!=kwsys_stl::string::npos))
+        {
+        this->Features.HasAPIC = true;
+        }
+      if ((cpuflags.find(" CMOV ")!=kwsys_stl::string::npos))
+        {
+        this->Features.HasCMOV = true;
+        }
+      if ((cpuflags.find(" MTRR ")!=kwsys_stl::string::npos))
+        {
+        this->Features.HasMTRR = true;
+        }
+      if ((cpuflags.find(" ACPI ")!=kwsys_stl::string::npos))
+        {
+        this->Features.HasACPI = true;
+        }
+      }
+    delete[] buf;
     }
 
   // brand string
@@ -4059,13 +4526,12 @@ kwsys_stl::string SystemInformationImplementation::RunProcess(kwsys_stl::vector<
   char* data = NULL;
   int length;
   double timeout = 255;
+  int pipe; // pipe id as returned by kwsysProcess_WaitForData()
 
-  while(kwsysProcess_WaitForData(gp,&data,&length,&timeout)) // wait for 1s
+  while( ( pipe = kwsysProcess_WaitForData(gp,&data,&length,&timeout),
+           (pipe == kwsysProcess_Pipe_STDOUT || pipe == kwsysProcess_Pipe_STDERR) ) ) // wait for 1s
     {
-    for(int i=0;i<length;i++)
-      {
-      buffer += data[i];
-      }
+      buffer.append(data, length);
     }
   kwsysProcess_WaitForExit(gp, 0);
 
@@ -4173,16 +4639,40 @@ kwsys_stl::string SystemInformationImplementation::ParseValueFromKStat(const cha
   return value;
 }
 
-
 /** Querying for system information from Solaris */
-bool SystemInformationImplementation::QuerySolarisInfo()
+bool SystemInformationImplementation::QuerySolarisMemory()
 {
-  // Parse values
-  this->NumberOfPhysicalCPU = static_cast<unsigned int>(
-    atoi(this->ParseValueFromKStat("-n syste_misc -s ncpus").c_str()));
-  this->NumberOfLogicalCPU = this->NumberOfPhysicalCPU;
-  this->Features.ExtendedFeatures.LogicalProcessorsPerPhysical = 1;
+#if defined (__SVR4) && defined (__sun)
+  // Solaris allows querying this value by sysconf, but if this is
+  // a 32 bit process on a 64 bit host the returned memory will be
+  // limited to 4GiB. So if this is a 32 bit process or if the sysconf
+  // method fails use the kstat interface.
+#if SIZEOF_VOID_P == 8
+  if (this->QueryMemoryBySysconf())
+    {
+    return true;
+    }
+#endif
 
+  char* tail;
+  unsigned long totalMemory =
+       strtoul(this->ParseValueFromKStat("-s physmem").c_str(),&tail,0);
+  this->TotalPhysicalMemory = totalMemory/128;
+
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool SystemInformationImplementation::QuerySolarisProcessor()
+{
+  if (!this->QueryProcessorBySysconf())
+    {
+    return false;
+    }
+
+  // Parse values
   this->CPUSpeedInMHz = static_cast<float>(atoi(this->ParseValueFromKStat("-s clock_MHz").c_str()));
 
   // Chip family
@@ -4199,20 +4689,6 @@ bool SystemInformationImplementation::QuerySolarisInfo()
     this->FindManufacturer();
     }
 
-  // Cache size
-  this->Features.L1CacheSize = 0;
-  this->Features.L2CacheSize = 0;
-
-  char* tail;
-  unsigned long totalMemory =
-       strtoul(this->ParseValueFromKStat("-s physmem").c_str(),&tail,0);
-  this->TotalPhysicalMemory = totalMemory/128;
-
-  // Undefined values (for now at least)
-  this->TotalVirtualMemory = 0;
-  this->AvailablePhysicalMemory = 0;
-  this->AvailableVirtualMemory = 0;
-
   return true;
 }
 
@@ -4222,11 +4698,28 @@ bool SystemInformationImplementation::QueryHaikuInfo()
 {
 #if defined(__HAIKU__)
 
+  // CPU count
   system_info info;
   get_system_info(&info);
-
   this->NumberOfPhysicalCPU = info.cpu_count;
-  this->CPUSpeedInMHz = info.cpu_clock_speed / 1000000.0F;
+
+  // CPU speed
+  uint32 topologyNodeCount = 0;
+  cpu_topology_node_info* topology = 0;
+  get_cpu_topology_info(0, &topologyNodeCount);
+  if (topologyNodeCount != 0)
+    topology = new cpu_topology_node_info[topologyNodeCount];
+  get_cpu_topology_info(topology, &topologyNodeCount);
+
+  for (uint32 i = 0; i < topologyNodeCount; i++) {
+    if (topology[i].type == B_TOPOLOGY_CORE) {
+      this->CPUSpeedInMHz = topology[i].data.core.default_frequency /
+        1000000.0f;
+      break;
+    }
+  }
+
+  delete[] topology;
 
   // Physical Memory
   this->TotalPhysicalMemory = (info.max_pages * B_PAGE_SIZE) / (1024 * 1024) ;
@@ -4424,6 +4917,45 @@ bool SystemInformationImplementation::QueryBSDProcessor()
   this->CPUSpeedInMHz = (float) k;
 #endif
 
+#if defined(CPU_SSE)
+  ctrl[0] = CTL_MACHDEP;
+  ctrl[1] = CPU_SSE;
+
+  if (sysctl(ctrl, 2, &k, &sz, NULL, 0) != 0)
+    {
+    return false;
+    }
+
+  this->Features.HasSSE = (k > 0);
+#endif
+
+#if defined(CPU_SSE2)
+  ctrl[0] = CTL_MACHDEP;
+  ctrl[1] = CPU_SSE2;
+
+  if (sysctl(ctrl, 2, &k, &sz, NULL, 0) != 0)
+    {
+    return false;
+    }
+
+  this->Features.HasSSE2 = (k > 0);
+#endif
+
+#if defined(CPU_CPUVENDOR)
+  ctrl[0] = CTL_MACHDEP;
+  ctrl[1] = CPU_CPUVENDOR;
+  char vbuf[25];
+  ::memset(vbuf, 0, sizeof(vbuf));
+  sz = sizeof(vbuf) - 1;
+  if (sysctl(ctrl, 2, vbuf, &sz, NULL, 0) != 0)
+    {
+    return false;
+    }
+
+  this->ChipID.Vendor = vbuf;
+  this->FindManufacturer();
+#endif
+
   return true;
 #else
   return false;
@@ -4497,7 +5029,12 @@ bool SystemInformationImplementation::QueryHPUXProcessor()
     case CPU_PA_RISC2_0:
       this->ChipID.Vendor = "Hewlett-Packard";
       this->ChipID.Family = 0x200;
+#  ifdef CPU_HP_INTEL_EM_1_0
+    case CPU_HP_INTEL_EM_1_0:
+#  endif
+#  ifdef CPU_IA64_ARCHREV_0
     case CPU_IA64_ARCHREV_0:
+#  endif
       this->ChipID.Vendor = "GenuineIntel";
       this->Features.HasIA64 = true;
       break;
@@ -4523,19 +5060,19 @@ bool SystemInformationImplementation::QueryOSInformation()
 
   this->OSName = "Windows";
 
-  OSVERSIONINFOEX osvi;
+  OSVERSIONINFOEXW osvi;
   BOOL bIsWindows64Bit;
   BOOL bOsVersionInfoEx;
   char operatingSystem[256];
 
   // Try calling GetVersionEx using the OSVERSIONINFOEX structure.
-  ZeroMemory (&osvi, sizeof (OSVERSIONINFOEX));
-  osvi.dwOSVersionInfoSize = sizeof (OSVERSIONINFOEX);
-  bOsVersionInfoEx = GetVersionEx ((OSVERSIONINFO *) &osvi);
+  ZeroMemory (&osvi, sizeof (OSVERSIONINFOEXW));
+  osvi.dwOSVersionInfoSize = sizeof (OSVERSIONINFOEXW);
+  bOsVersionInfoEx = GetVersionExW ((OSVERSIONINFOW*)&osvi);
   if (!bOsVersionInfoEx)
     {
-    osvi.dwOSVersionInfoSize = sizeof (OSVERSIONINFO);
-    if (!GetVersionEx ((OSVERSIONINFO *) &osvi))
+    osvi.dwOSVersionInfoSize = sizeof (OSVERSIONINFOW);
+    if (!GetVersionExW((OSVERSIONINFOW*)&osvi))
       {
       return false;
       }
@@ -4621,19 +5158,19 @@ bool SystemInformationImplementation::QueryOSInformation()
 #endif        // VER_NT_WORKSTATION
         {
         HKEY hKey;
-        char szProductType[80];
+        wchar_t szProductType[80];
         DWORD dwBufLen;
 
         // Query the registry to retrieve information.
-        RegOpenKeyEx (HKEY_LOCAL_MACHINE, "SYSTEM\\CurrentControlSet\\Control\\ProductOptions", 0, KEY_QUERY_VALUE, &hKey);
-        RegQueryValueEx (hKey, "ProductType", NULL, NULL, (LPBYTE) szProductType, &dwBufLen);
+        RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\ProductOptions", 0, KEY_QUERY_VALUE, &hKey);
+        RegQueryValueExW(hKey, L"ProductType", NULL, NULL, (LPBYTE) szProductType, &dwBufLen);
         RegCloseKey (hKey);
 
-        if (lstrcmpi ("WINNT", szProductType) == 0)
+        if (lstrcmpiW(L"WINNT", szProductType) == 0)
           {
           this->OSRelease += " Professional";
           }
-        if (lstrcmpi ("LANMANNT", szProductType) == 0)
+        if (lstrcmpiW(L"LANMANNT", szProductType) == 0)
           {
           // Decide between Windows 2000 Advanced Server and Windows .NET Enterprise Server.
           if (osvi.dwMajorVersion == 5 && osvi.dwMinorVersion == 1)
@@ -4645,7 +5182,7 @@ bool SystemInformationImplementation::QueryOSInformation()
             this->OSRelease += " Server";
             }
           }
-        if (lstrcmpi ("SERVERNT", szProductType) == 0)
+        if (lstrcmpiW(L"SERVERNT", szProductType) == 0)
           {
           // Decide between Windows 2000 Advanced Server and Windows .NET Enterprise Server.
           if (osvi.dwMajorVersion == 5 && osvi.dwMinorVersion == 1)
@@ -4678,7 +5215,7 @@ bool SystemInformationImplementation::QueryOSInformation()
         LPFNPROC DLLProc;
 
         // Load the Kernel32 DLL.
-        hKernelDLL = LoadLibrary ("kernel32");
+        hKernelDLL = LoadLibraryW(L"kernel32");
         if (hKernelDLL != NULL)  {
           // Only XP and .NET Server support IsWOW64Process so... Load dynamically!
           DLLProc = (LPFNPROC) GetProcAddress (hKernelDLL, "IsWow64Process");

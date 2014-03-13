@@ -1,17 +1,28 @@
-# - Check if the function exists.
+#.rst:
+# CheckLibraryExists
+# ------------------
+#
+# Check if the function exists.
+#
 # CHECK_LIBRARY_EXISTS (LIBRARY FUNCTION LOCATION VARIABLE)
 #
-#  LIBRARY  - the name of the library you are looking for
-#  FUNCTION - the name of the function
-#  LOCATION - location where the library should be found
-#  VARIABLE - variable to store the result
+# ::
 #
-# The following variables may be set before calling this macro to
-# modify the way the check is run:
+#   LIBRARY  - the name of the library you are looking for
+#   FUNCTION - the name of the function
+#   LOCATION - location where the library should be found
+#   VARIABLE - variable to store the result
 #
-#  CMAKE_REQUIRED_FLAGS = string of compile command line flags
-#  CMAKE_REQUIRED_DEFINITIONS = list of macros to define (-DFOO=bar)
-#  CMAKE_REQUIRED_LIBRARIES = list of libraries to link
+#
+#
+# The following variables may be set before calling this macro to modify
+# the way the check is run:
+#
+# ::
+#
+#   CMAKE_REQUIRED_FLAGS = string of compile command line flags
+#   CMAKE_REQUIRED_DEFINITIONS = list of macros to define (-DFOO=bar)
+#   CMAKE_REQUIRED_LIBRARIES = list of libraries to link
 
 #=============================================================================
 # Copyright 2002-2009 Kitware, Inc.
@@ -26,7 +37,6 @@
 # (To distribute this file outside of CMake, substitute the full
 #  License text for the above reference.)
 
-include("${CMAKE_CURRENT_LIST_DIR}/CMakeExpandImportedTargets.cmake")
 
 
 macro(CHECK_LIBRARY_EXISTS LIBRARY FUNCTION LOCATION VARIABLE)
@@ -36,19 +46,17 @@ macro(CHECK_LIBRARY_EXISTS LIBRARY FUNCTION LOCATION VARIABLE)
     message(STATUS "Looking for ${FUNCTION} in ${LIBRARY}")
     set(CHECK_LIBRARY_EXISTS_LIBRARIES ${LIBRARY})
     if(CMAKE_REQUIRED_LIBRARIES)
-      # this one translates potentially used imported library targets to their files on disk
-      CMAKE_EXPAND_IMPORTED_TARGETS(_ADJUSTED_CMAKE_REQUIRED_LIBRARIES  LIBRARIES  ${CMAKE_REQUIRED_LIBRARIES} CONFIGURATION "${CMAKE_TRY_COMPILE_CONFIGURATION}")
       set(CHECK_LIBRARY_EXISTS_LIBRARIES
-        ${CHECK_LIBRARY_EXISTS_LIBRARIES} ${_ADJUSTED_CMAKE_REQUIRED_LIBRARIES})
+        ${CHECK_LIBRARY_EXISTS_LIBRARIES} ${CMAKE_REQUIRED_LIBRARIES})
     endif()
     try_compile(${VARIABLE}
       ${CMAKE_BINARY_DIR}
       ${CMAKE_ROOT}/Modules/CheckFunctionExists.c
       COMPILE_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS}
+      LINK_LIBRARIES ${CHECK_LIBRARY_EXISTS_LIBRARIES}
       CMAKE_FLAGS
       -DCOMPILE_DEFINITIONS:STRING=${MACRO_CHECK_LIBRARY_EXISTS_DEFINITION}
       -DLINK_DIRECTORIES:STRING=${LOCATION}
-      "-DLINK_LIBRARIES:STRING=${CHECK_LIBRARY_EXISTS_LIBRARIES}"
       OUTPUT_VARIABLE OUTPUT)
 
     if(${VARIABLE})

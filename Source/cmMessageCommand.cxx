@@ -52,6 +52,23 @@ bool cmMessageCommand
     status = true;
     ++i;
     }
+  else if (*i == "DEPRECATION")
+    {
+    if (this->Makefile->IsOn("CMAKE_ERROR_DEPRECATED"))
+      {
+      fatal = true;
+      type = cmake::DEPRECATION_ERROR;
+      }
+    else if (this->Makefile->IsOn("CMAKE_WARN_DEPRECATED"))
+      {
+      type = cmake::DEPRECATION_WARNING;
+      }
+    else
+      {
+      return true;
+      }
+    ++i;
+    }
 
   for(;i != args.end(); ++i)
     {
@@ -60,7 +77,7 @@ bool cmMessageCommand
 
   if (type != cmake::MESSAGE)
     {
-    this->Makefile->IssueMessage(type, message.c_str());
+    this->Makefile->IssueMessage(type, message);
     }
   else
     {

@@ -14,6 +14,7 @@
 #include "cmGeneratorExpression.h"
 
 #include <cmsys/RegularExpression.hxx>
+#include <cmsys/FStream.hxx>
 
 void cmDependInformation::AddDependencies(cmDependInformation* info)
 {
@@ -73,7 +74,7 @@ void cmMakeDepend::SetMakefile(cmMakefile* makefile)
                       cmGeneratorExpression::StripAllGeneratorExpressions);
 
     std::vector<std::string> includes;
-    cmSystemTools::ExpandListArgument(incDirs.c_str(), includes);
+    cmSystemTools::ExpandListArgument(incDirs, includes);
 
     for(std::vector<std::string>::const_iterator j = includes.begin();
         j != includes.end(); ++j)
@@ -92,7 +93,7 @@ void cmMakeDepend::SetMakefile(cmMakefile* makefile)
     it != orderedAndUniqueIncludes.end();
     ++it)
     {
-    this->AddSearchPath(it->c_str());
+    this->AddSearchPath(*it);
     }
 }
 
@@ -164,7 +165,7 @@ void cmMakeDepend::GenerateDependInformation(cmDependInformation* info)
     {
     // Try to find the file amongst the sources
     cmSourceFile *srcFile = this->Makefile->GetSource
-      (cmSystemTools::GetFilenameWithoutExtension(path).c_str());
+      (cmSystemTools::GetFilenameWithoutExtension(path));
     if (srcFile)
       {
       if (srcFile->GetFullPath() == path)
@@ -217,7 +218,7 @@ void cmMakeDepend::DependWalk(cmDependInformation* info)
 {
   cmsys::RegularExpression includeLine
     ("^[ \t]*#[ \t]*include[ \t]*[<\"]([^\">]+)[\">]");
-  std::ifstream fin(info->FullPath.c_str());
+  cmsys::ifstream fin(info->FullPath.c_str());
   if(!fin)
     {
     cmSystemTools::Error("Cannot open ", info->FullPath.c_str());
@@ -280,7 +281,7 @@ cmDependInformation* cmMakeDepend::GetDependInformation(const char* file,
     // Didn't find an instance.  Create a new one and save it.
     cmDependInformation* info = new cmDependInformation;
     info->FullPath = fullPath;
-    info->PathOnly = cmSystemTools::GetFilenamePath(fullPath.c_str());
+    info->PathOnly = cmSystemTools::GetFilenamePath(fullPath);
     info->IncludeName = file;
     this->DependInformationMap[fullPath] = info;
     return info;
@@ -358,7 +359,7 @@ std::string cmMakeDepend::FullPath(const char* fname, const char *extraPath)
 }
 
 // Add a directory to the search path
-void cmMakeDepend::AddSearchPath(const char* path)
+void cmMakeDepend::AddSearchPath(const std::string& path)
 {
   this->IncludeDirectories.push_back(path);
 }

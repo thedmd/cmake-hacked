@@ -3,8 +3,9 @@ set(CMAKE_EXECUTABLE "${CMake_BIN_DIR}/cmake")
 
 macro(AddCMakeTest TestName PreArgs)
   configure_file("${CMAKE_CURRENT_SOURCE_DIR}/${TestName}Test.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/${TestName}Test.cmake" @ONLY IMMEDIATE)
-  add_test(CMake.${TestName} ${CMAKE_EXECUTABLE} ${PreArgs}
+    "${CMAKE_CURRENT_BINARY_DIR}/${TestName}Test.cmake" @ONLY)
+  add_test(NAME CMake.${TestName}
+    COMMAND ${CMAKE_EXECUTABLE} ${PreArgs}
     -P "${CMAKE_CURRENT_BINARY_DIR}/${TestName}Test.cmake" ${ARGN})
 endmacro()
 
@@ -28,13 +29,18 @@ AddCMakeTest(String "")
 AddCMakeTest(Math "")
 AddCMakeTest(CMakeMinimumRequired "")
 AddCMakeTest(CompilerIdVendor "")
-AddCMakeTest(ProcessorCount "")
+AddCMakeTest(ProcessorCount "-DKWSYS_TEST_EXE=$<TARGET_FILE:cmsysTestsCxx>")
 AddCMakeTest(PushCheckState "")
 AddCMakeTest(While "")
+AddCMakeTest(CMakeHostSystemInformation "")
 
 AddCMakeTest(FileDownload "")
 set_property(TEST CMake.FileDownload PROPERTY
   PASS_REGULAR_EXPRESSION "file already exists with expected MD5 sum"
+  )
+AddCMakeTest(FileDownloadBadHash "")
+set_property(TEST CMake.FileDownloadBadHash PROPERTY
+  WILL_FAIL TRUE
   )
 
 AddCMakeTest(FileUpload "")
@@ -52,6 +58,15 @@ set(GetPrerequisites_PreArgs
   "-DCTEST_CONFIGURATION_TYPE:STRING=\\\${CTEST_CONFIGURATION_TYPE}"
   )
 AddCMakeTest(GetPrerequisites "${GetPrerequisites_PreArgs}")
+
+if(GIT_EXECUTABLE)
+  set(PolicyCheck_PreArgs
+    "-DCMake_BINARY_DIR:PATH=${CMake_BINARY_DIR}"
+    "-DCMake_SOURCE_DIR:PATH=${CMake_SOURCE_DIR}"
+    "-DGIT_EXECUTABLE:STRING=${GIT_EXECUTABLE}"
+    )
+  AddCMakeTest(PolicyCheck "${PolicyCheck_PreArgs}")
+endif()
 
 # Run CheckSourceTree as the very last test in the CMake/CTest/CPack test
 # suite. It detects if any changes have been made to the CMake source tree

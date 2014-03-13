@@ -18,7 +18,7 @@
 
 //----------------------------------------------------------------------------
 cmCustomCommandGenerator::cmCustomCommandGenerator(
-  cmCustomCommand const& cc, const char* config, cmMakefile* mf):
+  cmCustomCommand const& cc, const std::string& config, cmMakefile* mf):
   CC(cc), Config(config), Makefile(mf), LG(mf->GetLocalGenerator()),
   OldStyle(cc.GetEscapeOldStyle()), MakeVars(cc.GetEscapeAllowMakeVars()),
   GE(new cmGeneratorExpression(cc.GetBacktrace()))
@@ -41,7 +41,7 @@ unsigned int cmCustomCommandGenerator::GetNumberOfCommands() const
 std::string cmCustomCommandGenerator::GetCommand(unsigned int c) const
 {
   std::string const& argv0 = this->CC.GetCommandLines()[c][0];
-  cmTarget* target = this->Makefile->FindTargetToUse(argv0.c_str());
+  cmTarget* target = this->Makefile->FindTargetToUse(argv0);
   if(target && target->GetType() == cmTarget::EXECUTABLE &&
      (target->IsImported() || !this->Makefile->IsOn("CMAKE_CROSSCOMPILING")))
     {
@@ -63,11 +63,35 @@ cmCustomCommandGenerator
     cmd += " ";
     if(this->OldStyle)
       {
-      cmd += this->LG->EscapeForShellOldStyle(arg.c_str());
+      cmd += this->LG->EscapeForShellOldStyle(arg);
       }
     else
       {
-      cmd += this->LG->EscapeForShell(arg.c_str(), this->MakeVars);
+      cmd += this->LG->EscapeForShell(arg, this->MakeVars);
       }
     }
+}
+
+//----------------------------------------------------------------------------
+const char* cmCustomCommandGenerator::GetComment() const
+{
+  return this->CC.GetComment();
+}
+
+//----------------------------------------------------------------------------
+std::string cmCustomCommandGenerator::GetWorkingDirectory() const
+{
+  return this->CC.GetWorkingDirectory();
+}
+
+//----------------------------------------------------------------------------
+std::vector<std::string> const& cmCustomCommandGenerator::GetOutputs() const
+{
+  return this->CC.GetOutputs();
+}
+
+//----------------------------------------------------------------------------
+std::vector<std::string> const& cmCustomCommandGenerator::GetDepends() const
+{
+  return this->CC.GetDepends();
 }

@@ -18,6 +18,7 @@
 #include "cmGlobalGenerator.h"
 #include <cmsys/Process.h>
 #include "cmCTestTestHandler.h"
+#include "cmCacheManager.h"
 
 //----------------------------------------------------------------------
 cmCTestBuildAndTestHandler::cmCTestBuildAndTestHandler()
@@ -59,13 +60,19 @@ int cmCTestBuildAndTestHandler::RunCMake(std::string* outstring,
 {
   unsigned int k;
   std::vector<std::string> args;
-  args.push_back(this->CTest->GetCMakeExecutable());
+  args.push_back(cmSystemTools::GetCMakeCommand());
   args.push_back(this->SourceDir);
   if(this->BuildGenerator.size())
     {
     std::string generator = "-G";
     generator += this->BuildGenerator;
     args.push_back(generator);
+    }
+  if(this->BuildGeneratorToolset.size())
+    {
+    std::string toolset = "-T";
+    toolset += this->BuildGeneratorToolset;
+    args.push_back(toolset);
     }
 
   const char* config = 0;
@@ -178,14 +185,14 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
   cmOStringStream out;
 
   // if the generator and make program are not specified then it is an error
-  if (!this->BuildGenerator.size() || !this->BuildMakeProgram.size())
+  if (!this->BuildGenerator.size())
     {
     if(outstring)
       {
       *outstring =
-        "--build-and-test requires that both the generator and makeprogram "
-        "be provided using the --build-generator and --build-makeprogram "
-        "command line options. ";
+        "--build-and-test requires that the generator "
+        "be provided using the --build-generator "
+        "command line option. ";
       }
     return 1;
     }
@@ -229,10 +236,18 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
   // should we cmake?
   cmake cm;
   cm.SetProgressCallback(CMakeProgressCallback, &cmakeOutString);
-  cm.SetGlobalGenerator(cm.CreateGlobalGenerator(
-      this->BuildGenerator.c_str()));
 
-  if(!this->BuildNoCMake)
+  if(this->BuildNoCMake)
+    {
+    // Make the generator available for the Build call below.
+    cm.SetGlobalGenerator(cm.CreateGlobalGenerator(
+                            this->BuildGenerator));
+    cm.SetGeneratorToolset(this->BuildGeneratorToolset);
+
+    // Load the cache to make CMAKE_MAKE_PROGRAM available.
+    cm.GetCacheManager()->LoadCache(this->BinaryDir);
+    }
+  else
     {
     // do the cmake step, no timeout here since it is not a sub process
     if (this->RunCMake(outstring,out,cmakeOutString,cwd,&cm))
@@ -280,9 +295,9 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
       config = "Debug";
       }
     int retVal = cm.GetGlobalGenerator()->Build(
-      this->SourceDir.c_str(), this->BinaryDir.c_str(),
-      this->BuildProject.c_str(), tarIt->c_str(),
-      &output, this->BuildMakeProgram.c_str(),
+      this->SourceDir, this->BinaryDir,
+      this->BuildProject, *tarIt,
+      &output, this->BuildMakeProgram,
       config,
       !this->BuildNoClean,
       false, remainingTime);
@@ -466,10 +481,16 @@ int cmCTestBuildAndTestHandler::ProcessCommandLineArguments(
     idx++;
     this->Timeout = atof(allArgs[idx].c_str());
     }
-  if(currentArg.find("--build-generator",0) == 0 && idx < allArgs.size() - 1)
+  if(currentArg == "--build-generator" && idx < allArgs.size() - 1)
     {
     idx++;
     this->BuildGenerator = allArgs[idx];
+    }
+  if(currentArg == "--build-generator-toolset" &&
+     idx < allArgs.size() - 1)
+    {
+    idx++;
+    this->BuildGeneratorToolset = allArgs[idx];
     }
   if(currentArg.find("--build-project",0) == 0 && idx < allArgs.size() - 1)
     {
@@ -492,23 +513,14 @@ int cmCTestBuildAndTestHandler::ProcessCommandLineArguments(
     {
     this->BuildNoClean = true;
     }
-  if(currentArg.find("--build-options",0) == 0 && idx < allArgs.size() - 1)
+  if(currentArg.find("--build-options",0) == 0)
     {
-    ++idx;
-    bool done = false;
-    while(idx < allArgs.size() && !done)
+    while(idx+1 < allArgs.size() &&
+          allArgs[idx+1] != "--build-target" &&
+          allArgs[idx+1] != "--test-command")
       {
+      ++idx;
       this->BuildOptions.push_back(allArgs[idx]);
-      if(idx+1 < allArgs.size()
-         && (allArgs[idx+1] == "--build-target" ||
-             allArgs[idx+1] == "--test-command"))
-        {
-        done = true;
-        }
-      else
-        {
-        ++idx;
-        }
       }
     }
   if(currentArg.find("--test-command",0) == 0 && idx < allArgs.size() - 1)

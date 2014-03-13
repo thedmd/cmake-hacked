@@ -85,6 +85,9 @@
 # written.
 
 CMAKE_MINIMUM_REQUIRED(VERSION 2.6.3 FATAL_ERROR)
+IF(POLICY CMP0025)
+  CMAKE_POLICY(SET CMP0025 NEW)
+ENDIF()
 
 #-----------------------------------------------------------------------------
 # If a namespace is not specified, use "kwsys" and enable testing.
@@ -112,6 +115,7 @@ IF(KWSYS_STANDALONE OR CMake_SOURCE_DIR)
   SET(KWSYS_USE_Base64 1)
   SET(KWSYS_USE_Directory 1)
   SET(KWSYS_USE_DynamicLoader 1)
+  SET(KWSYS_USE_Encoding 1)
   SET(KWSYS_USE_Glob 1)
   SET(KWSYS_USE_MD5 1)
   SET(KWSYS_USE_Process 1)
@@ -122,6 +126,7 @@ IF(KWSYS_STANDALONE OR CMake_SOURCE_DIR)
   SET(KWSYS_USE_FundamentalType 1)
   SET(KWSYS_USE_Terminal 1)
   SET(KWSYS_USE_IOStream 1)
+  SET(KWSYS_USE_FStream 1)
   SET(KWSYS_USE_String 1)
   SET(KWSYS_USE_SystemInformation 1)
   SET(KWSYS_USE_CPU 1)
@@ -130,18 +135,32 @@ ENDIF(KWSYS_STANDALONE OR CMake_SOURCE_DIR)
 # Enforce component dependencies.
 IF(KWSYS_USE_SystemTools)
   SET(KWSYS_USE_Directory 1)
+  SET(KWSYS_USE_FStream 1)
+  SET(KWSYS_USE_Encoding 1)
 ENDIF(KWSYS_USE_SystemTools)
 IF(KWSYS_USE_Glob)
   SET(KWSYS_USE_Directory 1)
   SET(KWSYS_USE_SystemTools 1)
   SET(KWSYS_USE_RegularExpression 1)
+  SET(KWSYS_USE_FStream 1)
+  SET(KWSYS_USE_Encoding 1)
 ENDIF(KWSYS_USE_Glob)
 IF(KWSYS_USE_Process)
   SET(KWSYS_USE_System 1)
+  SET(KWSYS_USE_Encoding 1)
 ENDIF(KWSYS_USE_Process)
 IF(KWSYS_USE_SystemInformation)
   SET(KWSYS_USE_Process 1)
 ENDIF(KWSYS_USE_SystemInformation)
+IF(KWSYS_USE_System)
+  SET(KWSYS_USE_Encoding 1)
+ENDIF(KWSYS_USE_System)
+IF(KWSYS_USE_Directory)
+  SET(KWSYS_USE_Encoding 1)
+ENDIF(KWSYS_USE_Directory)
+IF(KWSYS_USE_FStream)
+  SET(KWSYS_USE_Encoding 1)
+ENDIF(KWSYS_USE_FStream)
 
 # Setup the large file support default.
 IF(KWSYS_LFS_DISABLE)
@@ -149,6 +168,11 @@ IF(KWSYS_LFS_DISABLE)
 ELSE(KWSYS_LFS_DISABLE)
   SET(KWSYS_LFS_REQUESTED 1)
 ENDIF(KWSYS_LFS_DISABLE)
+
+# Specify default 8 bit encoding for Windows
+IF(NOT KWSYS_ENCODING_DEFAULT_CODEPAGE)
+  SET(KWSYS_ENCODING_DEFAULT_CODEPAGE CP_ACP)
+ENDIF(NOT KWSYS_ENCODING_DEFAULT_CODEPAGE)
 
 # Enable testing if building standalone.
 IF(KWSYS_STANDALONE)
@@ -506,6 +530,12 @@ IF(KWSYS_USE_FundamentalType)
     "Checking whether char is signed" DIRECT)
 ENDIF(KWSYS_USE_FundamentalType)
 
+IF(KWSYS_USE_Encoding)
+  # Look for type size helper macros.
+  KWSYS_PLATFORM_CXX_TEST(KWSYS_STL_HAS_WSTRING
+    "Checking whether wstring is available" DIRECT)
+ENDIF(KWSYS_USE_Encoding)
+
 IF(KWSYS_USE_IOStream)
   # Determine whether iostreams support long long.
   SET(KWSYS_PLATFORM_CXX_TEST_DEFINES
@@ -569,11 +599,22 @@ IF(KWSYS_USE_SystemTools)
     "Checking whether CXX compiler has unsetenv" DIRECT)
   KWSYS_PLATFORM_CXX_TEST(KWSYS_CXX_HAS_ENVIRON_IN_STDLIB_H
     "Checking whether CXX compiler has environ in stdlib.h" DIRECT)
-  SET_SOURCE_FILES_PROPERTIES(SystemTools.cxx PROPERTIES
-    COMPILE_FLAGS "-DKWSYS_CXX_HAS_SETENV=${KWSYS_CXX_HAS_SETENV} -DKWSYS_CXX_HAS_UNSETENV=${KWSYS_CXX_HAS_UNSETENV} -DKWSYS_CXX_HAS_ENVIRON_IN_STDLIB_H=${KWSYS_CXX_HAS_ENVIRON_IN_STDLIB_H}")
+  KWSYS_PLATFORM_CXX_TEST(KWSYS_CXX_HAS_UTIMES
+    "Checking whether CXX compiler has utimes" DIRECT)
+  KWSYS_PLATFORM_CXX_TEST(KWSYS_CXX_HAS_UTIMENSAT
+    "Checking whether CXX compiler has utimensat" DIRECT)
+  SET_PROPERTY(SOURCE SystemTools.cxx APPEND PROPERTY COMPILE_DEFINITIONS
+    KWSYS_CXX_HAS_SETENV=${KWSYS_CXX_HAS_SETENV}
+    KWSYS_CXX_HAS_UNSETENV=${KWSYS_CXX_HAS_UNSETENV}
+    KWSYS_CXX_HAS_ENVIRON_IN_STDLIB_H=${KWSYS_CXX_HAS_ENVIRON_IN_STDLIB_H}
+    KWSYS_CXX_HAS_UTIMES=${KWSYS_CXX_HAS_UTIMES}
+    KWSYS_CXX_HAS_UTIMENSAT=${KWSYS_CXX_HAS_UTIMENSAT}
+    )
 ENDIF()
 
 IF(KWSYS_USE_SystemInformation)
+  SET_PROPERTY(SOURCE SystemInformation.cxx APPEND PROPERTY
+    COMPILE_DEFINITIONS SIZEOF_VOID_P=${CMAKE_SIZEOF_VOID_P})
   IF(NOT CYGWIN)
     INCLUDE(CheckIncludeFiles)
     CHECK_INCLUDE_FILES("sys/types.h;ifaddrs.h" KWSYS_SYS_HAS_IFADDRS_H)
@@ -603,6 +644,13 @@ IF(KWSYS_USE_SystemInformation)
         COMPILE_DEFINITIONS KWSYS_SYS_HAS_MPCTL_H=1)
     ENDIF()
   ENDIF()
+  IF(CMAKE_SYSTEM MATCHES "BSD")
+    CHECK_INCLUDE_FILES("machine/cpu.h" KWSYS_SYS_HAS_MACHINE_CPU_H)
+    IF(KWSYS_SYS_HAS_MACHINE_CPU_H)
+      SET_PROPERTY(SOURCE SystemInformation.cxx APPEND PROPERTY
+        COMPILE_DEFINITIONS KWSYS_SYS_HAS_MACHINE_CPU_H=1)
+    ENDIF()
+  ENDIF()
   IF(KWSYS_LFS_AVAILABLE AND NOT KWSYS_LFS_DISABLE)
     SET(KWSYS_PLATFORM_CXX_TEST_DEFINES -DKWSYS_HAS_LFS=1)
   ENDIF()
@@ -630,6 +678,83 @@ IF(KWSYS_USE_SystemInformation)
   IF(KWSYS_CXX_HAS__ATOI64)
     SET_PROPERTY(SOURCE SystemInformation.cxx APPEND PROPERTY
       COMPILE_DEFINITIONS KWSYS_CXX_HAS__ATOI64=1)
+  ENDIF()
+  IF(UNIX)
+    INCLUDE(CheckIncludeFileCXX)
+    # check for simple stack trace
+    # usually it's in libc but on FreeBSD
+    # it's in libexecinfo
+    FIND_LIBRARY(EXECINFO_LIB "execinfo")
+    MARK_AS_ADVANCED(EXECINFO_LIB)
+    IF (NOT EXECINFO_LIB)
+      SET(EXECINFO_LIB "")
+    ENDIF()
+    CHECK_INCLUDE_FILE_CXX("execinfo.h" KWSYS_CXX_HAS_EXECINFOH)
+    IF (KWSYS_CXX_HAS_EXECINFOH)
+      # we have the backtrace header check if it
+      # can be used  with this compiler
+      SET(KWSYS_PLATFORM_CXX_TEST_LINK_LIBRARIES ${EXECINFO_LIB})
+      KWSYS_PLATFORM_CXX_TEST(KWSYS_CXX_HAS_BACKTRACE
+         "Checking whether backtrace works with this C++ compiler" DIRECT)
+      SET(KWSYS_PLATFORM_CXX_TEST_LINK_LIBRARIES)
+      IF (KWSYS_CXX_HAS_BACKTRACE)
+        # backtrace is supported by this system and compiler.
+        # now check for the more advanced capabilities.
+        SET_PROPERTY(SOURCE SystemInformation.cxx APPEND PROPERTY
+          COMPILE_DEFINITIONS KWSYS_SYSTEMINFORMATION_HAS_BACKTRACE=1)
+        # check for symbol lookup using dladdr
+        CHECK_INCLUDE_FILE_CXX("dlfcn.h" KWSYS_CXX_HAS_DLFCNH)
+        IF (KWSYS_CXX_HAS_DLFCNH)
+          # we have symbol lookup libraries and headers
+          # check if they can be used with this compiler
+          SET(KWSYS_PLATFORM_CXX_TEST_LINK_LIBRARIES ${CMAKE_DL_LIBS})
+            KWSYS_PLATFORM_CXX_TEST(KWSYS_CXX_HAS_DLADDR
+            "Checking whether dladdr works with this C++ compiler" DIRECT)
+          SET(KWSYS_PLATFORM_CXX_TEST_LINK_LIBRARIES)
+          IF (KWSYS_CXX_HAS_DLADDR)
+            # symbol lookup is supported by this system
+            # and compiler.
+            SET_PROPERTY(SOURCE SystemInformation.cxx APPEND PROPERTY
+              COMPILE_DEFINITIONS KWSYS_SYSTEMINFORMATION_HAS_SYMBOL_LOOKUP=1)
+          ENDIF()
+        ENDIF()
+        # c++ demangling support
+        # check for cxxabi headers
+        CHECK_INCLUDE_FILE_CXX("cxxabi.h" KWSYS_CXX_HAS_CXXABIH)
+        IF (KWSYS_CXX_HAS_CXXABIH)
+          # check if cxxabi can be used with this
+          # system and compiler.
+          KWSYS_PLATFORM_CXX_TEST(KWSYS_CXX_HAS_CXXABI
+            "Checking whether cxxabi works with this C++ compiler" DIRECT)
+          IF (KWSYS_CXX_HAS_CXXABI)
+            # c++ demangle using cxxabi is supported with
+            # this system and compiler
+            SET_PROPERTY(SOURCE SystemInformation.cxx APPEND PROPERTY
+              COMPILE_DEFINITIONS KWSYS_SYSTEMINFORMATION_HAS_CPP_DEMANGLE=1)
+          ENDIF()
+        ENDIF()
+        # basic backtrace works better with release build
+        # don't bother with advanced features for release
+        SET_PROPERTY(SOURCE SystemInformation.cxx APPEND PROPERTY
+          COMPILE_DEFINITIONS_DEBUG KWSYS_SYSTEMINFORMATION_HAS_DEBUG_BUILD=1)
+        SET_PROPERTY(SOURCE SystemInformation.cxx APPEND PROPERTY
+          COMPILE_DEFINITIONS_RELWITHDEBINFO KWSYS_SYSTEMINFORMATION_HAS_DEBUG_BUILD=1)
+      ENDIF()
+    ENDIF()
+  ENDIF()
+  IF(BORLAND)
+    KWSYS_PLATFORM_CXX_TEST(KWSYS_CXX_HAS_BORLAND_ASM
+      "Checking whether Borland CXX compiler supports assembler instructions" DIRECT)
+    IF(KWSYS_CXX_HAS_BORLAND_ASM)
+      SET_PROPERTY(SOURCE SystemInformation.cxx APPEND PROPERTY
+        COMPILE_DEFINITIONS KWSYS_CXX_HAS_BORLAND_ASM=1)
+      KWSYS_PLATFORM_CXX_TEST(KWSYS_CXX_HAS_BORLAND_ASM_CPUID
+        "Checking whether Borland CXX compiler supports CPUID assembler instruction" DIRECT)
+      IF(KWSYS_CXX_HAS_BORLAND_ASM_CPUID)
+        SET_PROPERTY(SOURCE SystemInformation.cxx APPEND PROPERTY
+          COMPILE_DEFINITIONS KWSYS_CXX_HAS_BORLAND_ASM_CPUID=1)
+      ENDIF()
+    ENDIF()
   ENDIF()
   IF(KWSYS_USE___INT64)
     SET_PROPERTY(SOURCE SystemInformation.cxx testSystemInformation.cxx APPEND PROPERTY
@@ -767,8 +892,8 @@ SET(KWSYS_HXX_FILES Configure String
 
 # Add selected C++ classes.
 SET(cppclasses
-  Directory DynamicLoader Glob RegularExpression SystemTools
-  CommandLineArguments IOStream SystemInformation
+  Directory DynamicLoader Encoding Glob RegularExpression SystemTools
+  CommandLineArguments IOStream FStream SystemInformation
   )
 FOREACH(cpp ${cppclasses})
   IF(KWSYS_USE_${cpp})
@@ -784,7 +909,7 @@ ENDFOREACH(cpp)
 
 # Add selected C components.
 FOREACH(c
-    Process Base64 FundamentalType MD5 Terminal System String CPU
+    Process Base64 Encoding FundamentalType MD5 Terminal System String CPU
     )
   IF(KWSYS_USE_${c})
     # Use the corresponding header file.
@@ -815,16 +940,24 @@ IF(KWSYS_USE_Process)
 ENDIF(KWSYS_USE_Process)
 
 # Add selected C sources.
-FOREACH(c Base64 MD5 Terminal System String)
+FOREACH(c Base64 Encoding MD5 Terminal System String)
   IF(KWSYS_USE_${c})
-    SET(KWSYS_C_SRCS ${KWSYS_C_SRCS} ${c}.c)
+    IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${c}C.c)
+      LIST(APPEND KWSYS_C_SRCS ${c}C.c)
+    ELSE()
+      LIST(APPEND KWSYS_C_SRCS ${c}.c)
+    ENDIF()
   ENDIF(KWSYS_USE_${c})
 ENDFOREACH(c)
 
 # Configure headers of C++ classes and construct the list of sources.
 FOREACH(c ${KWSYS_CLASSES})
   # Add this source to the list of source files for the library.
-  SET(KWSYS_CXX_SRCS ${KWSYS_CXX_SRCS} ${c}.cxx)
+  IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${c}CXX.cxx)
+    LIST(APPEND KWSYS_CXX_SRCS ${c}CXX.cxx)
+  ELSEIF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${c}.cxx)
+    LIST(APPEND KWSYS_CXX_SRCS ${c}.cxx)
+  ENDIF()
 
   # Configure the header for this class.
   CONFIGURE_FILE(${PROJECT_SOURCE_DIR}/${c}.hxx.in ${KWSYS_HEADER_DIR}/${c}.hxx
@@ -881,12 +1014,23 @@ IF(KWSYS_C_SRCS OR KWSYS_CXX_SRCS)
     ENDIF(UNIX)
   ENDIF(KWSYS_USE_DynamicLoader)
 
-  IF(KWSYS_USE_SystemInformation AND WIN32)
-    TARGET_LINK_LIBRARIES(${KWSYS_NAMESPACE} ws2_32)
-    IF(KWSYS_SYS_HAS_PSAPI)
-      TARGET_LINK_LIBRARIES(${KWSYS_NAMESPACE} Psapi)
+  IF(KWSYS_USE_SystemInformation)
+    IF(WIN32)
+      TARGET_LINK_LIBRARIES(${KWSYS_NAMESPACE} ws2_32)
+      IF(KWSYS_SYS_HAS_PSAPI)
+        TARGET_LINK_LIBRARIES(${KWSYS_NAMESPACE} Psapi)
+      ENDIF()
+    ELSEIF(UNIX)
+      IF (EXECINFO_LIB AND KWSYS_CXX_HAS_BACKTRACE)
+        # backtrace on FreeBSD is not in libc
+        TARGET_LINK_LIBRARIES(${KWSYS_NAMESPACE} ${EXECINFO_LIB})
+      ENDIF()
+      IF (KWSYS_CXX_HAS_DLADDR)
+        # for symbol lookup using dladdr
+        TARGET_LINK_LIBRARIES(${KWSYS_NAMESPACE} ${CMAKE_DL_LIBS})
+      ENDIF()
     ENDIF()
-  ENDIF(KWSYS_USE_SystemInformation AND WIN32)
+  ENDIF()
 
   # Apply user-defined target properties to the library.
   IF(KWSYS_PROPERTIES_CXX)
@@ -933,11 +1077,22 @@ IF(MSVC OR (WIN32 AND "${CMAKE_C_COMPILER_ID}" MATCHES "^(Intel)$"))
     )
 ENDIF()
 
+IF(WIN32)
+  # Help enforce the use of wide Windows apis.
+  ADD_DEFINITIONS(-DUNICODE -D_UNICODE)
+ENDIF()
+
 IF(KWSYS_USE_String)
   # Activate code in "String.c".  See the comment in the source.
   SET_SOURCE_FILES_PROPERTIES(String.c PROPERTIES
     COMPILE_FLAGS "-DKWSYS_STRING_C")
 ENDIF(KWSYS_USE_String)
+
+IF(KWSYS_USE_Encoding)
+  # Set default 8 bit encoding in "EndcodingC.c".
+  SET_PROPERTY(SOURCE EncodingC.c APPEND PROPERTY COMPILE_DEFINITIONS
+    KWSYS_ENCODING_DEFAULT_CODEPAGE=${KWSYS_ENCODING_DEFAULT_CODEPAGE})
+ENDIF(KWSYS_USE_Encoding)
 
 #-----------------------------------------------------------------------------
 # Setup testing if not being built as part of another project.
@@ -982,6 +1137,16 @@ IF(KWSYS_STANDALONE OR CMake_SOURCE_DIR)
       testCommandLineArguments
       testCommandLineArguments1
       )
+    IF(KWSYS_STL_HAS_WSTRING)
+      SET(KWSYS_CXX_TESTS ${KWSYS_CXX_TESTS}
+        testEncoding
+        )
+    ENDIF(KWSYS_STL_HAS_WSTRING)
+    IF(KWSYS_USE_FStream)
+      SET(KWSYS_CXX_TESTS ${KWSYS_CXX_TESTS}
+        testFStream
+        )
+    ENDIF(KWSYS_USE_FStream)
     IF(KWSYS_USE_SystemInformation)
       SET(KWSYS_CXX_TESTS ${KWSYS_CXX_TESTS} testSystemInformation)
     ENDIF(KWSYS_USE_SystemInformation)
@@ -1063,6 +1228,9 @@ IF(KWSYS_STANDALONE OR CMake_SOURCE_DIR)
     # Some Apple compilers produce bad optimizations in this source.
     IF(APPLE AND "${CMAKE_C_COMPILER_ID}" MATCHES "^(GNU|LLVM)$")
       SET_SOURCE_FILES_PROPERTIES(testProcess.c PROPERTIES COMPILE_FLAGS -O0)
+    ELSEIF(CMAKE_C_COMPILER_ID STREQUAL "XL")
+      # Tell IBM XL not to warn about our test infinite loop
+      SET_PROPERTY(SOURCE testProcess.c PROPERTY COMPILE_FLAGS -qsuppress=1500-010)
     ENDIF()
 
     # Test SharedForward

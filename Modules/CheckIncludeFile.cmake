@@ -1,19 +1,29 @@
-# - Check if the include file exists.
+#.rst:
+# CheckIncludeFile
+# ----------------
+#
+# macro which checks the include file exists.
+#
 # CHECK_INCLUDE_FILE(INCLUDE VARIABLE)
-# - macro which checks the include file exists.
-#  INCLUDE  - name of include file
-#  VARIABLE - variable to return result
 #
-# an optional third argument is the CFlags to add to the compile line
-# or you can use CMAKE_REQUIRED_FLAGS
+# ::
 #
-# The following variables may be set before calling this macro to
-# modify the way the check is run:
+#   INCLUDE  - name of include file
+#   VARIABLE - variable to return result
 #
-#  CMAKE_REQUIRED_FLAGS = string of compile command line flags
-#  CMAKE_REQUIRED_DEFINITIONS = list of macros to define (-DFOO=bar)
-#  CMAKE_REQUIRED_INCLUDES = list of include directories
 #
+#
+# an optional third argument is the CFlags to add to the compile line or
+# you can use CMAKE_REQUIRED_FLAGS
+#
+# The following variables may be set before calling this macro to modify
+# the way the check is run:
+#
+# ::
+#
+#   CMAKE_REQUIRED_FLAGS = string of compile command line flags
+#   CMAKE_REQUIRED_DEFINITIONS = list of macros to define (-DFOO=bar)
+#   CMAKE_REQUIRED_INCLUDES = list of include directories
 
 #=============================================================================
 # Copyright 2002-2009 Kitware, Inc.
@@ -38,7 +48,7 @@ macro(CHECK_INCLUDE_FILE INCLUDE VARIABLE)
     set(MACRO_CHECK_INCLUDE_FILE_FLAGS ${CMAKE_REQUIRED_FLAGS})
     set(CHECK_INCLUDE_FILE_VAR ${INCLUDE})
     configure_file(${CMAKE_ROOT}/Modules/CheckIncludeFile.c.in
-      ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/CheckIncludeFile.c IMMEDIATE)
+      ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/CheckIncludeFile.c)
     message(STATUS "Looking for ${INCLUDE}")
     if(${ARGC} EQUAL 3)
       set(CMAKE_C_FLAGS_SAVE ${CMAKE_C_FLAGS})

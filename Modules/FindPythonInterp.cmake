@@ -1,18 +1,32 @@
-# - Find python interpreter
-# This module finds if Python interpreter is installed and determines where the
-# executables are. This code sets the following variables:
+#.rst:
+# FindPythonInterp
+# ----------------
 #
-#  PYTHONINTERP_FOUND         - Was the Python executable found
-#  PYTHON_EXECUTABLE          - path to the Python interpreter
+# Find python interpreter
 #
-#  PYTHON_VERSION_STRING      - Python version found e.g. 2.5.2
-#  PYTHON_VERSION_MAJOR       - Python major version found e.g. 2
-#  PYTHON_VERSION_MINOR       - Python minor version found e.g. 5
-#  PYTHON_VERSION_PATCH       - Python patch version found e.g. 2
+# This module finds if Python interpreter is installed and determines
+# where the executables are.  This code sets the following variables:
 #
-# The Python_ADDITIONAL_VERSIONS variable can be used to specify a list of
-# version numbers that should be taken into account when searching for Python.
-# You need to set this variable before calling find_package(PythonInterp).
+# ::
+#
+#   PYTHONINTERP_FOUND         - Was the Python executable found
+#   PYTHON_EXECUTABLE          - path to the Python interpreter
+#
+#
+#
+# ::
+#
+#   PYTHON_VERSION_STRING      - Python version found e.g. 2.5.2
+#   PYTHON_VERSION_MAJOR       - Python major version found e.g. 2
+#   PYTHON_VERSION_MINOR       - Python minor version found e.g. 5
+#   PYTHON_VERSION_PATCH       - Python patch version found e.g. 2
+#
+#
+#
+# The Python_ADDITIONAL_VERSIONS variable can be used to specify a list
+# of version numbers that should be taken into account when searching
+# for Python.  You need to set this variable before calling
+# find_package(PythonInterp).
 
 #=============================================================================
 # Copyright 2005-2010 Kitware, Inc.
@@ -33,26 +47,26 @@ unset(_Python_NAMES)
 
 set(_PYTHON1_VERSIONS 1.6 1.5)
 set(_PYTHON2_VERSIONS 2.7 2.6 2.5 2.4 2.3 2.2 2.1 2.0)
-set(_PYTHON3_VERSIONS 3.3 3.2 3.1 3.0)
+set(_PYTHON3_VERSIONS 3.4 3.3 3.2 3.1 3.0)
 
 if(PythonInterp_FIND_VERSION)
-    if(PythonInterp_FIND_VERSION MATCHES "^[0-9]+\\.[0-9]+(\\.[0-9]+.*)?$")
-        string(REGEX REPLACE "^([0-9]+\\.[0-9]+).*" "\\1" _PYTHON_FIND_MAJ_MIN "${PythonInterp_FIND_VERSION}")
-        string(REGEX REPLACE "^([0-9]+).*" "\\1" _PYTHON_FIND_MAJ "${_PYTHON_FIND_MAJ_MIN}")
-        list(APPEND _Python_NAMES python${_PYTHON_FIND_MAJ_MIN} python${_PYTHON_FIND_MAJ})
+    if(PythonInterp_FIND_VERSION_COUNT GREATER 1)
+        set(_PYTHON_FIND_MAJ_MIN "${PythonInterp_FIND_VERSION_MAJOR}.${PythonInterp_FIND_VERSION_MINOR}")
+        list(APPEND _Python_NAMES
+             python${_PYTHON_FIND_MAJ_MIN}
+             python${PythonInterp_FIND_VERSION_MAJOR})
         unset(_PYTHON_FIND_OTHER_VERSIONS)
         if(NOT PythonInterp_FIND_VERSION_EXACT)
-            foreach(_PYTHON_V ${_PYTHON${_PYTHON_FIND_MAJ}_VERSIONS})
+            foreach(_PYTHON_V ${_PYTHON${PythonInterp_FIND_VERSION_MAJOR}_VERSIONS})
                 if(NOT _PYTHON_V VERSION_LESS _PYTHON_FIND_MAJ_MIN)
                     list(APPEND _PYTHON_FIND_OTHER_VERSIONS ${_PYTHON_V})
                 endif()
              endforeach()
         endif()
         unset(_PYTHON_FIND_MAJ_MIN)
-        unset(_PYTHON_FIND_MAJ)
     else()
-        list(APPEND _Python_NAMES python${PythonInterp_FIND_VERSION})
-        set(_PYTHON_FIND_OTHER_VERSIONS ${_PYTHON${PythonInterp_FIND_VERSION}_VERSIONS})
+        list(APPEND _Python_NAMES python${PythonInterp_FIND_VERSION_MAJOR})
+        set(_PYTHON_FIND_OTHER_VERSIONS ${_PYTHON${PythonInterp_FIND_VERSION_MAJOR}_VERSIONS})
     endif()
 else()
     set(_PYTHON_FIND_OTHER_VERSIONS ${_PYTHON3_VERSIONS} ${_PYTHON2_VERSIONS} ${_PYTHON1_VERSIONS})

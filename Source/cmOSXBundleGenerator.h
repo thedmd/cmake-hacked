@@ -21,19 +21,25 @@
 class cmTarget;
 class cmMakefile;
 class cmLocalGenerator;
+class cmGeneratorTarget;
 
 class cmOSXBundleGenerator
 {
 public:
-  static void PrepareTargetProperties(cmTarget* target);
+  cmOSXBundleGenerator(cmGeneratorTarget* target,
+                       const std::string& configName);
 
-  cmOSXBundleGenerator(cmTarget* target,
-                       std::string targetNameOut,
-                       const char* configName);
+  // create an app bundle at a given root, and return
+  // the directory within the bundle that contains the executable
+  void CreateAppBundle(const std::string& targetName, std::string& root);
 
-  void CreateAppBundle(std::string& targetName, std::string& outpath);
-  void CreateFramework(std::string const& targetName);
-  void CreateCFBundle(std::string& targetName, std::string& outpath);
+  // create a framework at a given root
+  void CreateFramework(const std::string& targetName,
+                       const std::string& root);
+
+  // create a cf bundle at a given root
+  void CreateCFBundle(const std::string& targetName,
+                      const std::string& root);
 
   struct MacOSXContentGeneratorType
   {
@@ -46,25 +52,18 @@ public:
     MacOSXContentGeneratorType* generator);
   std::string InitMacOSXContentDirectory(const char* pkgloc);
 
-  std::string GetMacContentDirectory() const
-  { return this->MacContentDirectory; }
-  std::string GetFrameworkVersion() const
-  { return this->FrameworkVersion; }
-  void SetMacContentFolders(std::set<cmStdString>* macContentFolders)
+  void SetMacContentFolders(std::set<std::string>* macContentFolders)
   { this->MacContentFolders = macContentFolders; }
 
 private:
   bool MustSkip();
 
 private:
-  cmTarget* Target;
+  cmGeneratorTarget* GT;
   cmMakefile* Makefile;
   cmLocalGenerator* LocalGenerator;
-  std::string TargetNameOut;
-  const char* ConfigName;
-  std::string MacContentDirectory;
-  std::string FrameworkVersion;
-  std::set<cmStdString>* MacContentFolders;
+  std::string ConfigName;
+  std::set<std::string>* MacContentFolders;
 };
 
 

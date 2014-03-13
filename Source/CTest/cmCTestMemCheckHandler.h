@@ -37,7 +37,7 @@ public:
 protected:
   virtual int PreProcessHandler();
   virtual int PostProcessHandler();
-  virtual void GenerateTestCommand(std::vector<std::string>& args);
+  virtual void GenerateTestCommand(std::vector<std::string>& args, int test);
 
 private:
 
@@ -89,7 +89,8 @@ private:
   std::string              BoundsCheckerDPBDFile;
   std::string              BoundsCheckerXMLFile;
   std::string              MemoryTester;
-  std::vector<cmStdString> MemoryTesterOptions;
+  std::vector<std::string> MemoryTesterDynamicOptions;
+  std::vector<std::string> MemoryTesterOptions;
   int                      MemoryTesterStyle;
   std::string              MemoryTesterOutputFile;
   int                      MemoryTesterGlobalResults[NO_MEMORY_FAULT];
@@ -102,8 +103,8 @@ private:
    */
   void GenerateDartOutput(std::ostream& os);
 
-  std::vector<cmStdString> CustomPreMemCheck;
-  std::vector<cmStdString> CustomPostMemCheck;
+  std::vector<std::string> CustomPreMemCheck;
+  std::vector<std::string> CustomPostMemCheck;
 
   //! Parse Valgrind/Purify/Bounds Checker result out of the output
   //string. After running, log holds the output and results hold the
@@ -117,8 +118,16 @@ private:
   bool ProcessMemCheckBoundsCheckerOutput(const std::string& str,
                                           std::string& log, int* results);
 
-  void PostProcessPurifyTest(cmCTestTestResult& res);
-  void PostProcessBoundsCheckerTest(cmCTestTestResult& res);
+  void PostProcessPurifyTest(cmCTestTestResult& res, int test);
+  void PostProcessBoundsCheckerTest(cmCTestTestResult& res, int test);
+  void PostProcessValgrindTest(cmCTestTestResult& res, int test);
+
+  ///! append MemoryTesterOutputFile to the test log
+  void appendMemTesterOutput(cmCTestTestHandler::cmCTestTestResult& res,
+                             int test);
+
+  ///! generate the output filename for the given test index
+  std::string testOutputFileName(int test);
 };
 
 #endif

@@ -1,20 +1,29 @@
-# - This module defines variables and macros required to build eCos application.
+#.rst:
+# UseEcos
+# -------
+#
+# This module defines variables and macros required to build eCos application.
+#
 # This file contains the following macros:
 # ECOS_ADD_INCLUDE_DIRECTORIES() - add the eCos include dirs
-# ECOS_ADD_EXECUTABLE(name source1 ... sourceN ) - create an eCos executable
-# ECOS_ADJUST_DIRECTORY(VAR source1 ... sourceN ) - adjusts the path of the source files and puts the result into VAR
+# ECOS_ADD_EXECUTABLE(name source1 ...  sourceN ) - create an eCos
+# executable ECOS_ADJUST_DIRECTORY(VAR source1 ...  sourceN ) - adjusts
+# the path of the source files and puts the result into VAR
 #
-# Macros for selecting the toolchain:
-# ECOS_USE_ARM_ELF_TOOLS()       - enable the ARM ELF toolchain for the directory where it is called
-# ECOS_USE_I386_ELF_TOOLS()      - enable the i386 ELF toolchain for the directory where it is called
-# ECOS_USE_PPC_EABI_TOOLS()      - enable the PowerPC toolchain for the directory where it is called
+# Macros for selecting the toolchain: ECOS_USE_ARM_ELF_TOOLS() - enable
+# the ARM ELF toolchain for the directory where it is called
+# ECOS_USE_I386_ELF_TOOLS() - enable the i386 ELF toolchain for the
+# directory where it is called ECOS_USE_PPC_EABI_TOOLS() - enable the
+# PowerPC toolchain for the directory where it is called
 #
-# It contains the following variables:
-# ECOS_DEFINITIONS
-# ECOSCONFIG_EXECUTABLE
-# ECOS_CONFIG_FILE               - defaults to ecos.ecc, if your eCos configuration file has a different name, adjust this variable
-# for internal use only:
-#  ECOS_ADD_TARGET_LIB
+# It contains the following variables: ECOS_DEFINITIONS
+# ECOSCONFIG_EXECUTABLE ECOS_CONFIG_FILE - defaults to ecos.ecc, if your
+# eCos configuration file has a different name, adjust this variable for
+# internal use only:
+#
+# ::
+#
+#   ECOS_ADD_TARGET_LIB
 
 #=============================================================================
 # Copyright 2006-2009 Kitware, Inc.
@@ -132,10 +141,10 @@ macro(ECOS_ADJUST_DIRECTORY _target_FILES )
 endmacro()
 
 # the default ecos config file name
-# maybe in the future also out-of-source builds may be possible
+# maybe in future also out-of-source builds may be possible
 set(ECOS_CONFIG_FILE ecos.ecc)
 
-#creates the dependancy from all source files on the ecos target.ld,
+#creates the dependency from all source files on the ecos target.ld,
 #adds the command for compiling ecos
 macro(ECOS_ADD_TARGET_LIB)
 # when building out-of-source, create the ecos/ subdir

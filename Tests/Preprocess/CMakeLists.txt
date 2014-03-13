@@ -40,6 +40,9 @@ endif()
 if("${CMAKE_GENERATOR}" MATCHES "Visual Studio 11")
   set(PP_VS110 1)
 endif()
+if("${CMAKE_GENERATOR}" MATCHES "Visual Studio 12")
+  set(PP_VS120 1)
+endif()
 
 # Some tests below check the PP_* variables set above.  They are meant
 # to test the case that the build tool is at fault.  Other tests below
@@ -55,7 +58,7 @@ endif()
 # must not have it escaped inside the configured header.
 set(STRING_EXTRA "")
 
-if(NOT BORLAND AND NOT PP_VS70 AND NOT PP_VS100 AND NOT PP_VS110)
+if(NOT BORLAND AND NOT PP_VS70)
   # Borland, VS70 IDE: ;
   # The Borland compiler will simply not accept a non-escaped semicolon
   # on the command line.  If it is escaped \; then the escape character
@@ -63,7 +66,6 @@ if(NOT BORLAND AND NOT PP_VS70 AND NOT PP_VS100 AND NOT PP_VS110)
   #
   # The VS 7.0 IDE separates definitions on semicolons and commas with
   # no regard for quotes.  Fortunately VS 7.1 and above are okay.
-  # VS 10 seems to also not like semicolons
   set(SEMICOLON "\;")
 endif()
 
@@ -256,6 +258,19 @@ set_property(
   "FILE_EXPR=${EXPR}"
   ${DEF_FILE_PATH}
   )
+
+# Try reading and writing the property value to ensure the string is
+# preserved.
+get_property(defs1 TARGET Preprocess PROPERTY COMPILE_DEFINITIONS)
+set_property(TARGET Preprocess PROPERTY COMPILE_DEFINITIONS "${defs1}")
+get_property(defs2 TARGET Preprocess PROPERTY COMPILE_DEFINITIONS)
+if(NOT "x${defs1}" STREQUAL "x${defs2}")
+  message(FATAL_ERROR "get/set/get COMPILE_DEFINITIONS round trip failed.  "
+    "First get:\n"
+    "  ${defs1}\n"
+    "Second get:\n"
+    "  ${defs2}")
+endif()
 
 # Helper target for running test manually in build tree.
 add_custom_target(drive COMMAND Preprocess)

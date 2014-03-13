@@ -6,6 +6,7 @@
 inline std::string cmVisualStudio10GeneratorOptionsEscapeForXML(const char* s)
 {
   std::string ret = s;
+  cmSystemTools::ReplaceString(ret, ";", "%3B");
   cmSystemTools::ReplaceString(ret, "&", "&amp;");
   cmSystemTools::ReplaceString(ret, "<", "&lt;");
   cmSystemTools::ReplaceString(ret, ">", "&gt;");
@@ -66,6 +67,7 @@ void cmVisualStudioGeneratorOptions::FixExceptionHandlingDefault()
       break;
     case cmLocalVisualStudioGenerator::VS10:
     case cmLocalVisualStudioGenerator::VS11:
+    case cmLocalVisualStudioGenerator::VS12:
       // by default VS puts <ExceptionHandling></ExceptionHandling> empty
       // for a project, to make our projects look the same put a new line
       // and space over for the closing </ExceptionHandling> as the default
@@ -98,13 +100,13 @@ void cmVisualStudioGeneratorOptions::SetVerboseMakefile(bool verbose)
     }
 }
 
-bool cmVisualStudioGeneratorOptions::IsDebug()
+bool cmVisualStudioGeneratorOptions::IsDebug() const
 {
   return this->FlagMap.find("DebugInformationFormat") != this->FlagMap.end();
 }
 
 //----------------------------------------------------------------------------
-bool cmVisualStudioGeneratorOptions::UsingUnicode()
+bool cmVisualStudioGeneratorOptions::UsingUnicode() const
 {
   // Look for the a _UNICODE definition.
   for(std::vector<std::string>::const_iterator di = this->Defines.begin();
@@ -118,7 +120,7 @@ bool cmVisualStudioGeneratorOptions::UsingUnicode()
   return false;
 }
 //----------------------------------------------------------------------------
-bool cmVisualStudioGeneratorOptions::UsingSBCS()
+bool cmVisualStudioGeneratorOptions::UsingSBCS() const
 {
   // Look for the a _SBCS definition.
   for(std::vector<std::string>::const_iterator di = this->Defines.begin();
@@ -220,7 +222,7 @@ cmVisualStudioGeneratorOptions
 ::OutputPreprocessorDefinitions(std::ostream& fout,
                                 const char* prefix,
                                 const char* suffix,
-                                const char* lang)
+                                const std::string& lang)
 {
   if(this->Defines.empty())
     {
@@ -228,7 +230,7 @@ cmVisualStudioGeneratorOptions
     }
   if(this->Version >= cmLocalVisualStudioGenerator::VS10)
     {
-    // if there are configuration specifc flags, then
+    // if there are configuration specific flags, then
     // use the configuration specific tag for PreprocessorDefinitions
     if(this->Configuration.size())
       {
@@ -268,7 +270,7 @@ cmVisualStudioGeneratorOptions
       {
       define = cmVisualStudio10GeneratorOptionsEscapeForXML(define.c_str());
 
-      if(0 == strcmp(lang, "RC"))
+      if(lang == "RC")
         {
         cmSystemTools::ReplaceString(define, "\"", "\\\"");
         }
@@ -298,7 +300,7 @@ cmVisualStudioGeneratorOptions
 {
   if(this->Version >= cmLocalVisualStudioGenerator::VS10)
     {
-    for(std::map<cmStdString, cmStdString>::iterator m = this->FlagMap.begin();
+    for(std::map<std::string, std::string>::iterator m = this->FlagMap.begin();
         m != this->FlagMap.end(); ++m)
       {
       fout << indent;
@@ -324,7 +326,7 @@ cmVisualStudioGeneratorOptions
     }
   else
     {
-    for(std::map<cmStdString, cmStdString>::iterator m = this->FlagMap.begin();
+    for(std::map<std::string, std::string>::iterator m = this->FlagMap.begin();
         m != this->FlagMap.end(); ++m)
       {
       fout << indent << m->first << "=\"" << m->second << "\"\n";

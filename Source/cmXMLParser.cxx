@@ -10,6 +10,7 @@
   See the License for more information.
 ============================================================================*/
 #include "cmXMLParser.h"
+#include <cmsys/FStream.hxx>
 
 #include <cm_expat.h>
 #include <ctype.h>
@@ -45,7 +46,7 @@ int cmXMLParser::ParseFile(const char* file)
     return 0;
     }
 
-  std::ifstream ifs(file);
+  cmsys::ifstream ifs(file);
   if ( !ifs )
     {
     return 0;
@@ -151,14 +152,14 @@ int cmXMLParser::ParsingComplete()
 }
 
 //----------------------------------------------------------------------------
-void cmXMLParser::StartElement(const char * name,
+void cmXMLParser::StartElement(const std::string& name,
   const char ** /*atts*/)
 {
   std::cout << "Start element: " << name << std::endl;
 }
 
 //----------------------------------------------------------------------------
-void cmXMLParser::EndElement(const char * name)
+void cmXMLParser::EndElement(const std::string& name)
 {
   std::cout << "End element: " << name << std::endl;
 }

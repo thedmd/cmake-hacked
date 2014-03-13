@@ -172,7 +172,8 @@ satisfy dependencies.
 
 //----------------------------------------------------------------------------
 cmComputeLinkDepends
-::cmComputeLinkDepends(cmTarget* target, const char* config, cmTarget* head)
+::cmComputeLinkDepends(cmTarget const* target, const std::string& config,
+                       cmTarget const* head)
 {
   // Store context information.
   this->Target = target;
@@ -183,7 +184,8 @@ cmComputeLinkDepends
   this->CMakeInstance = this->GlobalGenerator->GetCMakeInstance();
 
   // The configuration being linked.
-  this->Config = (config && *config)? config : 0;
+  this->HasConfig = !config.empty();
+  this->Config = (this->HasConfig)? config : std::string();
   this->LinkType = this->Target->ComputeLinkType(this->Config);
 
   // Enable debug mode if requested.
@@ -253,7 +255,8 @@ cmComputeLinkDepends::Compute()
             "---------------------------------------"
             "---------------------------------------\n");
     fprintf(stderr, "Link dependency analysis for target %s, config %s\n",
-            this->Target->GetName(), this->Config?this->Config:"noconfig");
+            this->Target->GetName().c_str(),
+            this->HasConfig?this->Config.c_str():"noconfig");
     this->DisplayConstraintGraph();
     }
 
@@ -277,12 +280,12 @@ cmComputeLinkDepends::Compute()
 }
 
 //----------------------------------------------------------------------------
-std::map<cmStdString, int>::iterator
+std::map<std::string, int>::iterator
 cmComputeLinkDepends::AllocateLinkEntry(std::string const& item)
 {
-  std::map<cmStdString, int>::value_type
+  std::map<std::string, int>::value_type
     index_entry(item, static_cast<int>(this->EntryList.size()));
-  std::map<cmStdString, int>::iterator
+  std::map<std::string, int>::iterator
     lei = this->LinkEntryIndex.insert(index_entry).first;
   this->EntryList.push_back(LinkEntry());
   this->InferredDependSets.push_back(0);
@@ -295,7 +298,7 @@ int cmComputeLinkDepends::AddLinkEntry(int depender_index,
                                        std::string const& item)
 {
   // Check if the item entry has already been added.
-  std::map<cmStdString, int>::iterator lei = this->LinkEntryIndex.find(item);
+  std::map<std::string, int>::iterator lei = this->LinkEntryIndex.find(item);
   if(lei != this->LinkEntryIndex.end())
     {
     // Yes.  We do not need to follow the item's dependencies again.
@@ -309,7 +312,7 @@ int cmComputeLinkDepends::AddLinkEntry(int depender_index,
   int index = lei->second;
   LinkEntry& entry = this->EntryList[index];
   entry.Item = item;
-  entry.Target = this->FindTargetToLink(depender_index, entry.Item.c_str());
+  entry.Target = this->FindTargetToLink(depender_index, entry.Item);
   entry.IsFlag = (!entry.Target && item[0] == '-' && item[1] != 'l' &&
                   item.substr(0, 10) != "-framework");
 
@@ -325,7 +328,7 @@ int cmComputeLinkDepends::AddLinkEntry(int depender_index,
     // Look for an old-style <item>_LIB_DEPENDS variable.
     std::string var = entry.Item;
     var += "_LIB_DEPENDS";
-    if(const char* val = this->Makefile->GetDefinition(var.c_str()))
+    if(const char* val = this->Makefile->GetDefinition(var))
       {
       // The item dependencies are known.  Follow them.
       BFSEntry qe = {index, val};
@@ -355,8 +358,15 @@ void cmComputeLinkDepends::FollowLinkEntry(BFSEntry const& qe)
     if(cmTarget::LinkInterface const* iface =
        entry.Target->GetLinkInterface(this->Config, this->HeadTarget))
       {
+      const bool isIface =
+                      entry.Target->GetType() == cmTarget::INTERFACE_LIBRARY;
       // This target provides its own link interface information.
       this->AddLinkEntries(depender_index, iface->Libraries);
+
+      if (isIface)
+        {
+        return;
+        }
 
       // Handle dependent shared libraries.
       this->FollowSharedDeps(depender_index, iface);
@@ -414,7 +424,7 @@ cmComputeLinkDepends
 void cmComputeLinkDepends::HandleSharedDependency(SharedDepEntry const& dep)
 {
   // Check if the target already has an entry.
-  std::map<cmStdString, int>::iterator lei =
+  std::map<std::string, int>::iterator lei =
     this->LinkEntryIndex.find(dep.Item);
   if(lei == this->LinkEntryIndex.end())
     {
@@ -425,7 +435,7 @@ void cmComputeLinkDepends::HandleSharedDependency(SharedDepEntry const& dep)
     LinkEntry& entry = this->EntryList[lei->second];
     entry.Item = dep.Item;
     entry.Target = this->FindTargetToLink(dep.DependerIndex,
-                                          dep.Item.c_str());
+                                          dep.Item);
 
     // This item was added specifically because it is a dependent
     // shared library.  It may get special treatment
@@ -496,7 +506,7 @@ void cmComputeLinkDepends::AddVarLinkEntries(int depender_index,
         {
         std::string var = *di;
         var += "_LINK_TYPE";
-        if(const char* val = this->Makefile->GetDefinition(var.c_str()))
+        if(const char* val = this->Makefile->GetDefinition(var))
           {
           if(strcmp(val, "debug") == 0)
             {
@@ -611,19 +621,19 @@ cmComputeLinkDepends::AddLinkEntries(int depender_index,
 }
 
 //----------------------------------------------------------------------------
-cmTarget* cmComputeLinkDepends::FindTargetToLink(int depender_index,
-                                                 const char* name)
+cmTarget const* cmComputeLinkDepends::FindTargetToLink(int depender_index,
+                                                 const std::string& name)
 {
   // Look for a target in the scope of the depender.
   cmMakefile* mf = this->Makefile;
   if(depender_index >= 0)
     {
-    if(cmTarget* depender = this->EntryList[depender_index].Target)
+    if(cmTarget const* depender = this->EntryList[depender_index].Target)
       {
       mf = depender->GetMakefile();
       }
     }
-  cmTarget* tgt = mf->FindTargetToUse(name);
+  cmTarget const* tgt = mf->FindTargetToUse(name);
 
   // Skip targets that will not really be linked.  This is probably a
   // name conflict between an external library and an executable
@@ -942,7 +952,7 @@ int cmComputeLinkDepends::ComputeComponentCount(NodeList const& nl)
   int count = 2;
   for(NodeList::const_iterator ni = nl.begin(); ni != nl.end(); ++ni)
     {
-    if(cmTarget* target = this->EntryList[*ni].Target)
+    if(cmTarget const* target = this->EntryList[*ni].Target)
       {
       if(cmTarget::LinkInterface const* iface =
          target->GetLinkInterface(this->Config, this->HeadTarget))
@@ -960,14 +970,14 @@ int cmComputeLinkDepends::ComputeComponentCount(NodeList const& nl)
 //----------------------------------------------------------------------------
 void cmComputeLinkDepends::DisplayFinalEntries()
 {
-  fprintf(stderr, "target [%s] links to:\n", this->Target->GetName());
+  fprintf(stderr, "target [%s] links to:\n", this->Target->GetName().c_str());
   for(std::vector<LinkEntry>::const_iterator lei =
         this->FinalLinkEntries.begin();
       lei != this->FinalLinkEntries.end(); ++lei)
     {
     if(lei->Target)
       {
-      fprintf(stderr, "  target [%s]\n", lei->Target->GetName());
+      fprintf(stderr, "  target [%s]\n", lei->Target->GetName().c_str());
       }
     else
       {
@@ -989,7 +999,8 @@ void cmComputeLinkDepends::CheckWrongConfigItem(int depender_index,
   // For CMake 2.4 bug-compatibility we need to consider the output
   // directories of targets linked in another configuration as link
   // directories.
-  if(cmTarget* tgt = this->FindTargetToLink(depender_index, item.c_str()))
+  if(cmTarget const* tgt
+                      = this->FindTargetToLink(depender_index, item))
     {
     if(!tgt->IsImported())
       {

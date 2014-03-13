@@ -35,7 +35,7 @@ public:
   // used by cmVisualStudioGeneratorOptions
   void WritePlatformConfigTag(
     const char* tag,
-    const char* config,
+    const std::string& config,
     int indentLevel,
     const char* attribute = 0,
     const char* end = 0,
@@ -59,9 +59,11 @@ private:
   void WriteSources(const char* tool, std::vector<cmSourceFile*> const&);
   void WriteAllSources();
   void WriteDotNetReferences();
+  void WriteEmbeddedResourceGroup();
   void WriteWinRTReferences();
   void WritePathAndIncrementalLinkOptions();
   void WriteItemDefinitionGroups();
+
   bool ComputeClOptions();
   bool ComputeClOptions(std::string const& configName);
   void WriteClOptions(std::string const& config,
@@ -85,17 +87,18 @@ private:
   void AddLibraries(cmComputeLinkInformation& cli, std::string& libstring);
   void WriteLibOptions(std::string const& config);
   void WriteEvents(std::string const& configName);
-  void WriteEvent(const char* name, std::vector<cmCustomCommand> & commands,
+  void WriteEvent(const char* name,
+                  std::vector<cmCustomCommand> const& commands,
                   std::string const& configName);
   void WriteGroupSources(const char* name, ToolSources const& sources,
                          std::vector<cmSourceGroup>& );
   void AddMissingSourceGroups(std::set<cmSourceGroup*>& groupsUsed,
                               const std::vector<cmSourceGroup>& allGroups);
-
+  bool IsResxHeader(const std::string& headerFile);
 
 private:
   typedef cmVisualStudioGeneratorOptions Options;
-  typedef std::map<cmStdString, Options*> OptionsMap;
+  typedef std::map<std::string, Options*> OptionsMap;
   OptionsMap ClOptions;
   OptionsMap LinkOptions;
   std::string PathToVcxproj;
@@ -110,7 +113,7 @@ private:
   cmLocalVisualStudio7Generator* LocalGenerator;
   std::set<cmSourceFile*> SourcesVisited;
 
-  typedef std::map<cmStdString, ToolSources> ToolSourceMap;
+  typedef std::map<std::string, ToolSources> ToolSourceMap;
   ToolSourceMap Tools;
 };
 

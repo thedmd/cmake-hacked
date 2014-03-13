@@ -64,25 +64,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return this->Args[0].c_str(); }
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-  {
-    std::string docs = "Function named: ";
-    docs += this->GetName();
-    return docs.c_str();
-  }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-  {
-    return this->GetTerseDocumentation();
-  }
+  virtual std::string GetName() const { return this->Args[0]; }
 
   cmTypeMacro(cmFunctionHelperCommand, cmCommand);
 
@@ -107,7 +89,7 @@ bool cmFunctionHelperCommand::InvokeInitialPass
     std::string errorMsg =
       "Function invoked with incorrect arguments for function named: ";
     errorMsg += this->Args[0];
-    this->SetError(errorMsg.c_str());
+    this->SetError(errorMsg);
     return false;
     }
 
@@ -131,15 +113,15 @@ bool cmFunctionHelperCommand::InvokeInitialPass
     {
     cmOStringStream tmpStream;
     tmpStream << "ARGV" << t;
-    this->Makefile->AddDefinition(tmpStream.str().c_str(),
+    this->Makefile->AddDefinition(tmpStream.str(),
                                   expandedArgs[t].c_str());
-    this->Makefile->MarkVariableAsUsed(tmpStream.str().c_str());
+    this->Makefile->MarkVariableAsUsed(tmpStream.str());
     }
 
   // define the formal arguments
   for (unsigned int j = 1; j < this->Args.size(); ++j)
     {
-    this->Makefile->AddDefinition(this->Args[j].c_str(),
+    this->Makefile->AddDefinition(this->Args[j],
                                   expandedArgs[j-1].c_str());
     }
 
@@ -237,8 +219,8 @@ IsFunctionBlocked(const cmListFileFunction& lff, cmMakefile &mf,
         }
 
       std::string newName = "_" + this->Args[0];
-      mf.GetCMakeInstance()->RenameCommand(this->Args[0].c_str(),
-                                           newName.c_str());
+      mf.GetCMakeInstance()->RenameCommand(this->Args[0],
+                                           newName);
       mf.AddCommand(f);
 
       // remove the function blocker now that the function is defined
@@ -267,7 +249,7 @@ ShouldRemove(const cmListFileFunction& lff, cmMakefile &mf)
     std::vector<std::string> expandedArguments;
     mf.ExpandArguments(lff.Arguments, expandedArguments);
     // if the endfunction has arguments then make sure
-    // they match the ones in the openeing function command
+    // they match the ones in the opening function command
     if ((expandedArguments.empty() ||
          (expandedArguments[0] == this->Args[0])))
       {

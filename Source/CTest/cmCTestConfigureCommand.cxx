@@ -31,32 +31,6 @@ cmCTestGenericHandler* cmCTestConfigureCommand::InitializeHandler()
     cmSystemTools::ExpandListArgument(this->Values[ctc_OPTIONS], options);
     }
 
-  if ( this->Values[ct_BUILD] )
-    {
-    this->CTest->SetCTestConfiguration("BuildDirectory",
-      cmSystemTools::CollapseFullPath(
-        this->Values[ct_BUILD]).c_str());
-    }
-  else
-    {
-    this->CTest->SetCTestConfiguration("BuildDirectory",
-      cmSystemTools::CollapseFullPath(
-       this->Makefile->GetSafeDefinition("CTEST_BINARY_DIRECTORY")).c_str());
-    }
-
-  if ( this->Values[ct_SOURCE] )
-    {
-    this->CTest->SetCTestConfiguration("SourceDirectory",
-      cmSystemTools::CollapseFullPath(
-        this->Values[ct_SOURCE]).c_str());
-    }
-  else
-    {
-    this->CTest->SetCTestConfiguration("SourceDirectory",
-      cmSystemTools::CollapseFullPath(
-        this->Makefile->GetSafeDefinition("CTEST_SOURCE_DIRECTORY")).c_str());
-    }
-
   if ( this->CTest->GetCTestConfiguration("BuildDirectory").empty() )
     {
     this->SetError("Build directory not specified. Either use BUILD "
@@ -95,7 +69,7 @@ cmCTestGenericHandler* cmCTestConfigureCommand::InitializeHandler()
         cmOStringStream e;
         e << "CMakeLists.txt file does not exist ["
           << cmakelists_file << "]";
-        this->SetError(e.str().c_str());
+        this->SetError(e.str());
         return 0;
         }
 
@@ -112,7 +86,7 @@ cmCTestGenericHandler* cmCTestConfigureCommand::InitializeHandler()
         }
 
       std::string cmakeConfigureCommand = "\"";
-      cmakeConfigureCommand += this->CTest->GetCMakeExecutable();
+      cmakeConfigureCommand += cmSystemTools::GetCMakeCommand();
       cmakeConfigureCommand += "\"";
 
       std::vector<std::string>::const_iterator it;
@@ -143,6 +117,15 @@ cmCTestGenericHandler* cmCTestConfigureCommand::InitializeHandler()
       cmakeConfigureCommand += " \"-G";
       cmakeConfigureCommand += cmakeGeneratorName;
       cmakeConfigureCommand += "\"";
+
+      const char* cmakeGeneratorToolset =
+        this->Makefile->GetDefinition("CTEST_CMAKE_GENERATOR_TOOLSET");
+      if(cmakeGeneratorToolset && *cmakeGeneratorToolset)
+        {
+        cmakeConfigureCommand += " \"-T";
+        cmakeConfigureCommand += cmakeGeneratorToolset;
+        cmakeConfigureCommand += "\"";
+        }
 
       cmakeConfigureCommand += " \"";
       cmakeConfigureCommand += source_dir;

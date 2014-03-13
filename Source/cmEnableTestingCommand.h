@@ -48,28 +48,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "enable_testing";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Enable testing for current directory and below.";
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "  enable_testing()\n"
-      "Enables testing for this directory and below.  "
-      "See also the add_test command.  Note that ctest expects to find "
-      "a test file in the build directory root.  Therefore, this command "
-      "should be in the source directory root.";
-    }
+  virtual std::string GetName() const { return "enable_testing";}
 
   cmTypeMacro(cmEnableTestingCommand, cmCommand);
 

@@ -20,6 +20,8 @@
 #include <cmsys/Process.h>
 #include <cmsys/RegularExpression.hxx>
 #include <cmsys/Base64.h>
+#include <cmsys/Directory.hxx>
+#include <cmsys/FStream.hxx>
 #include "cmMakefile.h"
 #include "cmGlobalGenerator.h"
 #include "cmLocalGenerator.h"
@@ -58,11 +60,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "subdirs";}
-
-  // Unused methods
-  virtual const char* GetTerseDocumentation() const { return ""; }
-  virtual const char* GetFullDocumentation() const { return ""; }
+  virtual std::string GetName() const { return "subdirs";}
 
   cmTypeMacro(cmCTestSubdirCommand, cmCommand);
 
@@ -82,7 +80,6 @@ bool cmCTestSubdirCommand
   std::string cwd = cmSystemTools::GetCurrentWorkingDirectory();
   for ( it = args.begin(); it != args.end(); ++ it )
     {
-    cmSystemTools::ChangeDirectory(cwd.c_str());
     std::string fname;
 
     if(cmSystemTools::FileIsFullPath(it->c_str()))
@@ -116,7 +113,6 @@ bool cmCTestSubdirCommand
     else
       {
       // No CTestTestfile? Who cares...
-      cmSystemTools::ChangeDirectory(cwd.c_str());
       continue;
       }
     fname += "/";
@@ -129,10 +125,11 @@ bool cmCTestSubdirCommand
       {
       std::string m = "Could not find include file: ";
       m += fname;
-      this->SetError(m.c_str());
+      this->SetError(m);
       return false;
       }
     }
+  cmSystemTools::ChangeDirectory(cwd.c_str());
   return true;
 }
 
@@ -160,11 +157,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "add_subdirectory";}
-
-  // Unused methods
-  virtual const char* GetTerseDocumentation() const { return ""; }
-  virtual const char* GetFullDocumentation() const { return ""; }
+  virtual std::string GetName() const { return "add_subdirectory";}
 
   cmTypeMacro(cmCTestAddSubdirectoryCommand, cmCommand);
 
@@ -220,7 +213,7 @@ bool cmCTestAddSubdirectoryCommand
     {
     std::string m = "Could not find include file: ";
     m += fname;
-    this->SetError(m.c_str());
+    this->SetError(m);
     return false;
     }
   return true;
@@ -250,11 +243,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "ADD_TEST";}
-
-  // Unused methods
-  virtual const char* GetTerseDocumentation() const { return ""; }
-  virtual const char* GetFullDocumentation() const { return ""; }
+  virtual std::string GetName() const { return "add_test";}
 
   cmTypeMacro(cmCTestAddTestCommand, cmCommand);
 
@@ -298,11 +287,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "SET_TESTS_PROPERTIES";}
-
-  // Unused methods
-  virtual const char* GetTerseDocumentation() const { return ""; }
-  virtual const char* GetFullDocumentation() const { return ""; }
+  virtual std::string GetName() const { return "set_tests_properties";}
 
   cmTypeMacro(cmCTestSetTestsPropertiesCommand, cmCommand);
 
@@ -538,6 +523,7 @@ int cmCTestTestHandler::ProcessHandler()
     this->UseExcludeRegExp();
     this->SetExcludeRegExp(val);
     }
+  this->SetRerunFailed(cmSystemTools::IsOn(this->GetOption("RerunFailed")));
 
   this->TestResults.clear();
 
@@ -554,8 +540,8 @@ int cmCTestTestHandler::ProcessHandler()
   this->StartLogFile((this->MemCheck ? "DynamicAnalysis" : "Test"), mLogFile);
   this->LogFile = &mLogFile;
 
-  std::vector<cmStdString> passed;
-  std::vector<cmStdString> failed;
+  std::vector<std::string> passed;
+  std::vector<std::string> failed;
   int total;
 
   //start the real time clock
@@ -583,7 +569,7 @@ int cmCTestTestHandler::ProcessHandler()
       {
       cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, std::endl
         << "The following tests passed:" << std::endl);
-      for(std::vector<cmStdString>::iterator j = passed.begin();
+      for(std::vector<std::string>::iterator j = passed.begin();
           j != passed.end(); ++j)
         {
         cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, "\t" << *j
@@ -630,7 +616,7 @@ int cmCTestTestHandler::ProcessHandler()
           ofs << ftit->TestCount << ":" << ftit->Name << std::endl;
           cmCTestLog(this->CTest, HANDLER_OUTPUT, "\t" << std::setw(3)
                      << ftit->TestCount << " - "
-                     << ftit->Name.c_str() << " ("
+                     << ftit->Name << " ("
                      << this->GetTestStatus(ftit->Status) << ")"
                      << std::endl);
           }
@@ -675,8 +661,8 @@ void cmCTestTestHandler::PrintLabelSummary()
   cmCTestTestHandler::ListOfTests::iterator it = this->TestList.begin();
   cmCTestTestHandler::TestResultsVector::iterator ri =
     this->TestResults.begin();
-  std::map<cmStdString, double> labelTimes;
-  std::set<cmStdString> labels;
+  std::map<std::string, double> labelTimes;
+  std::set<std::string> labels;
   // initialize maps
   std::string::size_type maxlen = 0;
   for(; it != this->TestList.end(); ++it)
@@ -716,7 +702,7 @@ void cmCTestTestHandler::PrintLabelSummary()
     {
     cmCTestLog(this->CTest, HANDLER_OUTPUT, "\nLabel Time Summary:");
     }
-  for(std::set<cmStdString>::const_iterator i = labels.begin();
+  for(std::set<std::string>::const_iterator i = labels.begin();
       i != labels.end(); ++i)
     {
     std::string label = *i;
@@ -820,6 +806,13 @@ void cmCTestTestHandler::ComputeTestList()
 {
   this->TestList.clear(); // clear list of test
   this->GetListOfTests();
+
+  if (this->RerunFailed)
+    {
+    this->ComputeTestListForRerunFailed();
+    return;
+    }
+
   cmCTestTestHandler::ListOfTests::size_type tmsize = this->TestList.size();
   // how many tests are in based on RegExp?
   int inREcnt = 0;
@@ -882,9 +875,47 @@ void cmCTestTestHandler::ComputeTestList()
   this->TotalNumberOfTests = this->TestList.size();
   // Set the TestList to the final list of all test
   this->TestList = finalList;
+
+  this->UpdateMaxTestNameWidth();
+}
+
+void cmCTestTestHandler::ComputeTestListForRerunFailed()
+{
+  this->ExpandTestsToRunInformationForRerunFailed();
+
+  cmCTestTestHandler::ListOfTests::iterator it;
+  ListOfTests finalList;
+  int cnt = 0;
+  for ( it = this->TestList.begin(); it != this->TestList.end(); it ++ )
+    {
+    cnt ++;
+
+    // if this test is not in our list of tests to run, then skip it.
+    if ((this->TestsToRun.size() &&
+         std::find(this->TestsToRun.begin(), this->TestsToRun.end(), cnt)
+         == this->TestsToRun.end()))
+      {
+      continue;
+      }
+
+    it->Index = cnt;
+    finalList.push_back(*it);
+    }
+
+  // Save the total number of tests before exclusions
+  this->TotalNumberOfTests = this->TestList.size();
+
+  // Set the TestList to the list of failed tests to rerun
+  this->TestList = finalList;
+
+  this->UpdateMaxTestNameWidth();
+}
+
+void cmCTestTestHandler::UpdateMaxTestNameWidth()
+{
   std::string::size_type max = this->CTest->GetMaxTestNameWidth();
-  for (it = this->TestList.begin();
-       it != this->TestList.end(); it ++ )
+  for ( cmCTestTestHandler::ListOfTests::iterator it = this->TestList.begin();
+        it != this->TestList.end(); it ++ )
     {
     cmCTestTestProperties& p = *it;
     if(max < p.Name.size())
@@ -901,7 +932,7 @@ void cmCTestTestHandler::ComputeTestList()
 
 bool cmCTestTestHandler::GetValue(const char* tag,
                                   int& value,
-                                  std::ifstream& fin)
+                                  std::istream& fin)
 {
   std::string line;
   bool ret = true;
@@ -923,7 +954,7 @@ bool cmCTestTestHandler::GetValue(const char* tag,
 
 bool cmCTestTestHandler::GetValue(const char* tag,
                                   double& value,
-                                  std::ifstream& fin)
+                                  std::istream& fin)
 {
   std::string line;
   cmSystemTools::GetLineFromStream(fin, line);
@@ -945,7 +976,7 @@ bool cmCTestTestHandler::GetValue(const char* tag,
 
 bool cmCTestTestHandler::GetValue(const char* tag,
                                   bool& value,
-                                  std::ifstream& fin)
+                                  std::istream& fin)
 {
   std::string line;
   cmSystemTools::GetLineFromStream(fin, line);
@@ -977,7 +1008,7 @@ bool cmCTestTestHandler::GetValue(const char* tag,
 
 bool cmCTestTestHandler::GetValue(const char* tag,
                                   size_t& value,
-                                  std::ifstream& fin)
+                                  std::istream& fin)
 {
   std::string line;
   cmSystemTools::GetLineFromStream(fin, line);
@@ -991,7 +1022,7 @@ bool cmCTestTestHandler::GetValue(const char* tag,
     {
     cmCTestLog(this->CTest, ERROR_MESSAGE,
                "parse error: missing tag: "
-               << tag << " found [" << line.c_str() << "]" << std::endl);
+               << tag << " found [" << line << "]" << std::endl);
     ret = false;
     }
   return ret;
@@ -999,7 +1030,7 @@ bool cmCTestTestHandler::GetValue(const char* tag,
 
 bool cmCTestTestHandler::GetValue(const char* tag,
                                   std::string& value,
-                                  std::ifstream& fin)
+                                  std::istream& fin)
 {
   std::string line;
   cmSystemTools::GetLineFromStream(fin, line);
@@ -1019,8 +1050,8 @@ bool cmCTestTestHandler::GetValue(const char* tag,
 }
 
 //---------------------------------------------------------------------
-void cmCTestTestHandler::ProcessDirectory(std::vector<cmStdString> &passed,
-                                         std::vector<cmStdString> &failed)
+void cmCTestTestHandler::ProcessDirectory(std::vector<std::string> &passed,
+                                         std::vector<std::string> &failed)
 {
   this->ComputeTestList();
   this->StartTest = this->CTest->CurrentTime();
@@ -1108,7 +1139,7 @@ void cmCTestTestHandler::ProcessDirectory(std::vector<cmStdString> &passed,
 }
 
 //----------------------------------------------------------------------
-void cmCTestTestHandler::GenerateTestCommand(std::vector<std::string>&)
+void cmCTestTestHandler::GenerateTestCommand(std::vector<std::string>&, int)
 {
 }
 
@@ -1185,14 +1216,14 @@ void cmCTestTestHandler::GenerateDartOutput(std::ostream& os)
       << "name=\"Command Line\"><Value>"
       << cmXMLSafe(result->FullCommandLine)
       << "</Value></NamedMeasurement>\n";
-    std::map<cmStdString,cmStdString>::iterator measureIt;
+    std::map<std::string,std::string>::iterator measureIt;
     for ( measureIt = result->Properties->Measurements.begin();
       measureIt != result->Properties->Measurements.end();
       ++ measureIt )
       {
       os
         << "\t\t\t<NamedMeasurement type=\"text/string\" "
-        << "name=\"" << measureIt->first.c_str() << "\"><Value>"
+        << "name=\"" << measureIt->first << "\"><Value>"
         << cmXMLSafe(measureIt->second)
         << "</Value></NamedMeasurement>\n";
       }
@@ -1297,16 +1328,15 @@ void cmCTestTestHandler::AttachFiles(std::ostream& os,
 }
 
 //----------------------------------------------------------------------
-int cmCTestTestHandler::ExecuteCommands(std::vector<cmStdString>& vec)
+int cmCTestTestHandler::ExecuteCommands(std::vector<std::string>& vec)
 {
-  std::vector<cmStdString>::iterator it;
+  std::vector<std::string>::iterator it;
   for ( it = vec.begin(); it != vec.end(); ++it )
     {
     int retVal = 0;
-    std::string cmd = cmSystemTools::ConvertToOutputPath(it->c_str());
-    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, "Run command: " << cmd
+    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, "Run command: " << *it
       << std::endl);
-    if ( !cmSystemTools::RunSingleCommand(cmd.c_str(), 0, &retVal, 0,
+    if ( !cmSystemTools::RunSingleCommand(it->c_str(), 0, &retVal, 0,
                                           cmSystemTools::OUTPUT_MERGE
         /*this->Verbose*/) || retVal != 0 )
       {
@@ -1363,7 +1393,7 @@ void cmCTestTestHandler
     tempPath += filename;
     attempted.push_back(tempPath);
     attemptedConfigs.push_back(ctest->GetConfigType());
-    // If the file is an OSX bundle then the configtyp
+    // If the file is an OSX bundle then the configtype
     // will be at the start of the path
     tempPath = ctest->GetConfigType();
     tempPath += "/";
@@ -1374,7 +1404,7 @@ void cmCTestTestHandler
     }
   else
     {
-    // no config specified to try some options
+    // no config specified - try some options...
     tempPath = filepath;
     tempPath += "Release/";
     tempPath += filename;
@@ -1476,7 +1506,7 @@ std::string cmCTestTestHandler
     // then try with the exe extension
     else
       {
-      failed.push_back(attempted[ai].c_str());
+      failed.push_back(attempted[ai]);
       tempPath = attempted[ai];
       tempPath += cmSystemTools::GetExecutableExtension();
       if(cmSystemTools::FileExists(tempPath.c_str())
@@ -1487,7 +1517,7 @@ std::string cmCTestTestHandler
         }
       else
         {
-        failed.push_back(tempPath.c_str());
+        failed.push_back(tempPath);
         }
       }
     }
@@ -1710,6 +1740,91 @@ void cmCTestTestHandler::ExpandTestsToRunInformation(size_t numTests)
   this->TestsToRun.erase(new_end, this->TestsToRun.end());
 }
 
+void cmCTestTestHandler::ExpandTestsToRunInformationForRerunFailed()
+{
+
+  std::string dirName = this->CTest->GetBinaryDir() + "/Testing/Temporary";
+
+  cmsys::Directory directory;
+  if (directory.Load(dirName.c_str()) == 0)
+    {
+    cmCTestLog(this->CTest, ERROR_MESSAGE, "Unable to read the contents of "
+      << dirName << std::endl);
+    return;
+    }
+
+  int numFiles = static_cast<int>
+    (cmsys::Directory::GetNumberOfFilesInDirectory(dirName.c_str()));
+  std::string pattern = "LastTestsFailed";
+  std::string logName = "";
+
+  for (int i = 0; i < numFiles; ++i)
+    {
+    std::string fileName = directory.GetFile(i);
+    // bcc crashes if we attempt a normal substring comparison,
+    // hence the following workaround
+    std::string fileNameSubstring = fileName.substr(0, pattern.length());
+    if (fileNameSubstring.compare(pattern) != 0)
+      {
+      continue;
+      }
+    if (logName == "")
+      {
+      logName = fileName;
+      }
+    else
+      {
+      // if multiple matching logs were found we use the most recently
+      // modified one.
+      int res;
+      cmSystemTools::FileTimeCompare(logName.c_str(), fileName.c_str(), &res);
+      if (res == -1)
+        {
+        logName = fileName;
+        }
+      }
+    }
+
+  std::string lastTestsFailedLog = this->CTest->GetBinaryDir()
+    + "/Testing/Temporary/" + logName;
+
+  if ( !cmSystemTools::FileExists(lastTestsFailedLog.c_str()) )
+    {
+    if ( !this->CTest->GetShowOnly() && !this->CTest->ShouldPrintLabels() )
+      {
+      cmCTestLog(this->CTest, ERROR_MESSAGE, lastTestsFailedLog
+        << " does not exist!" << std::endl);
+      }
+    return;
+    }
+
+  // parse the list of tests to rerun from LastTestsFailed.log
+  cmsys::ifstream ifs(lastTestsFailedLog.c_str());
+  if ( ifs )
+    {
+    std::string line;
+    std::string::size_type pos;
+    while ( cmSystemTools::GetLineFromStream(ifs, line) )
+      {
+      pos = line.find(':', 0);
+      if (pos == line.npos)
+        {
+        continue;
+        }
+
+      int val = atoi(line.substr(0, pos).c_str());
+      this->TestsToRun.push_back(val);
+      }
+    ifs.close();
+    }
+  else if ( !this->CTest->GetShowOnly() && !this->CTest->ShouldPrintLabels() )
+    {
+    cmCTestLog(this->CTest, ERROR_MESSAGE, "Problem reading file: "
+      << lastTestsFailedLog <<
+      " while generating list of previously failed tests." << std::endl);
+    }
+}
+
 //----------------------------------------------------------------------
 // Just for convenience
 #define SPACE_REGEX "[ \t\r\n]"
@@ -1845,12 +1960,12 @@ std::string cmCTestTestHandler::GenerateRegressionImages(
             << " " << k1 << "=\"" << v1 << "\""
             << " " << k2 << "=\"" << v2 << "\""
             << " encoding=\"none\""
-            << "><Value>Image " << filename.c_str()
+            << "><Value>Image " << filename
             << " is empty</Value></NamedMeasurement>";
           }
         else
           {
-          std::ifstream ifs(filename.c_str(), std::ios::in
+          cmsys::ifstream ifs(filename.c_str(), std::ios::in
 #ifdef _WIN32
                             | std::ios::binary
 #endif
@@ -1899,10 +2014,10 @@ std::string cmCTestTestHandler::GenerateRegressionImages(
           << "\t\t\t<NamedMeasurement"
           << " name=\"" << measurementfile.match(idx) << "\""
           << " text=\"text/string\""
-          << "><Value>File " << filename.c_str()
+          << "><Value>File " << filename
           << " not found</Value></NamedMeasurement>"
           << std::endl;
-        cmCTestLog(this->CTest, HANDLER_OUTPUT, "File \"" << filename.c_str()
+        cmCTestLog(this->CTest, HANDLER_OUTPUT, "File \"" << filename
           << "\" not found." << std::endl);
         }
       cxml.erase(measurementfile.start(),
@@ -1940,7 +2055,7 @@ void cmCTestTestHandler::SetTestsToRunInformation(const char* in)
   // string
   if(cmSystemTools::FileExists(in))
     {
-    std::ifstream fin(in);
+    cmsys::ifstream fin(in);
     unsigned long filelen = cmSystemTools::FileLength(in);
     char* buff = new char[filelen+1];
     fin.getline(buff, filelen);
@@ -1997,7 +2112,7 @@ bool cmCTestTestHandler::SetTestsProperties(
   const std::vector<std::string>& args)
 {
   std::vector<std::string>::const_iterator it;
-  std::vector<cmStdString> tests;
+  std::vector<std::string> tests;
   bool found = false;
   for ( it = args.begin(); it != args.end(); ++ it )
     {
@@ -2022,7 +2137,7 @@ bool cmCTestTestHandler::SetTestsProperties(
       break;
       }
     std::string val = *it;
-    std::vector<cmStdString>::const_iterator tit;
+    std::vector<std::string>::const_iterator tit;
     for ( tit = tests.begin(); tit != tests.end(); ++ tit )
       {
       cmCTestTestHandler::ListOfTests::iterator rtit;
@@ -2039,7 +2154,7 @@ bool cmCTestTestHandler::SetTestsProperties(
           if ( key == "ATTACHED_FILES" )
             {
             std::vector<std::string> lval;
-            cmSystemTools::ExpandListArgument(val.c_str(), lval);
+            cmSystemTools::ExpandListArgument(val, lval);
 
             for(std::vector<std::string>::iterator f = lval.begin();
                 f != lval.end(); ++f)
@@ -2050,7 +2165,7 @@ bool cmCTestTestHandler::SetTestsProperties(
           if ( key == "ATTACHED_FILES_ON_FAIL" )
             {
             std::vector<std::string> lval;
-            cmSystemTools::ExpandListArgument(val.c_str(), lval);
+            cmSystemTools::ExpandListArgument(val, lval);
 
             for(std::vector<std::string>::iterator f = lval.begin();
                 f != lval.end(); ++f)
@@ -2061,7 +2176,7 @@ bool cmCTestTestHandler::SetTestsProperties(
           if ( key == "RESOURCE_LOCK" )
             {
             std::vector<std::string> lval;
-            cmSystemTools::ExpandListArgument(val.c_str(), lval);
+            cmSystemTools::ExpandListArgument(val, lval);
 
             for(std::vector<std::string>::iterator f = lval.begin();
                 f != lval.end(); ++f)
@@ -2081,7 +2196,7 @@ bool cmCTestTestHandler::SetTestsProperties(
           if ( key == "REQUIRED_FILES" )
             {
             std::vector<std::string> lval;
-            cmSystemTools::ExpandListArgument(val.c_str(), lval);
+            cmSystemTools::ExpandListArgument(val, lval);
 
             for(std::vector<std::string>::iterator f = lval.begin();
                 f != lval.end(); ++f)
@@ -2096,14 +2211,14 @@ bool cmCTestTestHandler::SetTestsProperties(
           if ( key == "FAIL_REGULAR_EXPRESSION" )
             {
             std::vector<std::string> lval;
-            cmSystemTools::ExpandListArgument(val.c_str(), lval);
+            cmSystemTools::ExpandListArgument(val, lval);
             std::vector<std::string>::iterator crit;
             for ( crit = lval.begin(); crit != lval.end(); ++ crit )
               {
               rtit->ErrorRegularExpressions.push_back(
                 std::pair<cmsys::RegularExpression, std::string>(
                   cmsys::RegularExpression(crit->c_str()),
-                  std::string(crit->c_str())));
+                  std::string(*crit)));
               }
             }
           if ( key == "PROCESSORS" )
@@ -2114,10 +2229,18 @@ bool cmCTestTestHandler::SetTestsProperties(
               rtit->Processors = 1;
               }
             }
+          if ( key == "SKIP_RETURN_CODE" )
+            {
+            rtit->SkipReturnCode = atoi(val.c_str());
+            if(rtit->SkipReturnCode < 0 || rtit->SkipReturnCode > 255)
+              {
+              rtit->SkipReturnCode = -1;
+              }
+            }
           if ( key == "DEPENDS" )
             {
             std::vector<std::string> lval;
-            cmSystemTools::ExpandListArgument(val.c_str(), lval);
+            cmSystemTools::ExpandListArgument(val, lval);
             std::vector<std::string>::iterator crit;
             for ( crit = lval.begin(); crit != lval.end(); ++ crit )
               {
@@ -2127,7 +2250,7 @@ bool cmCTestTestHandler::SetTestsProperties(
           if ( key == "ENVIRONMENT" )
             {
             std::vector<std::string> lval;
-            cmSystemTools::ExpandListArgument(val.c_str(), lval);
+            cmSystemTools::ExpandListArgument(val, lval);
             std::vector<std::string>::iterator crit;
             for ( crit = lval.begin(); crit != lval.end(); ++ crit )
               {
@@ -2137,7 +2260,7 @@ bool cmCTestTestHandler::SetTestsProperties(
           if ( key == "LABELS" )
             {
             std::vector<std::string> lval;
-            cmSystemTools::ExpandListArgument(val.c_str(), lval);
+            cmSystemTools::ExpandListArgument(val, lval);
             std::vector<std::string>::iterator crit;
             for ( crit = lval.begin(); crit != lval.end(); ++ crit )
               {
@@ -2161,14 +2284,14 @@ bool cmCTestTestHandler::SetTestsProperties(
           if ( key == "PASS_REGULAR_EXPRESSION" )
             {
             std::vector<std::string> lval;
-            cmSystemTools::ExpandListArgument(val.c_str(), lval);
+            cmSystemTools::ExpandListArgument(val, lval);
             std::vector<std::string>::iterator crit;
             for ( crit = lval.begin(); crit != lval.end(); ++ crit )
               {
               rtit->RequiredRegularExpressions.push_back(
                 std::pair<cmsys::RegularExpression, std::string>(
                   cmsys::RegularExpression(crit->c_str()),
-                  std::string(crit->c_str())));
+                  std::string(*crit)));
               }
             }
           if ( key == "WORKING_DIRECTORY" )
@@ -2196,7 +2319,7 @@ bool cmCTestTestHandler::AddTest(const std::vector<std::string>& args)
     }
   if ( this->MemCheck )
     {
-    std::vector<cmStdString>::iterator it;
+    std::vector<std::string>::iterator it;
     bool found = false;
     for ( it = this->CustomTestsIgnore.begin();
       it != this->CustomTestsIgnore.end(); ++ it )
@@ -2216,7 +2339,7 @@ bool cmCTestTestHandler::AddTest(const std::vector<std::string>& args)
     }
   else
     {
-    std::vector<cmStdString>::iterator it;
+    std::vector<std::string>::iterator it;
     bool found = false;
     for ( it = this->CustomTestsIgnore.begin();
       it != this->CustomTestsIgnore.end(); ++ it )
@@ -2249,6 +2372,7 @@ bool cmCTestTestHandler::AddTest(const std::vector<std::string>& args)
   test.ExplicitTimeout = false;
   test.Cost = 0;
   test.Processors = 1;
+  test.SkipReturnCode = -1;
   test.PreviousRuns = 0;
   if (this->UseIncludeRegExpFlag &&
     !this->IncludeTestsRegularExpression.find(testname.c_str()))

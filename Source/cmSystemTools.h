@@ -47,7 +47,10 @@ public:
                                    KeyWOW64 view = KeyWOW64_Default);
 
   ///! Escape quotes in a string.
-  static std::string EscapeQuotes(const char* str);
+  static std::string EscapeQuotes(const std::string& str);
+
+  /** Map help document name to file name.  */
+  static std::string HelpFileName(std::string);
 
   /**
    * Returns a string that has whitespace removed from the start and the end.
@@ -56,7 +59,7 @@ public:
 
   typedef  void (*ErrorCallback)(const char*, const char*, bool&, void*);
   /**
-   *  Set the function used by GUI's to display error messages
+   *  Set the function used by GUIs to display error messages
    *  Function gets passed: message as a const char*,
    *  title as a const char*, and a reference to bool that when
    *  set to false, will disable furthur messages (cancel).
@@ -155,9 +158,10 @@ public:
   static std::string FileExistsInParentDirectories(const char* fname,
     const char* directory, const char* toplevel);
 
-  static void Glob(const char *directory, const char *regexp,
+  static void Glob(const std::string& directory, const std::string& regexp,
                    std::vector<std::string>& files);
-  static void GlobDirs(const char *fullPath, std::vector<std::string>& files);
+  static void GlobDirs(const std::string& fullPath,
+                       std::vector<std::string>& files);
 
   /**
    * Try to find a list of files that match the "simple" globbing
@@ -168,8 +172,8 @@ public:
    * want to find. 0 means all files, -1 means directories, 1 means
    * files only. This method returns true if search was succesfull.
    */
-  static bool SimpleGlob(const cmStdString& glob,
-                         std::vector<cmStdString>& files,
+  static bool SimpleGlob(const std::string& glob,
+                         std::vector<std::string>& files,
                          int type = 0);
 
   ///! Copy a file.
@@ -182,28 +186,11 @@ public:
   static bool RenameFile(const char* oldname, const char* newname);
 
   ///! Compute the md5sum of a file
-  static bool ComputeFileMD5(const char* source, char* md5out);
+  static bool ComputeFileMD5(const std::string& source, char* md5out);
 
   /** Compute the md5sum of a string.  */
-  static std::string ComputeStringMD5(const char* input);
+  static std::string ComputeStringMD5(const std::string& input);
 
-  /**
-   * Run an executable command and put the stdout in output.
-   * A temporary file is created in the binaryDir for storing the
-   * output because windows does not have popen.
-   *
-   * If verbose is false, no user-viewable output from the program
-   * being run will be generated.
-   *
-   * If timeout is specified, the command will be terminated after
-   * timeout expires.
-   */
-  static bool RunCommand(const char* command, std::string& output,
-                         const char* directory = 0,
-                         bool verbose = true, int timeout = 0);
-  static bool RunCommand(const char* command, std::string& output,
-                         int &retVal, const char* directory = 0,
-                         bool verbose = true, int timeout = 0);
   /**
    * Run a single executable command
    *
@@ -211,7 +198,7 @@ public:
    * user-viewable output from the program being run will be generated.
    * OUTPUT_MERGE is the legacy behaviour where stdout and stderr are merged
    * into stdout.  OUTPUT_NORMAL passes through the output to stdout/stderr as
-   * it was received.
+   * it was received.  OUTPUT_PASSTHROUGH passes through the original handles.
    *
    * If timeout is specified, the command will be terminated after
    * timeout expires. Timeout is specified in seconds.
@@ -230,7 +217,8 @@ public:
    {
      OUTPUT_NONE = 0,
      OUTPUT_MERGE,
-     OUTPUT_NORMAL
+     OUTPUT_NORMAL,
+     OUTPUT_PASSTHROUGH
    };
   static bool RunSingleCommand(const char* command, std::string* output = 0,
                                int* retVal = 0, const char* dir = 0,
@@ -241,16 +229,18 @@ public:
    * the command to run, and each argument to the command should
    * be in comand[1]...command[command.size()]
    */
-  static bool RunSingleCommand(std::vector<cmStdString> const& command,
+  static bool RunSingleCommand(std::vector<std::string> const& command,
                                std::string* output = 0,
                                int* retVal = 0, const char* dir = 0,
                                OutputOption outputflag = OUTPUT_MERGE,
                                double timeout = 0.0);
 
+  static std::string PrintSingleCommand(std::vector<std::string> const&);
+
   /**
    * Parse arguments out of a single string command
    */
-  static std::vector<cmStdString> ParseArguments(const char* command);
+  static std::vector<std::string> ParseArguments(const char* command);
 
   /** Parse arguments out of a windows command line string.  */
   static void ParseWindowsCommandLine(const char* command,
@@ -259,8 +249,6 @@ public:
   /** Parse arguments out of a unix command line string.  */
   static void ParseUnixCommandLine(const char* command,
                                    std::vector<std::string>& args);
-  static void ParseUnixCommandLine(const char* command,
-                                   std::vector<cmStdString>& args);
 
   /** Compute an escaped version of the given argument for use in a
       windows shell.  See kwsys/System.h.in for details.  */
@@ -274,7 +262,7 @@ public:
   static bool GetRunCommandOutput() { return s_DisableRunCommandOutput; }
 
   /**
-   * Come constants for different file formats.
+   * Some constants for different file formats.
    */
   enum FileFormat {
     NO_FILE_FORMAT = 0,
@@ -308,14 +296,6 @@ public:
    */
   static FileFormat GetFileFormat(const char* ext);
 
-  /**
-   * On Windows 9x we need a comspec (command.com) substitute to run
-   * programs correctly. This string has to be constant available
-   * through the running of program. This method does not create a copy.
-   */
-  static void SetWindows9xComspecSubstitute(const char*);
-  static const char* GetWindows9xComspecSubstitute();
-
   /** Windows if this is true, the CreateProcess in RunCommand will
    *  not show new consol windows when running programs.
    */
@@ -334,7 +314,7 @@ public:
 
   /** Split a string on its newlines into multiple lines.  Returns
       false only if the last line stored had no newline.  */
-  static bool Split(const char* s, std::vector<cmStdString>& l);
+  static bool Split(const char* s, std::vector<std::string>& l);
   static void SetForceUnixPaths(bool v)
     {
       s_ForceUnixPaths = v;
@@ -364,6 +344,12 @@ public:
       from /usr/src to /usr/src/test/blah/foo.cpp -> test/blah/foo.cpp
   */
   static std::string RelativePath(const char* local, const char* remote);
+
+  /** Joins two paths while collapsing x/../ parts
+   * For example CollapseCombinedPath("a/b/c", "../../d") results in "a/d"
+   */
+  static std::string CollapseCombinedPath(std::string const& dir,
+                                          std::string const& file);
 
 #ifdef CMAKE_BUILD_WITH_CMAKE
   /** Remove an environment variable */
@@ -397,7 +383,7 @@ public:
   static bool ListTar(const char* outFileName,
                       bool gzip, bool verbose);
   static bool CreateTar(const char* outFileName,
-                        const std::vector<cmStdString>& files, bool gzip,
+                        const std::vector<std::string>& files, bool gzip,
                         bool bzip2, bool verbose);
   static bool ExtractTar(const char* inFileName, bool gzip,
                          bool verbose);
@@ -421,13 +407,16 @@ public:
   /** Random seed generation.  */
   static unsigned int RandomSeed();
 
-  /** Find the directory containing the running executable.  Save it
-   in a global location to be queried by GetExecutableDirectory
-   later.  */
-  static void FindExecutableDirectory(const char* argv0);
+  /** Find the directory containing CMake executables.  */
+  static void FindCMakeResources(const char* argv0);
 
-  /** Get the directory containing the currently running executable.  */
-  static const char* GetExecutableDirectory();
+  /** Get the CMake resource paths, after FindCMakeResources.  */
+  static std::string const& GetCTestCommand();
+  static std::string const& GetCPackCommand();
+  static std::string const& GetCMakeCommand();
+  static std::string const& GetCMakeGUICommand();
+  static std::string const& GetCMakeCursesCommand();
+  static std::string const& GetCMakeRoot();
 
 #if defined(CMAKE_BUILD_WITH_CMAKE)
   /** Echo a message in color using KWSys's Terminal cprintf.  */
@@ -437,6 +426,10 @@ public:
 
   /** Try to guess the soname of a shared library.  */
   static bool GuessLibrarySOName(std::string const& fullPath,
+                                 std::string& soname);
+
+  /** Try to guess the install name of a shared library.  */
+  static bool GuessLibraryInstallName(std::string const& fullPath,
                                  std::string& soname);
 
   /** Try to set the RPATH in an ELF binary.  */
@@ -461,6 +454,15 @@ public:
   /** Tokenize a string */
   static std::vector<std::string> tokenize(const std::string& str,
                                            const std::string& sep);
+
+#ifdef _WIN32
+  struct WindowsFileRetry
+  {
+    unsigned int Count;
+    unsigned int Delay;
+  };
+  static WindowsFileRetry GetWindowsFileRetry();
+#endif
 private:
   static bool s_ForceUnixPaths;
   static bool s_RunCommandHideConsole;
@@ -474,8 +476,6 @@ private:
   static void* s_ErrorCallbackClientData;
   static void* s_StdoutCallbackClientData;
   static void* s_InterruptCallbackClientData;
-
-  static std::string s_Windows9xComspecSubstitute;
 };
 
 #endif

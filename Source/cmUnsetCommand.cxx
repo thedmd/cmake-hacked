@@ -24,7 +24,7 @@ bool cmUnsetCommand::InitialPass(std::vector<std::string> const& args,
   const char* variable = args[0].c_str();
 
   // unset(ENV{VAR})
-  if (!strncmp(variable,"ENV{",4) && strlen(variable) > 5)
+  if (cmHasLiteralPrefix(variable, "ENV{") && strlen(variable) > 5)
     {
     // what is the variable name
     char *envVarName = new char [strlen(variable)];
@@ -49,7 +49,13 @@ bool cmUnsetCommand::InitialPass(std::vector<std::string> const& args,
     this->Makefile->RemoveCacheDefinition(variable);
     return true;
     }
-  // ERROR: second argument isn't CACHE
+  // unset(VAR PARENT_SCOPE)
+  else if ((args.size() == 2) && (args[1] == "PARENT_SCOPE"))
+    {
+    this->Makefile->RaiseScope(variable, 0);
+    return true;
+    }
+  // ERROR: second argument isn't CACHE or PARENT_SCOPE
   else
     {
     this->SetError("called with an invalid second argument");

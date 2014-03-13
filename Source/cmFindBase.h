@@ -31,10 +31,7 @@ public:
   virtual bool ParseArguments(std::vector<std::string> const& args);
   cmTypeMacro(cmFindBase, cmFindCommon);
 
-  virtual const char* GetFullDocumentation() const;
-
 protected:
-  virtual void GenerateDocumentation();
   void PrintFindStuff();
   void ExpandPaths();
   void AddPathSuffixes();
@@ -44,16 +41,15 @@ protected:
   // if it has documentation in the cache
   bool CheckForVariableInCache();
 
-  cmStdString GenericDocumentation;
   // use by command during find
-  cmStdString VariableDocumentation;
-  cmStdString VariableName;
+  std::string VariableDocumentation;
+  std::string VariableName;
   std::vector<std::string> Names;
   bool NamesPerDir;
   bool NamesPerDirAllowed;
 
   // CMAKE_*_PATH CMAKE_SYSTEM_*_PATH FRAMEWORK|LIBRARY|INCLUDE|PROGRAM
-  cmStdString EnvironmentPath; // LIB,INCLUDE
+  std::string EnvironmentPath; // LIB,INCLUDE
 
   bool AlreadyInCache;
   bool AlreadyInCacheWithoutMetaInfo;
@@ -67,8 +63,8 @@ private:
   void AddUserGuessPath();
 
   // Helpers.
-  void AddCMakePrefixPath(const char* variable);
-  void AddEnvPrefixPath(const char* variable);
+  void AddCMakePrefixPath(const std::string& variable);
+  void AddEnvPrefixPath(const std::string& variable);
   void AddPrefixPaths(std::vector<std::string> const& in_paths,
                       PathType pathType);
 };

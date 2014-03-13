@@ -32,45 +32,11 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "set_tests_properties";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Set a property of the tests.";
-    }
-
-  /**
-   * Longer documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "  set_tests_properties(test1 [test2...] PROPERTIES prop1 value1 prop2"
-      " value2)\n"
-      "Set a property for the tests. If the property is not found, CMake "
-      "will report an error. The properties include:\n"
-      "WILL_FAIL: If set to true, this will invert the pass/fail flag of the"
-      " test.\n"
-      "PASS_REGULAR_EXPRESSION: If set, the test output will be checked "
-      "against the specified regular expressions and at least one of the"
-      " regular "
-      "expressions has to match, otherwise the test will fail.\n"
-      "  Example: PASS_REGULAR_EXPRESSION \"TestPassed;All ok\"\n"
-      "FAIL_REGULAR_EXPRESSION: If set, if the output will match to one of "
-      "specified regular expressions, the test will fail.\n"
-      "  Example: PASS_REGULAR_EXPRESSION \"[^a-z]Error;ERROR;Failed\"\n"
-      "Both PASS_REGULAR_EXPRESSION and FAIL_REGULAR_EXPRESSION expect a "
-      "list of regular expressions.\n"
-      "TIMEOUT: Setting this will limit the test runtime to the number of "
-      "seconds specified.\n";
-    }
+  virtual std::string GetName() const { return "set_tests_properties";}
 
   cmTypeMacro(cmSetTestsPropertiesCommand, cmCommand);
 
-  static bool SetOneTest(const char *tname,
+  static bool SetOneTest(const std::string& tname,
                          std::vector<std::string> &propertyPairs,
                          cmMakefile *mf,
                          std::string &errors);

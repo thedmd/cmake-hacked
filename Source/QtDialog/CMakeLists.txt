@@ -11,6 +11,9 @@
 #=============================================================================
 
 project(QtDialog)
+if(POLICY CMP0020)
+  cmake_policy(SET CMP0020 NEW) # Drop when CMake >= 2.8.11 required
+endif()
 find_package(Qt5Widgets QUIET)
 if (Qt5Widgets_FOUND)
   include_directories(${Qt5Widgets_INCLUDE_DIRS})
@@ -27,6 +30,13 @@ if (Qt5Widgets_FOUND)
   set(QT_LIBRARIES ${Qt5Widgets_LIBRARIES})
   # Remove this when the minimum version of Qt is 4.6.
   add_definitions(-DQT_DISABLE_DEPRECATED_BEFORE=0)
+
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${Qt5Widgets_EXECUTABLE_COMPILE_FLAGS}")
+
+  if(WIN32 AND TARGET Qt5::Core)
+    get_property(_Qt5_Core_LOCATION TARGET Qt5::Core PROPERTY LOCATION)
+    get_filename_component(Qt_BIN_DIR "${_Qt5_Core_LOCATION}" PATH)
+  endif()
 else()
   set(QT_MIN_VERSION "4.4.0")
   find_package(Qt4 REQUIRED)
@@ -36,6 +46,18 @@ else()
   endif()
 
   include(${QT_USE_FILE})
+
+  if(WIN32 AND EXISTS "${QT_QMAKE_EXECUTABLE}")
+    get_filename_component(_Qt_BIN_DIR "${QT_QMAKE_EXECUTABLE}" PATH)
+    if(EXISTS "${_Qt_BIN_DIR}/QtCore4.dll")
+      set(Qt_BIN_DIR ${_Qt_BIN_DIR})
+    endif()
+  endif()
+endif()
+
+
+if(WIN32 AND KWSYS_ENCODING_DEFAULT_CODEPAGE MATCHES CP_UTF8)
+  add_definitions(-DKWSYS_CP_UTF8)
 endif()
 
 set(SRCS
@@ -85,14 +107,39 @@ if(APPLE)
     MACOSX_PACKAGE_LOCATION Resources)
 endif()
 
+if(CMake_GUI_DISTRIBUTE_WITH_Qt_LGPL)
+  install(FILES ${CMake_SOURCE_DIR}/Licenses/LGPLv2.1.txt
+    DESTINATION ${CMAKE_DATA_DIR}/Licenses)
+  set_property(SOURCE CMakeSetupDialog.cxx
+    PROPERTY COMPILE_DEFINITIONS CMake_GUI_DISTRIBUTE_WITH_Qt_LGPL)
+endif()
+
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 add_executable(cmake-gui WIN32 MACOSX_BUNDLE ${SRCS})
 target_link_libraries(cmake-gui CMakeLib ${QT_QTMAIN_LIBRARY} ${QT_LIBRARIES})
+if(Qt_BIN_DIR)
+  set_property(TARGET cmake-gui PROPERTY Qt_BIN_DIR ${Qt_BIN_DIR})
+endif()
 
 if(APPLE)
+  file(STRINGS "${CMake_SOURCE_DIR}/Copyright.txt" copyright_line
+    LIMIT_COUNT 1 REGEX "^Copyright 2000-20[0-9][0-9] Kitware")
+
   set_target_properties(cmake-gui PROPERTIES
-    OUTPUT_NAME ${CMAKE_BUNDLE_NAME})
+    OUTPUT_NAME CMake
+    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${CMAKE_BUNDLE_VERSION}"
+    # TBD: MACOSX_BUNDLE_BUNDLE_VERSION "${CMAKE_BUNDLE_VERSION}"
+    MACOSX_BUNDLE_COPYRIGHT "${copyright_line}"
+    )
+
+  # Create a symlink in the build tree to provide a "cmake-gui" next
+  # to the "cmake" executable that refers to the application bundle.
+  add_custom_command(TARGET cmake-gui POST_BUILD
+    COMMAND ln -sf CMake.app/Contents/MacOS/CMake
+                   $<TARGET_FILE_DIR:cmake>/cmake-gui
+    )
 endif()
 set(CMAKE_INSTALL_DESTINATION_ARGS
   BUNDLE DESTINATION "${CMAKE_BUNDLE_LOCATION}")
@@ -116,7 +163,7 @@ if(APPLE)
     "${CMake_BINARY_DIR}/Source/QtDialog/postflight.sh")
   configure_file("${CMake_SOURCE_DIR}/Source/QtDialog/postupgrade.sh.in"
     "${CMake_BINARY_DIR}/Source/QtDialog/postupgrade.sh")
-  install(CODE "execute_process(COMMAND ln -s \"../MacOS/${CMAKE_BUNDLE_NAME}\" cmake-gui
+  install(CODE "execute_process(COMMAND ln -s \"../MacOS/CMake\" cmake-gui
                 WORKING_DIRECTORY \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin)")
 endif()
 
@@ -125,7 +172,7 @@ if(APPLE OR WIN32)
   # if a system Qt is used (e.g. installed in /usr/lib/), it will not be included in the installation
   set(fixup_exe "\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/cmake-gui${CMAKE_EXECUTABLE_SUFFIX}")
   if(APPLE)
-    set(fixup_exe "\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/MacOS/${CMAKE_BUNDLE_NAME}")
+    set(fixup_exe "\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/MacOS/CMake")
   endif()
   install(CODE "
     include(\"${CMake_SOURCE_DIR}/Modules/BundleUtilities.cmake\")

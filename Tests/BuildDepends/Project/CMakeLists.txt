@@ -7,8 +7,8 @@ function(test_for_xcode4 result_var)
     execute_process(COMMAND xcodebuild -version
       OUTPUT_VARIABLE ov RESULT_VARIABLE rv
       )
-    if("${rv}" STREQUAL "0")
-      if(ov MATCHES "^Xcode 4.[0-9].*$")
+    if("${rv}" STREQUAL "0" AND ov MATCHES "^Xcode ([0-9]+)\\.")
+      if(NOT CMAKE_MATCH_1 VERSION_LESS 4)
         set(${result_var} 1 PARENT_SCOPE)
       endif()
     endif()
@@ -123,3 +123,31 @@ add_custom_target(link_depends_no_shared_check ALL
    -P ${CMAKE_CURRENT_SOURCE_DIR}/link_depends_no_shared_check.cmake
   )
 add_dependencies(link_depends_no_shared_check link_depends_no_shared_exe)
+
+add_custom_command(
+  OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/dir/header.h
+  DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/dir/header.txt
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+  ${CMAKE_CURRENT_BINARY_DIR}/dir/header.txt
+  ${CMAKE_CURRENT_BINARY_DIR}/dir/header.h
+  )
+
+set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/dir/header.h
+  PROPERTIES GENERATED 1)
+
+add_custom_target(header_tgt DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/dir/header.h)
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+add_executable(ninjadep ninjadep.cpp)
+add_dependencies(ninjadep header_tgt)
+
+include(ExternalProject)
+ExternalProject_Add(ExternalBuild
+  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/External
+  BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/External
+  STAMP_DIR ${CMAKE_CURRENT_BINARY_DIR}/External/Stamp
+  BUILD_ALWAYS 1
+  CMAKE_ARGS
+    -Dexternal_in=${CMAKE_CURRENT_BINARY_DIR}/external.in
+    -Dexternal_out=${CMAKE_CURRENT_BINARY_DIR}/external.out
+  INSTALL_COMMAND ""
+  )

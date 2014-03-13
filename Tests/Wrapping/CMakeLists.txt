@@ -54,7 +54,7 @@ if (QT_FOUND AND QT_WRAP_UI)
 
 
   configure_file(${CMAKE_CURRENT_SOURCE_DIR}/foo.ui.in
-    ${CMAKE_CURRENT_BINARY_DIR}/foo.ui IMMEDIATE)
+    ${CMAKE_CURRENT_BINARY_DIR}/foo.ui)
 
   set (QT_WRAP_UI "On")
   set (QT_UIC_EXE "${QT_UIC_EXECUTABLE}")
@@ -89,9 +89,8 @@ set (FLTK_SRCS
   fltk1.fl
   )
 add_executable(fakefluid fakefluid.cxx)
-get_target_property(FLUID_LOC fakefluid LOCATION)
 set (FLTK_WRAP_UI "On")
-set (FLTK_FLUID_EXECUTABLE "${FLUID_LOC}")
+set (FLTK_FLUID_EXECUTABLE fakefluid)
 fltk_wrap_ui (wraplibFLTK ${FLTK_SRCS})
 add_library(wraplibFLTK ${wraplibFLTK_FLTK_UI_SRCS})
 add_dependencies(wraplibFLTK fakefluid)
@@ -102,6 +101,6 @@ add_dependencies(fakefluid Wrap)
 configure_file(
   ${Wrapping_SOURCE_DIR}/dummy
   ${Wrapping_BINARY_DIR}/gl.h
-  COPYONLY IMMEDIATE)
+  COPYONLY)
 use_mangled_mesa (${Wrapping_BINARY_DIR} ${Wrapping_BINARY_DIR}/mangled_mesa)
 

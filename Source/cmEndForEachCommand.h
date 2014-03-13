@@ -52,25 +52,7 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "endforeach";}
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Ends a list of commands in a FOREACH block.";
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "  endforeach(expression)\n"
-      "See the FOREACH command.";
-    }
+  virtual std::string GetName() const { return "endforeach";}
 
   cmTypeMacro(cmEndForEachCommand, cmCommand);
 };

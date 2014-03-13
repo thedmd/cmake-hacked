@@ -44,32 +44,12 @@ public:
   /**
    * The name of the command as specified in CMakeList.txt.
    */
-  virtual const char* GetName() const { return "make_directory";}
+  virtual std::string GetName() const { return "make_directory";}
 
   /**
    * This determines if the command is invoked when in script mode.
    */
   virtual bool IsScriptable() const { return true; }
-
-  /**
-   * Succinct documentation.
-   */
-  virtual const char* GetTerseDocumentation() const
-    {
-    return "Deprecated. Use the file(MAKE_DIRECTORY ) command instead.";
-    }
-
-  /**
-   * More documentation.
-   */
-  virtual const char* GetFullDocumentation() const
-    {
-    return
-      "  make_directory(directory)\n"
-      "Creates the specified directory.  Full paths should be given.  Any "
-      "parent directories that do not exist will also be created.  Use with "
-      "care.";
-    }
 
   /** This command is kept for compatibility with older CMake versions. */
   virtual bool IsDiscouraged() const

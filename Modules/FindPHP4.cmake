@@ -1,11 +1,17 @@
-# - Find PHP4
-# This module finds if PHP4 is installed and determines where the include files
-# and libraries are. It also determines what the name of the library is. This
-# code sets the following variables:
+#.rst:
+# FindPHP4
+# --------
 #
-#  PHP4_INCLUDE_PATH       = path to where php.h can be found
-#  PHP4_EXECUTABLE         = full path to the php4 binary
+# Find PHP4
 #
+# This module finds if PHP4 is installed and determines where the
+# include files and libraries are.  It also determines what the name of
+# the library is.  This code sets the following variables:
+#
+# ::
+#
+#   PHP4_INCLUDE_PATH       = path to where php.h can be found
+#   PHP4_EXECUTABLE         = full path to the php4 binary
 
 #=============================================================================
 # Copyright 2004-2009 Kitware, Inc.
@@ -40,7 +46,7 @@ if(PHP4_FOUND_INCLUDE_PATH)
   foreach(php4_path Zend main TSRM)
     set(php4_paths ${php4_paths} "${PHP4_FOUND_INCLUDE_PATH}/${php4_path}")
   endforeach()
-  set(PHP4_INCLUDE_PATH "${php4_paths}" INTERNAL "PHP4 include paths")
+  set(PHP4_INCLUDE_PATH "${php4_paths}")
 endif()
 
 find_program(PHP4_EXECUTABLE NAMES php4 php )

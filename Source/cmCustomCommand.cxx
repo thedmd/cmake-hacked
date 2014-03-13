@@ -13,6 +13,8 @@
 
 #include "cmMakefile.h"
 
+#include <cmsys/auto_ptr.hxx>
+
 //----------------------------------------------------------------------------
 cmCustomCommand::cmCustomCommand()
 {
@@ -36,7 +38,33 @@ cmCustomCommand::cmCustomCommand(const cmCustomCommand& r):
 }
 
 //----------------------------------------------------------------------------
-cmCustomCommand::cmCustomCommand(cmMakefile* mf,
+cmCustomCommand& cmCustomCommand::operator=(cmCustomCommand const& r)
+{
+  if(this == &r)
+    {
+    return *this;
+    }
+
+  this->Outputs = r.Outputs;
+  this->Depends = r.Depends;
+  this->CommandLines = r.CommandLines;
+  this->HaveComment = r.HaveComment;
+  this->Comment = r.Comment;
+  this->WorkingDirectory = r.WorkingDirectory;
+  this->EscapeAllowMakeVars = r.EscapeAllowMakeVars;
+  this->EscapeOldStyle = r.EscapeOldStyle;
+  this->ImplicitDepends = r.ImplicitDepends;
+
+  cmsys::auto_ptr<cmListFileBacktrace>
+    newBacktrace(new cmListFileBacktrace(*r.Backtrace));
+  delete this->Backtrace;
+  this->Backtrace = newBacktrace.release();
+
+  return *this;
+}
+
+//----------------------------------------------------------------------------
+cmCustomCommand::cmCustomCommand(cmMakefile const* mf,
                                  const std::vector<std::string>& outputs,
                                  const std::vector<std::string>& depends,
                                  const cmCustomCommandLines& commandLines,
@@ -70,16 +98,6 @@ cmCustomCommand::~cmCustomCommand()
 const std::vector<std::string>& cmCustomCommand::GetOutputs() const
 {
   return this->Outputs;
-}
-
-//----------------------------------------------------------------------------
-const char* cmCustomCommand::GetWorkingDirectory() const
-{
-  if(this->WorkingDirectory.size() == 0)
-    {
-    return 0;
-    }
-  return this->WorkingDirectory.c_str();
 }
 
 //----------------------------------------------------------------------------
