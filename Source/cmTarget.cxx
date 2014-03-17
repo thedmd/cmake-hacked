@@ -2670,23 +2670,19 @@ const char *cmTarget::GetProperty(const std::string& prop,
                                    this->GetLocation(configName),
                                    cmProperty::TARGET);
       }
-    else
+    // Support "<CONFIG>_LOCATION".
+    if(cmHasLiteralSuffix(prop, "_LOCATION"))
       {
-      // Support "<CONFIG>_LOCATION" for compatibility.
-      int len = static_cast<int>(strlen(prop));
-      if(len > 9 && strcmp(prop+len-9, "_LOCATION") == 0)
+      std::string configName(prop.c_str(), prop.size() - 9);
+      if(configName != "IMPORTED")
         {
-        std::string configName(prop, len-9);
-        if(configName != "IMPORTED")
+        if (!this->HandleLocationPropertyPolicy())
           {
-          if (!this->HandleLocationPropertyPolicy())
-            {
-            return 0;
-            }
-          this->Properties.SetProperty(prop,
-                                       this->GetLocation(configName.c_str()),
-                                       cmProperty::TARGET);
+          return 0;
           }
+        this->Properties.SetProperty(prop,
+                                     this->GetLocation(configName),
+                                     cmProperty::TARGET);
         }
       }
     }
