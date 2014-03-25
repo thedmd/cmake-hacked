@@ -44,7 +44,7 @@ else()
 endif()
 
 
-pkg_check_modules (FOO "${expected_path}")
+pkg_check_modules(FOO "${expected_path}")
 
 if(NOT "FOO_FOUND")
   message(FATAL_ERROR "Expected PKG_CONFIG_PATH: \"${expected_path}\".")

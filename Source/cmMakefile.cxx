@@ -926,6 +926,14 @@ cmMakefile::AddCustomCommandToTarget(const std::string& target,
     this->IssueMessage(cmake::FATAL_ERROR, e.str());
     return;
     }
+  if(ti->second.GetType() == cmTarget::INTERFACE_LIBRARY)
+    {
+    cmOStringStream e;
+    e << "Target \"" << target << "\" is an INTERFACE library "
+      "that may not have PRE_BUILD, PRE_LINK, or POST_BUILD commands.";
+    this->IssueMessage(cmake::FATAL_ERROR, e.str());
+    return;
+    }
   // Add the command to the appropriate build step for the target.
   std::vector<std::string> no_output;
   cmCustomCommand cc(this, no_output, depends,
@@ -2071,7 +2079,7 @@ cmMakefile::LinearGetSourceFileWithOutput(const std::string& name) const
     // does this source file have a custom command?
     if ((*i)->GetCustomCommand())
       {
-      // is the output of the custom command match the source files name
+      // Does the output of the custom command match the source file name?
       const std::vector<std::string>& outputs =
         (*i)->GetCustomCommand()->GetOutputs();
       for(std::vector<std::string>::const_iterator o = outputs.begin();
@@ -2101,7 +2109,7 @@ cmSourceFile *cmMakefile::GetSourceFileWithOutput(
   // linear-time search for an output with a matching suffix.
   if(!cmSystemTools::FileIsFullPath(name.c_str()))
     {
-    return LinearGetSourceFileWithOutput(name);
+    return this->LinearGetSourceFileWithOutput(name);
     }
   // Otherwise we use an efficient lookup map.
   OutputToSourceMap::const_iterator o = this->OutputToSource.find(name);
@@ -3517,6 +3525,20 @@ int cmMakefile::ConfigureFile(const char* infile, const char* outfile,
                            sinfile.c_str());
       return 0;
       }
+
+    cmsys::FStream::BOM bom = cmsys::FStream::ReadBOM(fin);
+    if(bom != cmsys::FStream::BOM_None &&
+       bom != cmsys::FStream::BOM_UTF8)
+      {
+      cmOStringStream e;
+      e << "File starts with a Byte-Order-Mark that is not UTF-8:\n  "
+        << sinfile;
+      this->IssueMessage(cmake::FATAL_ERROR, e.str());
+      return 0;
+      }
+    // rewind to copy BOM to output file
+    fin.seekg(0);
+
 
     // now copy input to output and expand variables in the
     // input file at the same time
