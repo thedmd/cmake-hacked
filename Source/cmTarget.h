@@ -30,7 +30,8 @@
   F(CMP0038) \
   F(CMP0041) \
   F(CMP0042) \
-  F(CMP0046)
+  F(CMP0046) \
+  F(CMP0052)
 
 class cmake;
 class cmMakefile;
@@ -106,7 +107,7 @@ public:
 
   ///! Set the cmMakefile that owns this target
   void SetMakefile(cmMakefile *mf);
-  cmMakefile *GetMakefile() const { return this->Makefile;};
+  cmMakefile *GetMakefile() const { return this->Makefile;}
 
 #define DECLARE_TARGET_POLICY(POLICY) \
   cmPolicies::PolicyStatus GetPolicyStatus ## POLICY () const \
@@ -135,17 +136,17 @@ public:
   /**
    * Get the list of the source files used by this target
    */
-  void GetSourceFiles(std::vector<cmSourceFile*> &files) const;
-  void AddSourceFile(cmSourceFile* sf);
-  std::vector<std::string> const& GetObjectLibraries() const
-    {
-    return this->ObjectLibraries;
-    }
+  void GetSourceFiles(std::vector<cmSourceFile*> &files,
+                      const std::string& config,
+                      cmTarget const* head = 0) const;
+  bool GetConfigCommonSourceFiles(std::vector<cmSourceFile*>& files) const;
 
   /**
    * Add sources to the target.
    */
   void AddSources(std::vector<std::string> const& srcs);
+  void AddTracedSources(std::vector<std::string> const& srcs);
+  cmSourceFile* AddSourceCMP0049(const std::string& src);
   cmSourceFile* AddSource(const std::string& src);
 
   enum LinkLibraryType {GENERAL, DEBUG, OPTIMIZED};
@@ -446,7 +447,7 @@ public:
                                                cmTarget const* head = 0) const;
 
   // Get the properties
-  cmPropertyMap &GetProperties() const { return this->Properties; };
+  cmPropertyMap &GetProperties() const { return this->Properties; }
 
   bool GetMappedConfig(std::string const& desired_config,
                        const char** loc,
@@ -468,7 +469,9 @@ public:
   // when source file properties are changed and we do not have enough
   // information to forward these property changes to the targets
   // until we have per-target object file properties.
-  void GetLanguages(std::set<std::string>& languages) const;
+  void GetLanguages(std::set<std::string>& languages,
+                    std::string const& config,
+                    cmTarget const* head = 0) const;
 
   /** Return whether this target is an executable with symbol exports
       enabled.  */
@@ -679,14 +682,15 @@ private:
                                        const std::string& config,
                                        bool contentOnly) const;
 
+  void GetSourceFiles(std::vector<std::string> &files,
+                      const std::string& config,
+                      cmTarget const* head = 0) const;
 private:
   std::string Name;
   std::vector<cmCustomCommand> PreBuildCommands;
   std::vector<cmCustomCommand> PreLinkCommands;
   std::vector<cmCustomCommand> PostBuildCommands;
   TargetType TargetTypeValue;
-  std::vector<cmSourceFile*> SourceFiles;
-  std::vector<std::string> ObjectLibraries;
   LinkLibraryVectorType LinkLibraries;
   LinkLibraryVectorType PrevLinkedLibraries;
   bool LinkLibrariesAnalyzed;
@@ -708,6 +712,7 @@ private:
   mutable std::map<std::string, bool> DebugCompatiblePropertiesDone;
   mutable bool DebugCompileOptionsDone;
   mutable bool DebugCompileDefinitionsDone;
+  mutable bool DebugSourcesDone;
   mutable std::set<std::string> LinkImplicitNullProperties;
   bool BuildInterfaceIncludesAppended;
 
@@ -743,9 +748,13 @@ private:
   void ComputeLinkImplementation(const std::string& config,
                                  LinkImplementation& impl,
                                  cmTarget const* head) const;
-  void ComputeLinkImplementationLanguages(LinkImplementation& impl) const;
+  void ComputeLinkImplementationLanguages(const std::string& config,
+                                          LinkImplementation& impl,
+                                          cmTarget const* head) const;
   void ComputeLinkClosure(const std::string& config, LinkClosure& lc,
                           cmTarget const* head) const;
+
+  std::string ProcessSourceItemCMP0049(const std::string& s);
 
   void ClearLinkMaps();
 
@@ -777,6 +786,8 @@ private:
                             std::string const& suffix,
                             std::string const& name,
                             const char* version) const;
+
+  mutable bool LinkImplementationLanguageIsContextDependent;
 };
 
 typedef std::map<std::string,cmTarget> cmTargets;

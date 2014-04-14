@@ -16,6 +16,7 @@
 #    [LIST_SEPARATOR sep]        # Sep to be replaced by ; in cmd lines
 #    [TMP_DIR dir]               # Directory to store temporary files
 #    [STAMP_DIR dir]             # Directory to store step timestamps
+#    [EXCLUDE_FROM_ALL 1]        # The "all" target does not depend on this
 #   #--Download step--------------
 #    [DOWNLOAD_NAME fname]       # File name to store (if not end of URL)
 #    [DOWNLOAD_DIR dir]          # Directory to store downloaded files
@@ -119,6 +120,7 @@
 #    [DEPENDERS steps...]    # Steps that depend on this step
 #    [DEPENDS files...]      # Files on which this step depends
 #    [ALWAYS 1]              # No stamp file, step always runs
+#    [EXCLUDE_FROM_MAIN 1]   # Main target does not depend on this step
 #    [WORKING_DIRECTORY dir] # Working directory for command
 #    [LOG 1]                 # Wrap step in script to log output
 #    )
@@ -1192,13 +1194,16 @@ function(ExternalProject_Add_Step name step)
   set(complete_stamp_file "${cmf_dir}${cfgdir}/${name}-complete")
   _ep_get_step_stampfile(${name} ${step} stamp_file)
 
-  add_custom_command(APPEND
-    OUTPUT ${complete_stamp_file}
-    DEPENDS ${stamp_file}
-    )
-
   _ep_parse_arguments(ExternalProject_Add_Step
                       ${name} _EP_${step}_ "${ARGN}")
+
+  get_property(exclude_from_main TARGET ${name} PROPERTY _EP_${step}_EXCLUDE_FROM_MAIN)
+  if(NOT exclude_from_main)
+    add_custom_command(APPEND
+      OUTPUT ${complete_stamp_file}
+      DEPENDS ${stamp_file}
+      )
+  endif()
 
   # Steps depending on this step.
   get_property(dependers TARGET ${name} PROPERTY _EP_${step}_DEPENDERS)
@@ -1347,7 +1352,7 @@ function(_ep_add_download_command name)
   if(cmd_set)
     set(work_dir ${download_dir})
   elseif(cvs_repository)
-    find_package(CVS)
+    find_package(CVS QUIET)
     if(NOT CVS_EXECUTABLE)
       message(FATAL_ERROR "error: could not find cvs for checkout of ${name}")
     endif()
@@ -1374,7 +1379,7 @@ function(_ep_add_download_command name)
     set(cmd ${CVS_EXECUTABLE} -d ${cvs_repository} -q co ${cvs_tag} -d ${src_name} ${cvs_module})
     list(APPEND depends ${stamp_dir}/${name}-cvsinfo.txt)
   elseif(svn_repository)
-    find_package(Subversion)
+    find_package(Subversion QUIET)
     if(NOT Subversion_SVN_EXECUTABLE)
       message(FATAL_ERROR "error: could not find svn for checkout of ${name}")
     endif()
@@ -1410,7 +1415,7 @@ function(_ep_add_download_command name)
       --non-interactive ${svn_trust_cert_args} ${svn_user_pw_args} ${src_name})
     list(APPEND depends ${stamp_dir}/${name}-svninfo.txt)
   elseif(git_repository)
-    find_package(Git)
+    find_package(Git QUIET)
     if(NOT GIT_EXECUTABLE)
       message(FATAL_ERROR "error: could not find git for clone of ${name}")
     endif()
@@ -1458,7 +1463,7 @@ function(_ep_add_download_command name)
     set(cmd ${CMAKE_COMMAND} -P ${tmp_dir}/${name}-gitclone.cmake)
     list(APPEND depends ${stamp_dir}/${name}-gitinfo.txt)
   elseif(hg_repository)
-    find_package(Hg)
+    find_package(Hg QUIET)
     if(NOT HG_EXECUTABLE)
       message(FATAL_ERROR "error: could not find hg for clone of ${name}")
     endif()
@@ -1909,12 +1914,21 @@ function(ExternalProject_Add name)
   set(cmf_dir ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles)
   set(complete_stamp_file "${cmf_dir}${cfgdir}/${name}-complete")
 
+  # The "ALL" option to add_custom_target just tells it to not set the
+  # EXCLUDE_FROM_ALL target property. Later, if the EXCLUDE_FROM_ALL
+  # argument was passed, we explicitly set it for the target.
   add_custom_target(${name} ALL DEPENDS ${complete_stamp_file})
   set_property(TARGET ${name} PROPERTY _EP_IS_EXTERNAL_PROJECT 1)
   _ep_parse_arguments(ExternalProject_Add ${name} _EP_ "${ARGN}")
   _ep_set_directories(${name})
   _ep_get_step_stampfile(${name} "done" done_stamp_file)
   _ep_get_step_stampfile(${name} "install" install_stamp_file)
+
+  # Set the EXCLUDE_FROM_ALL target property if required.
+  get_property(exclude_from_all TARGET ${name} PROPERTY _EP_EXCLUDE_FROM_ALL)
+  if(exclude_from_all)
+    set_property(TARGET ${name} PROPERTY EXCLUDE_FROM_ALL TRUE)
+  endif()
 
   # The 'complete' step depends on all other steps and creates a
   # 'done' mark.  A dependent external project's 'configure' step

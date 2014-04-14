@@ -216,6 +216,11 @@ bool cmGlobalGenerator::GenerateImportFile(const std::string &file)
   return false;
 }
 
+void cmGlobalGenerator::ForceLinkerLanguages()
+{
+
+}
+
 bool
 cmGlobalGenerator::IsExportedTargetsFile(const std::string &filename) const
 {
@@ -765,7 +770,8 @@ void cmGlobalGenerator::CheckCompilerIdCompatibility(cmMakefile* mf,
     switch(mf->GetPolicyStatus(cmPolicies::CMP0025))
       {
       case cmPolicies::WARN:
-        if(!this->CMakeInstance->GetIsInTryCompile())
+        if(!this->CMakeInstance->GetIsInTryCompile() &&
+           mf->PolicyOptionalWarningEnabled("CMAKE_POLICY_WARNING_CMP0025"))
           {
           cmOStringStream w;
           w << policies->GetPolicyWarning(cmPolicies::CMP0025) << "\n"
@@ -796,7 +802,8 @@ void cmGlobalGenerator::CheckCompilerIdCompatibility(cmMakefile* mf,
     switch(mf->GetPolicyStatus(cmPolicies::CMP0047))
       {
       case cmPolicies::WARN:
-        if(!this->CMakeInstance->GetIsInTryCompile())
+        if(!this->CMakeInstance->GetIsInTryCompile() &&
+           mf->PolicyOptionalWarningEnabled("CMAKE_POLICY_WARNING_CMP0047"))
           {
           cmOStringStream w;
           w << policies->GetPolicyWarning(cmPolicies::CMP0047) << "\n"
@@ -1194,6 +1201,8 @@ void cmGlobalGenerator::Generate()
   // Create per-target generator information.
   this->CreateGeneratorTargets();
 
+  this->ForceLinkerLanguages();
+
 #ifdef CMAKE_BUILD_WITH_CMAKE
   for (AutogensType::iterator it = autogens.begin(); it != autogens.end();
        ++it)
@@ -1214,8 +1223,6 @@ void cmGlobalGenerator::Generate()
     {
     this->LocalGenerators[i]->GenerateTargetManifest();
     }
-
-  this->ComputeGeneratorTargetObjects();
 
   this->ProcessEvaluationFiles();
 
@@ -1407,6 +1414,7 @@ void cmGlobalGenerator::CreateGeneratorTargets(cmMakefile *mf)
     {
     cmTarget* t = &ti->second;
     cmGeneratorTarget* gt = new cmGeneratorTarget(t);
+    this->ComputeTargetObjectDirectory(gt);
     this->GeneratorTargets[t] = gt;
     generatorTargets[t] = gt;
     }
@@ -1432,29 +1440,6 @@ void cmGlobalGenerator::CreateGeneratorTargets()
     }
 }
 
-//----------------------------------------------------------------------------
-void cmGlobalGenerator::ComputeGeneratorTargetObjects()
-{
-  // Construct per-target generator information.
-  for(unsigned int i=0; i < this->LocalGenerators.size(); ++i)
-    {
-    cmMakefile *mf = this->LocalGenerators[i]->GetMakefile();
-    cmGeneratorTargetsType targets = mf->GetGeneratorTargets();
-    for(cmGeneratorTargetsType::iterator ti = targets.begin();
-        ti != targets.end(); ++ti)
-      {
-      if (ti->second->Target->IsImported()
-          || ti->second->Target->GetType() == cmTarget::INTERFACE_LIBRARY)
-        {
-        continue;
-        }
-      cmGeneratorTarget* gt = ti->second;
-      this->ComputeTargetObjectDirectory(gt);
-      gt->LookupObjectLibraries();
-      this->ComputeTargetObjects(gt);
-      }
-    }
-}
 
 //----------------------------------------------------------------------------
 void cmGlobalGenerator::ClearGeneratorMembers()
@@ -1513,29 +1498,6 @@ cmGlobalGenerator::GetGeneratorTarget(cmTarget const* t) const
     return 0;
     }
   return ti->second;
-}
-
-//----------------------------------------------------------------------------
-void cmGlobalGenerator::ComputeTargetObjects(cmGeneratorTarget* gt) const
-{
-  std::vector<cmSourceFile const*> objectSources;
-  gt->GetObjectSources(objectSources);
-
-  std::map<cmSourceFile const*, std::string> mapping;
-  for(std::vector<cmSourceFile const*>::const_iterator it
-      = objectSources.begin(); it != objectSources.end(); ++it)
-    {
-    mapping[*it];
-    }
-
-  gt->LocalGenerator->ComputeObjectFilenames(mapping, gt);
-
-  for(std::map<cmSourceFile const*, std::string>::const_iterator it
-      = mapping.begin(); it != mapping.end(); ++it)
-    {
-    assert(!it->second.empty());
-    gt->AddObject(it->first, it->second);
-    }
 }
 
 //----------------------------------------------------------------------------
@@ -2940,10 +2902,25 @@ void cmGlobalGenerator::WriteSummary(cmTarget* target)
     // List the source files with any per-source labels.
     fout << "# Source files and their labels\n";
     std::vector<cmSourceFile*> sources;
-    target->GetSourceFiles(sources);
+    std::vector<std::string> configs;
+    target->GetMakefile()->GetConfigurations(configs);
+    if (configs.empty())
+      {
+      configs.push_back("");
+      }
+    for(std::vector<std::string>::const_iterator ci = configs.begin();
+        ci != configs.end(); ++ci)
+      {
+      target->GetSourceFiles(sources, *ci);
+      }
+    std::set<cmSourceFile*> emitted;
     for(std::vector<cmSourceFile*>::const_iterator si = sources.begin();
         si != sources.end(); ++si)
       {
+      if (!emitted.insert(*si).second)
+        {
+        continue;
+        }
       cmSourceFile* sf = *si;
       fout << sf->GetFullPath() << "\n";
       if(const char* svalue = sf->GetProperty("LABELS"))

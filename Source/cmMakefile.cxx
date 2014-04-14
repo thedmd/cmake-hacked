@@ -1182,7 +1182,7 @@ cmMakefile::AddCustomCommandOldStyle(const std::string& target,
       {
       if (this->Targets.find(target) != this->Targets.end())
         {
-        this->Targets[target].AddSourceFile(sf);
+        this->Targets[target].AddSource(sf->GetFullPath());
         }
       else
         {
@@ -1266,7 +1266,7 @@ cmMakefile::AddUtilityCommand(const std::string& utilityName,
                                  commandLines, comment,
                                  workingDirectory, no_replace,
                                  escapeOldStyle);
-  cmSourceFile* sf = target->AddSource(force);
+  cmSourceFile* sf = target->AddSourceCMP0049(force);
 
   // The output is not actually created so mark it symbolic.
   if(sf)
@@ -3365,7 +3365,6 @@ std::string cmMakefile::GetModulesFile(const char* filename) const
         case cmPolicies::REQUIRED_IF_USED:
         case cmPolicies::REQUIRED_ALWAYS:
         case cmPolicies::NEW:
-        default:
           result = moduleInCMakeRoot;
           break;
         }
@@ -4328,6 +4327,22 @@ cmMakefile::GetPolicyStatusInternal(cmPolicies::PolicyID id) const
 
   // The policy is not set.  Use the default for this CMake version.
   return this->GetPolicies()->GetPolicyStatus(id);
+}
+
+//----------------------------------------------------------------------------
+bool cmMakefile::PolicyOptionalWarningEnabled(std::string const& var)
+{
+  // Check for an explicit CMAKE_POLICY_WARNING_CMP<NNNN> setting.
+  if(!var.empty())
+    {
+    if(const char* val = this->GetDefinition(var))
+      {
+      return cmSystemTools::IsOn(val);
+      }
+    }
+  // Enable optional policy warnings with --debug-output or --trace.
+  cmake* cm = this->GetCMakeInstance();
+  return cm->GetDebugOutput() || cm->GetTrace();
 }
 
 bool cmMakefile::SetPolicy(const char *id,

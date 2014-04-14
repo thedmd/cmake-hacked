@@ -133,7 +133,7 @@ void cmFLTKWrapUICommand::FinalPass()
     return;
     }
   std::vector<cmSourceFile*> srcs;
-  target->GetSourceFiles(srcs);
+  target->GetSourceFiles(srcs, "");
   bool found = false;
   for (unsigned int i = 0; i < srcs.size(); ++i)
     {
@@ -168,7 +168,7 @@ void cmFLTKWrapUICommand::FinalPass()
     for(size_t classNum = 0; classNum < lastHeadersClass; classNum++)
       {
       this->Makefile->GetTargets()[this->Target]
-        .AddSourceFile(this->GeneratedSourcesClasses[classNum]);
+        .AddSource(this->GeneratedSourcesClasses[classNum]->GetFullPath());
       }
     }
 }

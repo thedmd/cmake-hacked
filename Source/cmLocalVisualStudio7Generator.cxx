@@ -117,7 +117,7 @@ void cmLocalVisualStudio7Generator::AddCMakeListsRules()
         {
         if(l->first != CMAKE_CHECK_BUILD_SYSTEM_TARGET)
           {
-          l->second.AddSourceFile(sf);
+          l->second.AddSource(sf->GetFullPath());
           }
         }
       }
@@ -153,7 +153,7 @@ void cmLocalVisualStudio7Generator::FixGlobalTargets()
            force.c_str(), no_depends, no_main_dependency,
            force_commands, " ", 0, true))
         {
-        tgt.AddSourceFile(file);
+        tgt.AddSource(file->GetFullPath());
         }
       }
     }
@@ -1330,7 +1330,7 @@ cmLocalVisualStudio7GeneratorInternals
   cmGeneratorTarget* gt =
     lg->GetGlobalGenerator()->GetGeneratorTarget(t);
   std::vector<std::string> objs;
-  gt->UseObjectLibraries(objs);
+  gt->UseObjectLibraries(objs, "");
   const char* sep = isep? isep : "";
   for(std::vector<std::string>::const_iterator
         oi = objs.begin(); oi != objs.end(); ++oi)
@@ -1397,10 +1397,17 @@ void cmLocalVisualStudio7Generator::WriteVCProjFile(std::ostream& fout,
   // get the classes from the source lists then add them to the groups
   this->ModuleDefinitionFile = "";
   std::vector<cmSourceFile*> classes;
-  target.GetSourceFiles(classes);
+  if (!target.GetConfigCommonSourceFiles(classes))
+    {
+    return;
+    }
   for(std::vector<cmSourceFile*>::const_iterator i = classes.begin();
       i != classes.end(); i++)
     {
+    if (!(*i)->GetObjectLibrary().empty())
+      {
+      continue;
+      }
     // Add the file to the list of sources.
     std::string source = (*i)->GetFullPath();
     if(cmSystemTools::UpperCase((*i)->GetExtension()) == "DEF")
@@ -1434,7 +1441,7 @@ void cmLocalVisualStudio7Generator::WriteVCProjFile(std::ostream& fout,
     cmGeneratorTarget* gt =
       this->GlobalGenerator->GetGeneratorTarget(&target);
     std::vector<std::string> objs;
-    gt->UseObjectLibraries(objs);
+    gt->UseObjectLibraries(objs, "");
     if(!objs.empty())
       {
       // TODO: Separate sub-filter for each object library used?

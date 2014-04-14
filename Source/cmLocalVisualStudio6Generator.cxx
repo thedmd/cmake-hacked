@@ -253,9 +253,9 @@ void cmLocalVisualStudio6Generator::AddDSPBuildRule(cmTarget& tgt)
                                            makefileIn.c_str(), commandLines,
                                            comment.c_str(),
                                            no_working_directory, true);
-  if(cmSourceFile* file = this->Makefile->GetSource(makefileIn.c_str()))
+  if(this->Makefile->GetSource(makefileIn.c_str()))
     {
-    tgt.AddSourceFile(file);
+    tgt.AddSource(makefileIn);
     }
   else
     {
@@ -317,13 +317,21 @@ void cmLocalVisualStudio6Generator::WriteDSPFile(std::ostream& fout,
 
   // get the classes from the source lists then add them to the groups
   std::vector<cmSourceFile*> classes;
-  target.GetSourceFiles(classes);
+  if (!target.GetConfigCommonSourceFiles(classes))
+    {
+    return;
+    }
 
   // now all of the source files have been properly assigned to the target
   // now stick them into source groups using the reg expressions
   for(std::vector<cmSourceFile*>::const_iterator i = classes.begin();
       i != classes.end(); i++)
     {
+    if (!(*i)->GetObjectLibrary().empty())
+      {
+      continue;
+      }
+
     // Add the file to the list of sources.
     std::string source = (*i)->GetFullPath();
     cmSourceGroup* sourceGroup =
@@ -398,6 +406,11 @@ void cmLocalVisualStudio6Generator
   for(std::vector<const cmSourceFile *>::const_iterator sf =
         sourceFiles.begin(); sf != sourceFiles.end(); ++sf)
     {
+    if (!(*sf)->GetObjectLibrary().empty())
+      {
+      continue;
+      }
+
     std::string source = (*sf)->GetFullPath();
     const cmCustomCommand *command =
       (*sf)->GetCustomCommand();
@@ -591,7 +604,7 @@ cmLocalVisualStudio6Generator
        origCommand.GetCommandLines(), comment,
        origCommand.GetWorkingDirectory().c_str()))
     {
-    target.AddSourceFile(outsf);
+    target.AddSource(outsf->GetFullPath());
     }
 
   // Replace the dependencies with the output of this rule so that the
@@ -1259,7 +1272,20 @@ void cmLocalVisualStudio6Generator
   if(targetBuilds)
     {
     // Get the language to use for linking.
-    const std::string& linkLanguage = target.GetLinkerLanguage();
+    std::vector<std::string> configs;
+    target.GetMakefile()->GetConfigurations(configs);
+    std::vector<std::string>::const_iterator it = configs.begin();
+    const std::string& linkLanguage = target.GetLinkerLanguage(*it);
+    for ( ; it != configs.end(); ++it)
+      {
+      const std::string& configLinkLanguage = target.GetLinkerLanguage(*it);
+      if (configLinkLanguage != linkLanguage)
+        {
+        cmSystemTools::Error
+          ("Linker language must not vary by configuration for target: ",
+          target.GetName().c_str());
+        }
+      }
     if(linkLanguage.empty())
       {
       cmSystemTools::Error
@@ -1681,7 +1707,20 @@ void cmLocalVisualStudio6Generator
     if(target.GetType() >= cmTarget::EXECUTABLE &&
        target.GetType() <= cmTarget::OBJECT_LIBRARY)
       {
-      const std::string& linkLanguage = target.GetLinkerLanguage();
+      std::vector<std::string> configs;
+      target.GetMakefile()->GetConfigurations(configs);
+      std::vector<std::string>::const_iterator it = configs.begin();
+      const std::string& linkLanguage = target.GetLinkerLanguage(*it);
+      for ( ; it != configs.end(); ++it)
+        {
+        const std::string& configLinkLanguage = target.GetLinkerLanguage(*it);
+        if (configLinkLanguage != linkLanguage)
+          {
+          cmSystemTools::Error
+            ("Linker language must not vary by configuration for target: ",
+            target.GetName().c_str());
+          }
+        }
       if(linkLanguage.empty())
         {
         cmSystemTools::Error
@@ -1879,7 +1918,7 @@ void cmLocalVisualStudio6Generator
   cmGeneratorTarget* gt =
     this->GlobalGenerator->GetGeneratorTarget(&target);
   std::vector<std::string> objs;
-  gt->UseObjectLibraries(objs);
+  gt->UseObjectLibraries(objs, "");
   for(std::vector<std::string>::const_iterator
         oi = objs.begin(); oi != objs.end(); ++oi)
     {

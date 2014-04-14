@@ -30,36 +30,47 @@ public:
   std::string GetName() const;
   const char *GetProperty(const std::string& prop) const;
   bool GetPropertyAsBool(const std::string& prop) const;
-  void GetSourceFiles(std::vector<cmSourceFile*>& files) const;
+  void GetSourceFiles(std::vector<cmSourceFile*>& files,
+                      const std::string& config) const;
 
-  void GetObjectSources(std::vector<cmSourceFile const*> &) const;
+  void GetObjectSources(std::vector<cmSourceFile const*> &,
+                        const std::string& config) const;
   const std::string& GetObjectName(cmSourceFile const* file);
 
-  void AddObject(cmSourceFile const* sf, std::string const&name);
   bool HasExplicitObjectName(cmSourceFile const* file) const;
   void AddExplicitObjectName(cmSourceFile const* sf);
 
-  void GetResxSources(std::vector<cmSourceFile const*>&) const;
-  void GetIDLSources(std::vector<cmSourceFile const*>&) const;
-  void GetExternalObjects(std::vector<cmSourceFile const*>&) const;
-  void GetHeaderSources(std::vector<cmSourceFile const*>&) const;
-  void GetExtraSources(std::vector<cmSourceFile const*>&) const;
-  void GetCustomCommands(std::vector<cmSourceFile const*>&) const;
-  void GetExpectedResxHeaders(std::set<std::string>&) const;
+  void GetResxSources(std::vector<cmSourceFile const*>&,
+                      const std::string& config) const;
+  void GetIDLSources(std::vector<cmSourceFile const*>&,
+                     const std::string& config) const;
+  void GetExternalObjects(std::vector<cmSourceFile const*>&,
+                          const std::string& config) const;
+  void GetHeaderSources(std::vector<cmSourceFile const*>&,
+                        const std::string& config) const;
+  void GetExtraSources(std::vector<cmSourceFile const*>&,
+                       const std::string& config) const;
+  void GetCustomCommands(std::vector<cmSourceFile const*>&,
+                         const std::string& config) const;
+  void GetExpectedResxHeaders(std::set<std::string>&,
+                              const std::string& config) const;
+
+  void ComputeObjectMapping();
 
   cmTarget* Target;
   cmMakefile* Makefile;
   cmLocalGenerator* LocalGenerator;
   cmGlobalGenerator const* GlobalGenerator;
 
-  std::string GetModuleDefinitionFile() const;
+  std::string GetModuleDefinitionFile(const std::string& config) const;
 
   /** Full path with trailing slash to the top-level directory
       holding object files for this target.  Includes the build
       time config name placeholder if needed for the generator.  */
   std::string ObjectDirectory;
 
-  void UseObjectLibraries(std::vector<std::string>& objs) const;
+  void UseObjectLibraries(std::vector<std::string>& objs,
+                          const std::string& config) const;
 
   void GetAppleArchs(const std::string& config,
                      std::vector<std::string>& archVec) const;
@@ -83,8 +94,6 @@ public:
    * that they depend on, used by all generators
    */
   void TraceDependencies();
-
-  void LookupObjectLibraries();
 
   /** Get sources that must be built before the given source.  */
   std::vector<cmSourceFile*> const*
@@ -125,9 +134,8 @@ private:
   typedef std::map<cmSourceFile const*, SourceEntry> SourceEntriesType;
   SourceEntriesType SourceEntries;
 
-  std::map<cmSourceFile const*, std::string> Objects;
+  mutable std::map<cmSourceFile const*, std::string> Objects;
   std::set<cmSourceFile const*> ExplicitObjectName;
-  std::vector<cmTarget*> ObjectLibraries;
   mutable std::map<std::string, std::vector<std::string> > SystemIncludesCache;
 
   void ConstructSourceFileFlags() const;

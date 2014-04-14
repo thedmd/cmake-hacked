@@ -485,27 +485,31 @@ cmNinjaTargetGenerator
     << this->GetTargetName()
     << "\n\n";
 
+  std::string config = this->Makefile->GetSafeDefinition("CMAKE_BUILD_TYPE");
   std::vector<cmSourceFile const*> customCommands;
-  this->GeneratorTarget->GetCustomCommands(customCommands);
+  this->GeneratorTarget->GetCustomCommands(customCommands, config);
   for(std::vector<cmSourceFile const*>::const_iterator
         si = customCommands.begin();
       si != customCommands.end(); ++si)
      {
      cmCustomCommand const* cc = (*si)->GetCustomCommand();
      this->GetLocalGenerator()->AddCustomCommandTarget(cc, this->GetTarget());
+     // Record the custom commands for this target. The container is used
+     // in WriteObjectBuildStatement when called in a loop below.
+     this->CustomCommands.push_back((*si)->GetCustomCommand());
      }
   std::vector<cmSourceFile const*> headerSources;
-  this->GeneratorTarget->GetHeaderSources(headerSources);
+  this->GeneratorTarget->GetHeaderSources(headerSources, config);
   this->OSXBundleGenerator->GenerateMacOSXContentStatements(
     headerSources,
     this->MacOSXContentGenerator);
   std::vector<cmSourceFile const*> extraSources;
-  this->GeneratorTarget->GetExtraSources(extraSources);
+  this->GeneratorTarget->GetExtraSources(extraSources, config);
   this->OSXBundleGenerator->GenerateMacOSXContentStatements(
     extraSources,
     this->MacOSXContentGenerator);
   std::vector<cmSourceFile const*> externalObjects;
-  this->GeneratorTarget->GetExternalObjects(externalObjects);
+  this->GeneratorTarget->GetExternalObjects(externalObjects, config);
   for(std::vector<cmSourceFile const*>::const_iterator
         si = externalObjects.begin();
       si != externalObjects.end(); ++si)
@@ -513,28 +517,17 @@ cmNinjaTargetGenerator
     this->Objects.push_back(this->GetSourceFilePath(*si));
     }
   std::vector<cmSourceFile const*> objectSources;
-  this->GeneratorTarget->GetObjectSources(objectSources);
+  this->GeneratorTarget->GetObjectSources(objectSources, config);
   for(std::vector<cmSourceFile const*>::const_iterator
         si = objectSources.begin(); si != objectSources.end(); ++si)
     {
     this->WriteObjectBuildStatement(*si);
     }
-  std::string def = this->GeneratorTarget->GetModuleDefinitionFile();
+  std::string def = this->GeneratorTarget->GetModuleDefinitionFile(config);
   if(!def.empty())
     {
     this->ModuleDefinitionFile = this->ConvertToNinjaPath(def.c_str());
     }
-
-  {
-  // Add object library contents as external objects.
-  std::vector<std::string> objs;
-  this->GeneratorTarget->UseObjectLibraries(objs);
-  for(std::vector<std::string>::iterator oi = objs.begin();
-      oi != objs.end(); ++oi)
-    {
-    this->Objects.push_back(ConvertToNinjaPath(oi->c_str()));
-    }
-  }
 
   this->GetBuildFileStream() << "\n";
 }
@@ -575,13 +568,11 @@ cmNinjaTargetGenerator
   }
 
   // Add order-only dependencies on custom command outputs.
-  std::vector<cmSourceFile const*> customCommands;
-  this->GeneratorTarget->GetCustomCommands(customCommands);
-  for(std::vector<cmSourceFile const*>::const_iterator
-        si = customCommands.begin();
-      si != customCommands.end(); ++si)
+  for(std::vector<cmCustomCommand const*>::const_iterator
+        cci = this->CustomCommands.begin();
+      cci != this->CustomCommands.end(); ++cci)
     {
-    cmCustomCommand const* cc = (*si)->GetCustomCommand();
+    cmCustomCommand const* cc = *cci;
     cmCustomCommandGenerator ccg(*cc, this->GetConfigName(),
                                  this->GetMakefile());
     const std::vector<std::string>& ccoutputs = ccg.GetOutputs();

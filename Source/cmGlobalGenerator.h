@@ -51,7 +51,7 @@ public:
   virtual cmLocalGenerator *CreateLocalGenerator();
 
   ///! Get the name for this generator
-  virtual std::string GetName() const { return "Generic"; };
+  virtual std::string GetName() const { return "Generic"; }
 
   /** Check whether the given name matches the current generator.  */
   virtual bool MatchesGeneratorName(const std::string& name) const
@@ -423,6 +423,8 @@ private:
   void WriteSummary(cmTarget* target);
   void FinalizeTargetCompileInfo();
 
+  virtual void ForceLinkerLanguages();
+
   virtual void PrintCompilerAdvice(std::ostream& os, std::string const& lang,
                                    const char* envVar) const;
   void CheckCompilerIdCompatibility(cmMakefile* mf,
@@ -442,8 +444,6 @@ private:
   friend class cmake;
   void CreateGeneratorTargets(cmMakefile* mf);
   void CreateGeneratorTargets();
-  void ComputeGeneratorTargetObjects();
-  void ComputeTargetObjects(cmGeneratorTarget* gt) const;
 
   void ClearGeneratorMembers();
 

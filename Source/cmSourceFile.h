@@ -89,13 +89,16 @@ public:
   void AddDepend(const char* d) { this->Depends.push_back(d); }
 
   // Get the properties
-  cmPropertyMap &GetProperties() { return this->Properties; };
+  cmPropertyMap &GetProperties() { return this->Properties; }
 
   /**
    * Check whether the given source file location could refer to this
    * source.
    */
   bool Matches(cmSourceFileLocation const&);
+
+  void SetObjectLibrary(std::string const& objlib);
+  std::string GetObjectLibrary() const;
 
 private:
   cmSourceFileLocation Location;
@@ -105,6 +108,7 @@ private:
   std::string Language;
   std::string FullPath;
   bool FindFullPathFailed;
+  std::string ObjectLibrary;
 
   bool FindFullPath(std::string* error);
   bool TryFullPath(const std::string& path, const std::string& ext);

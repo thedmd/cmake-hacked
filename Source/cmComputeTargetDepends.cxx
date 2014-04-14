@@ -16,6 +16,7 @@
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
 #include "cmSystemTools.h"
+#include "cmSourceFile.h"
 #include "cmTarget.h"
 #include "cmake.h"
 
@@ -212,28 +213,42 @@ void cmComputeTargetDepends::CollectTargetDepends(int depender_index)
   // deal with config-specific dependencies.
   {
   std::set<std::string> emitted;
-  {
-  std::vector<std::string> tlibs;
-  depender->GetDirectLinkLibraries("", tlibs, depender);
-  // A target should not depend on itself.
-  emitted.insert(depender->GetName());
-  for(std::vector<std::string>::const_iterator lib = tlibs.begin();
-      lib != tlibs.end(); ++lib)
-    {
-    // Don't emit the same library twice for this target.
-    if(emitted.insert(*lib).second)
-      {
-      this->AddTargetDepend(depender_index, *lib, true);
-      this->AddInterfaceDepends(depender_index, *lib,
-                                true, emitted);
-      }
-    }
-  }
+  cmGeneratorTarget* gt = depender->GetMakefile()->GetLocalGenerator()
+                                  ->GetGlobalGenerator()
+                                  ->GetGeneratorTarget(depender);
+
   std::vector<std::string> configs;
   depender->GetMakefile()->GetConfigurations(configs);
+  if (configs.empty())
+    {
+    configs.push_back("");
+    }
   for (std::vector<std::string>::const_iterator it = configs.begin();
     it != configs.end(); ++it)
     {
+    std::vector<cmSourceFile const*> objectFiles;
+    gt->GetExternalObjects(objectFiles, *it);
+    for(std::vector<cmSourceFile const*>::const_iterator
+        oi = objectFiles.begin(); oi != objectFiles.end(); ++oi)
+      {
+      std::string objLib = (*oi)->GetObjectLibrary();
+      if (!objLib.empty() && emitted.insert(objLib).second)
+        {
+        if(depender->GetType() != cmTarget::EXECUTABLE &&
+            depender->GetType() != cmTarget::STATIC_LIBRARY &&
+            depender->GetType() != cmTarget::SHARED_LIBRARY &&
+            depender->GetType() != cmTarget::MODULE_LIBRARY)
+          {
+          this->GlobalGenerator->GetCMakeInstance()
+            ->IssueMessage(cmake::FATAL_ERROR,
+                            "Only executables and non-OBJECT libraries may "
+                            "reference target objects.",
+                            depender->GetBacktrace());
+          return;
+          }
+        const_cast<cmTarget*>(depender)->AddUtility(objLib);
+        }
+      }
     std::vector<std::string> tlibs;
     depender->GetDirectLinkLibraries(*it, tlibs, depender);
 

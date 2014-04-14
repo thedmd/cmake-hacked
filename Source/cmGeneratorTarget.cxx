@@ -289,7 +289,7 @@ static void handleSystemIncludesDep(cmMakefile *mf, cmTarget* depTgt,
 #define IMPLEMENT_VISIT_IMPL(DATA, DATATYPE) \
   { \
   std::vector<cmSourceFile*> sourceFiles; \
-  this->Target->GetSourceFiles(sourceFiles); \
+  this->Target->GetSourceFiles(sourceFiles, config); \
   TagVisitor<DATA ## Tag DATATYPE> visitor(this->Target, data); \
   for(std::vector<cmSourceFile*>::const_iterator si = sourceFiles.begin(); \
       si != sourceFiles.end(); ++si) \
@@ -308,21 +308,51 @@ static void handleSystemIncludesDep(cmMakefile *mf, cmTarget* depTgt,
 //----------------------------------------------------------------------------
 void
 cmGeneratorTarget
-::GetObjectSources(std::vector<cmSourceFile const*> &data) const
+::GetObjectSources(std::vector<cmSourceFile const*> &data,
+                   const std::string& config) const
 {
   IMPLEMENT_VISIT(ObjectSources);
+
+  if (!this->Objects.empty())
+    {
+    return;
+    }
+
+  for(std::vector<cmSourceFile const*>::const_iterator it = data.begin();
+      it != data.end(); ++it)
+    {
+    this->Objects[*it];
+    }
+
+  this->LocalGenerator->ComputeObjectFilenames(this->Objects, this);
+}
+
+void cmGeneratorTarget::ComputeObjectMapping()
+{
+  if(!this->Objects.empty())
+    {
+    return;
+    }
+
+  std::vector<std::string> configs;
+  this->Makefile->GetConfigurations(configs);
+  if (configs.empty())
+    {
+    configs.push_back("");
+    }
+  for(std::vector<std::string>::const_iterator ci = configs.begin();
+      ci != configs.end(); ++ci)
+    {
+    std::vector<cmSourceFile const*> sourceFiles;
+    this->GetObjectSources(sourceFiles, *ci);
+    }
 }
 
 //----------------------------------------------------------------------------
 const std::string& cmGeneratorTarget::GetObjectName(cmSourceFile const* file)
 {
+  this->ComputeObjectMapping();
   return this->Objects[file];
-}
-
-void cmGeneratorTarget::AddObject(cmSourceFile const* sf,
-                                  std::string const&name)
-{
-    this->Objects[sf] = name;
 }
 
 //----------------------------------------------------------------------------
@@ -334,6 +364,7 @@ void cmGeneratorTarget::AddExplicitObjectName(cmSourceFile const* sf)
 //----------------------------------------------------------------------------
 bool cmGeneratorTarget::HasExplicitObjectName(cmSourceFile const* file) const
 {
+  const_cast<cmGeneratorTarget*>(this)->ComputeObjectMapping();
   std::set<cmSourceFile const*>::const_iterator it
                                         = this->ExplicitObjectName.find(file);
   return it != this->ExplicitObjectName.end();
@@ -341,7 +372,8 @@ bool cmGeneratorTarget::HasExplicitObjectName(cmSourceFile const* file) const
 
 //----------------------------------------------------------------------------
 void cmGeneratorTarget
-::GetIDLSources(std::vector<cmSourceFile const*>& data) const
+::GetIDLSources(std::vector<cmSourceFile const*>& data,
+                const std::string& config) const
 {
   IMPLEMENT_VISIT(IDLSources);
 }
@@ -349,14 +381,16 @@ void cmGeneratorTarget
 //----------------------------------------------------------------------------
 void
 cmGeneratorTarget
-::GetHeaderSources(std::vector<cmSourceFile const*>& data) const
+::GetHeaderSources(std::vector<cmSourceFile const*>& data,
+                   const std::string& config) const
 {
   IMPLEMENT_VISIT(HeaderSources);
 }
 
 //----------------------------------------------------------------------------
 void cmGeneratorTarget
-::GetExtraSources(std::vector<cmSourceFile const*>& data) const
+::GetExtraSources(std::vector<cmSourceFile const*>& data,
+                  const std::string& config) const
 {
   IMPLEMENT_VISIT(ExtraSources);
 }
@@ -364,7 +398,8 @@ void cmGeneratorTarget
 //----------------------------------------------------------------------------
 void
 cmGeneratorTarget
-::GetCustomCommands(std::vector<cmSourceFile const*>& data) const
+::GetCustomCommands(std::vector<cmSourceFile const*>& data,
+                    const std::string& config) const
 {
   IMPLEMENT_VISIT(CustomCommands);
 }
@@ -372,14 +407,16 @@ cmGeneratorTarget
 //----------------------------------------------------------------------------
 void
 cmGeneratorTarget
-::GetExternalObjects(std::vector<cmSourceFile const*>& data) const
+::GetExternalObjects(std::vector<cmSourceFile const*>& data,
+                     const std::string& config) const
 {
   IMPLEMENT_VISIT(ExternalObjects);
 }
 
 //----------------------------------------------------------------------------
 void
-cmGeneratorTarget::GetExpectedResxHeaders(std::set<std::string>& srcs) const
+cmGeneratorTarget::GetExpectedResxHeaders(std::set<std::string>& srcs,
+                                          const std::string& config) const
 {
   ResxData data;
   IMPLEMENT_VISIT_IMPL(Resx, COMMA cmGeneratorTarget::ResxData)
@@ -388,7 +425,8 @@ cmGeneratorTarget::GetExpectedResxHeaders(std::set<std::string>& srcs) const
 
 //----------------------------------------------------------------------------
 void cmGeneratorTarget
-::GetResxSources(std::vector<cmSourceFile const*>& srcs) const
+::GetResxSources(std::vector<cmSourceFile const*>& srcs,
+                 const std::string& config) const
 {
   ResxData data;
   IMPLEMENT_VISIT_IMPL(Resx, COMMA cmGeneratorTarget::ResxData)
@@ -498,65 +536,15 @@ bool cmGeneratorTarget::GetPropertyAsBool(const std::string& prop) const
 }
 
 //----------------------------------------------------------------------------
-void cmGeneratorTarget::GetSourceFiles(std::vector<cmSourceFile*> &files) const
+void cmGeneratorTarget::GetSourceFiles(std::vector<cmSourceFile*> &files,
+                                       const std::string& config) const
 {
-  this->Target->GetSourceFiles(files);
+  this->Target->GetSourceFiles(files, config);
 }
 
 //----------------------------------------------------------------------------
-void cmGeneratorTarget::LookupObjectLibraries()
-{
-  std::vector<std::string> const& objLibs =
-    this->Target->GetObjectLibraries();
-  for(std::vector<std::string>::const_iterator oli = objLibs.begin();
-      oli != objLibs.end(); ++oli)
-    {
-    std::string const& objLibName = *oli;
-    if(cmTarget* objLib = this->Makefile->FindTargetToUse(objLibName))
-      {
-      if(objLib->GetType() == cmTarget::OBJECT_LIBRARY)
-        {
-        if(this->Target->GetType() != cmTarget::EXECUTABLE &&
-           this->Target->GetType() != cmTarget::STATIC_LIBRARY &&
-           this->Target->GetType() != cmTarget::SHARED_LIBRARY &&
-           this->Target->GetType() != cmTarget::MODULE_LIBRARY)
-          {
-          this->GlobalGenerator->GetCMakeInstance()
-            ->IssueMessage(cmake::FATAL_ERROR,
-                           "Only executables and non-OBJECT libraries may "
-                           "reference target objects.",
-                           this->Target->GetBacktrace());
-          return;
-          }
-        this->Target->AddUtility(objLib->GetName());
-        this->ObjectLibraries.push_back(objLib);
-        }
-      else
-        {
-        cmOStringStream e;
-        e << "Objects of target \"" << objLibName
-          << "\" referenced but is not an OBJECT library.";
-        this->GlobalGenerator->GetCMakeInstance()
-          ->IssueMessage(cmake::FATAL_ERROR, e.str(),
-                         this->Target->GetBacktrace());
-        return;
-        }
-      }
-    else
-      {
-      cmOStringStream e;
-      e << "Objects of target \"" << objLibName
-        << "\" referenced but no such target exists.";
-      this->GlobalGenerator->GetCMakeInstance()
-        ->IssueMessage(cmake::FATAL_ERROR, e.str(),
-                       this->Target->GetBacktrace());
-      return;
-      }
-    }
-}
-
-//----------------------------------------------------------------------------
-std::string cmGeneratorTarget::GetModuleDefinitionFile() const
+std::string
+cmGeneratorTarget::GetModuleDefinitionFile(const std::string& config) const
 {
   std::string data;
   IMPLEMENT_VISIT_IMPL(ModuleDefinitionFile, COMMA std::string)
@@ -565,17 +553,35 @@ std::string cmGeneratorTarget::GetModuleDefinitionFile() const
 
 //----------------------------------------------------------------------------
 void
-cmGeneratorTarget::UseObjectLibraries(std::vector<std::string>& objs) const
+cmGeneratorTarget::UseObjectLibraries(std::vector<std::string>& objs,
+                                      const std::string &config) const
 {
+  std::vector<cmSourceFile const*> objectFiles;
+  this->GetExternalObjects(objectFiles, config);
+  std::vector<cmTarget*> objectLibraries;
+  std::set<cmTarget*> emitted;
+  for(std::vector<cmSourceFile const*>::const_iterator
+      it = objectFiles.begin(); it != objectFiles.end(); ++it)
+    {
+    std::string objLib = (*it)->GetObjectLibrary();
+    if (cmTarget* tgt = this->Makefile->FindTargetToUse(objLib))
+      {
+      if (emitted.insert(tgt).second)
+        {
+        objectLibraries.push_back(tgt);
+        }
+      }
+    }
+
   for(std::vector<cmTarget*>::const_iterator
-        ti = this->ObjectLibraries.begin();
-      ti != this->ObjectLibraries.end(); ++ti)
+        ti = objectLibraries.begin();
+      ti != objectLibraries.end(); ++ti)
     {
     cmTarget* objLib = *ti;
     cmGeneratorTarget* ogt =
       this->GlobalGenerator->GetGeneratorTarget(objLib);
     std::vector<cmSourceFile const*> objectSources;
-    ogt->GetObjectSources(objectSources);
+    ogt->GetObjectSources(objectSources, config);
     for(std::vector<cmSourceFile const*>::const_iterator
           si = objectSources.begin();
         si != objectSources.end(); ++si)
@@ -604,6 +610,7 @@ private:
   std::set<cmSourceFile*> SourcesQueued;
   typedef std::map<std::string, cmSourceFile*> NameMapType;
   NameMapType NameMap;
+  std::vector<std::string> NewSources;
 
   void QueueSource(cmSourceFile* sf);
   void FollowName(std::string const& name);
@@ -628,14 +635,29 @@ cmTargetTraceDependencies
   this->CurrentEntry = 0;
 
   // Queue all the source files already specified for the target.
-  std::vector<cmSourceFile*> sources;
   if (this->Target->GetType() != cmTarget::INTERFACE_LIBRARY)
     {
-    this->Target->GetSourceFiles(sources);
-    for(std::vector<cmSourceFile*>::const_iterator si = sources.begin();
-        si != sources.end(); ++si)
+    std::vector<std::string> configs;
+    this->Makefile->GetConfigurations(configs);
+    if (configs.empty())
       {
-      this->QueueSource(*si);
+      configs.push_back("");
+      }
+    std::set<cmSourceFile*> emitted;
+    for(std::vector<std::string>::const_iterator ci = configs.begin();
+        ci != configs.end(); ++ci)
+      {
+      std::vector<cmSourceFile*> sources;
+      this->Target->GetSourceFiles(sources, *ci);
+      for(std::vector<cmSourceFile*>::const_iterator si = sources.begin();
+          si != sources.end(); ++si)
+        {
+        cmSourceFile* sf = *si;
+        if(emitted.insert(sf).second && this->SourcesQueued.insert(sf).second)
+          {
+          this->SourceQueue.push(sf);
+          }
+        }
       }
     }
 
@@ -677,6 +699,8 @@ void cmTargetTraceDependencies::Trace()
       }
     }
   this->CurrentEntry = 0;
+
+  this->Target->AddTracedSources(this->NewSources);
 }
 
 //----------------------------------------------------------------------------
@@ -686,8 +710,8 @@ void cmTargetTraceDependencies::QueueSource(cmSourceFile* sf)
     {
     this->SourceQueue.push(sf);
 
-    // Make sure this file is in the target.
-    this->Target->AddSourceFile(sf);
+    // Make sure this file is in the target at the end.
+    this->NewSources.push_back(sf->GetFullPath());
     }
 }
 
@@ -709,7 +733,6 @@ void cmTargetTraceDependencies::FollowName(std::string const& name)
       {
       this->CurrentEntry->Depends.push_back(sf);
       }
-
     this->QueueSource(sf);
     }
 }

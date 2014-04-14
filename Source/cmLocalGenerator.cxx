@@ -542,6 +542,10 @@ void cmLocalGenerator::GenerateTargetManifest()
   // Collect the set of configuration types.
   std::vector<std::string> configNames;
   this->Makefile->GetConfigurations(configNames);
+  if(configNames.empty())
+    {
+    configNames.push_back("");
+    }
 
   // Add our targets to the manifest for each configuration.
   cmGeneratorTargetsType targets = this->Makefile->GetGeneratorTargets();
@@ -557,18 +561,11 @@ void cmLocalGenerator::GenerateTargetManifest()
       {
       continue;
       }
-    if(configNames.empty())
+    for(std::vector<std::string>::iterator ci = configNames.begin();
+        ci != configNames.end(); ++ci)
       {
-      target.GenerateTargetManifest("");
-      }
-    else
-      {
-      for(std::vector<std::string>::iterator ci = configNames.begin();
-          ci != configNames.end(); ++ci)
-        {
-        const char* config = ci->c_str();
-        target.GenerateTargetManifest(config);
-        }
+      const char* config = ci->c_str();
+      target.GenerateTargetManifest(config);
       }
     }
 }
@@ -662,7 +659,8 @@ void cmLocalGenerator::AddBuildTargetRule(const std::string& llang,
   std::vector<std::string> objVector;
   // Add all the sources outputs to the depends of the target
   std::vector<cmSourceFile*> classes;
-  target.GetSourceFiles(classes);
+  target.GetSourceFiles(classes,
+                      this->Makefile->GetSafeDefinition("CMAKE_BUILD_TYPE"));
   for(std::vector<cmSourceFile*>::const_iterator i = classes.begin();
       i != classes.end(); ++i)
     {
@@ -691,6 +689,7 @@ void cmLocalGenerator::AddBuildTargetRule(const std::string& llang,
   std::string createRule = "CMAKE_";
   createRule += llang;
   createRule += target.GetCreateRuleVariable();
+  bool useWatcomQuote = this->Makefile->IsOn(createRule+"_USE_WATCOM_QUOTE");
   std::string targetName = target.Target->GetFullName();
   // Executable :
   // Shared Library:
@@ -702,7 +701,7 @@ void cmLocalGenerator::AddBuildTargetRule(const std::string& llang,
   std::string flags; // should be set
   std::string linkFlags; // should be set
   this->GetTargetFlags(linkLibs, frameworkPath, linkPath, flags, linkFlags,
-                       &target);
+                       &target, useWatcomQuote);
   linkLibs = frameworkPath + linkPath + linkLibs;
   cmLocalGenerator::RuleVariables vars;
   vars.Language = llang.c_str();
@@ -754,8 +753,8 @@ void cmLocalGenerator::AddBuildTargetRule(const std::string& llang,
     comment.c_str(),
     this->Makefile->GetStartOutputDirectory()
     );
-  target.Target->AddSourceFile
-    (this->Makefile->GetSource(targetFullPath));
+  this->Makefile->GetSource(targetFullPath);
+  target.Target->AddSource(targetFullPath);
 }
 
 
@@ -1613,7 +1612,8 @@ void cmLocalGenerator::GetTargetFlags(std::string& linkLibs,
                                  std::string& linkFlags,
                                  std::string& frameworkPath,
                                  std::string& linkPath,
-                                 cmGeneratorTarget* target)
+                                 cmGeneratorTarget* target,
+                                 bool useWatcomQuote)
 {
   std::string buildType =
     this->Makefile->GetSafeDefinition("CMAKE_BUILD_TYPE");
@@ -1644,7 +1644,7 @@ void cmLocalGenerator::GetTargetFlags(std::string& linkLibs,
          !(this->Makefile->IsOn("CYGWIN") || this->Makefile->IsOn("MINGW")))
         {
         std::vector<cmSourceFile*> sources;
-        target->GetSourceFiles(sources);
+        target->GetSourceFiles(sources, buildType);
         for(std::vector<cmSourceFile*>::const_iterator i = sources.begin();
             i != sources.end(); ++i)
           {
@@ -1677,7 +1677,7 @@ void cmLocalGenerator::GetTargetFlags(std::string& linkLibs,
           }
         }
       this->OutputLinkLibraries(linkLibs, frameworkPath, linkPath,
-                                *target, false, false);
+                                *target, false, false, useWatcomQuote);
       }
       break;
     case cmTarget::EXECUTABLE:
@@ -1692,7 +1692,7 @@ void cmLocalGenerator::GetTargetFlags(std::string& linkLibs,
         linkFlags += this->Makefile->GetSafeDefinition(build);
         linkFlags += " ";
         }
-      std::string linkLanguage = target->Target->GetLinkerLanguage();
+      std::string linkLanguage = target->Target->GetLinkerLanguage(buildType);
       if(linkLanguage.empty())
         {
         cmSystemTools::Error
@@ -1702,7 +1702,7 @@ void cmLocalGenerator::GetTargetFlags(std::string& linkLibs,
         }
       this->AddLanguageFlags(flags, linkLanguage, buildType);
       this->OutputLinkLibraries(linkLibs, frameworkPath, linkPath,
-                                *target, false, false);
+                                *target, false, false, useWatcomQuote);
       if(cmSystemTools::IsOn
          (this->Makefile->GetDefinition("BUILD_SHARED_LIBS")))
         {
@@ -1761,9 +1761,8 @@ std::string cmLocalGenerator::ConvertToLinkReference(std::string const& lib,
                                                      OutputFormat format)
 {
 #if defined(_WIN32) && !defined(__CYGWIN__)
-  // Work-ardound command line parsing limitations in MSVC 6.0 and
-  // Watcom.
-  if(this->Makefile->IsOn("MSVC60") || this->Makefile->IsOn("WATCOM"))
+  // Work-ardound command line parsing limitations in MSVC 6.0
+  if(this->Makefile->IsOn("MSVC60"))
     {
     // Search for the last space.
     std::string::size_type pos = lib.rfind(' ');
@@ -1800,9 +1799,11 @@ void cmLocalGenerator::OutputLinkLibraries(std::string& linkLibraries,
                                            std::string& linkPath,
                                            cmGeneratorTarget &tgt,
                                            bool relink,
-                                           bool forResponseFile)
+                                           bool forResponseFile,
+                                           bool useWatcomQuote)
 {
-  OutputFormat shellFormat = forResponseFile? RESPONSE : SHELL;
+  OutputFormat shellFormat = (forResponseFile) ? RESPONSE :
+                             ((useWatcomQuote) ? WATCOMQUOTE : SHELL);
   bool escapeAllowMakeVars = !forResponseFile;
   cmOStringStream fout;
   const char* config = this->Makefile->GetDefinition("CMAKE_BUILD_TYPE");
@@ -2285,7 +2286,6 @@ bool cmLocalGenerator::GetShouldUseOldFlags(bool shared,
         case cmPolicies::REQUIRED_IF_USED:
         case cmPolicies::REQUIRED_ALWAYS:
         case cmPolicies::NEW:
-        default:
           return false;
         }
       }
@@ -2597,7 +2597,7 @@ std::string cmLocalGenerator::ConvertToOutputFormat(const std::string& source,
     {
     result = cmSystemTools::ConvertToOutputPath(result.c_str());
     }
-  else if( output == SHELL)
+  else if(output == SHELL || output == WATCOMQUOTE)
     {
         // For the MSYS shell convert drive letters to posix paths, so
     // that c:/some/path becomes /c/some/path.  This is needed to
@@ -2619,11 +2619,11 @@ std::string cmLocalGenerator::ConvertToOutputFormat(const std::string& source,
         pos++;
         }
       }
-    result = this->EscapeForShell(result, true, false);
+    result = this->EscapeForShell(result, true, false, output == WATCOMQUOTE);
     }
   else if(output == RESPONSE)
     {
-    result = this->EscapeForShell(result, false, false);
+    result = this->EscapeForShell(result, false, false, false);
     }
   return result;
 }
@@ -3250,7 +3250,8 @@ static bool cmLocalGeneratorIsShellOperator(const std::string& str)
 //----------------------------------------------------------------------------
 std::string cmLocalGenerator::EscapeForShell(const std::string& str,
                                              bool makeVars,
-                                             bool forEcho)
+                                             bool forEcho,
+                                             bool useWatcomQuote)
 {
   // Do not escape shell operators.
   if(cmLocalGeneratorIsShellOperator(str))
@@ -3275,6 +3276,10 @@ std::string cmLocalGenerator::EscapeForShell(const std::string& str,
   if(forEcho)
     {
     flags |= cmsysSystem_Shell_Flag_EchoWindows;
+    }
+  if(useWatcomQuote)
+    {
+    flags |= cmsysSystem_Shell_Flag_WatcomQuote;
     }
   if(this->WatcomWMake)
     {
