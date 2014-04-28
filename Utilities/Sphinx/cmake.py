@@ -80,12 +80,12 @@ class CMakeModule(Directive):
             settings.record_dependencies.add(path)
             f = io.FileInput(source_path=path, encoding=encoding,
                              error_handler=e_handler)
-        except UnicodeEncodeError, error:
+        except UnicodeEncodeError as error:
             raise self.severe('Problems with "%s" directive path:\n'
                               'Cannot encode input file path "%s" '
                               '(wrong locale?).' %
                               (self.name, SafeString(path)))
-        except IOError, error:
+        except IOError as error:
             raise self.severe('Problems with "%s" directive path:\n%s.' %
                       (self.name, ErrorString(error)))
         raw_lines = f.read().splitlines()
@@ -308,9 +308,12 @@ class CMakeDomain(Domain):
     }
 
     def clear_doc(self, docname):
+        to_clear = set()
         for fullname, (fn, _) in self.data['objects'].items():
             if fn == docname:
-                del self.data['objects'][fullname]
+                to_clear.add(fullname)
+        for fullname in to_clear:
+            del self.data['objects'][fullname]
 
     def resolve_xref(self, env, fromdocname, builder,
                      typ, target, node, contnode):
@@ -323,7 +326,7 @@ class CMakeDomain(Domain):
                             contnode, target)
 
     def get_objects(self):
-        for refname, (docname, type) in self.data['objects'].iteritems():
+        for refname, (docname, type) in self.data['objects'].items():
             yield (refname, refname, type, docname, refname, 1)
 
 def setup(app):

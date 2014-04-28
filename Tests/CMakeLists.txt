@@ -197,6 +197,9 @@ if(BUILD_TESTING)
   ADD_TEST_MACRO(TarTest TarTest)
   ADD_TEST_MACRO(SystemInformation SystemInformation)
   ADD_TEST_MACRO(MathTest MathTest)
+  ADD_TEST_MACRO(CompileFeatures CompileFeatures)
+  ADD_TEST_MACRO(CMakeCommands.target_compile_features target_compile_features)
+
   # assume no resources building to test
   set(TEST_RESOURCES FALSE)
   # for windows and cygwin assume we have resources
@@ -283,6 +286,19 @@ if(BUILD_TESTING)
     ADD_TEST_MACRO(ConfigSources ConfigSources)
   endif()
   ADD_TEST_MACRO(SourcesProperty SourcesProperty)
+  if(CMAKE_CXX_COMPILER_ID STREQUAL GNU
+      AND NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.6)
+    set(runCxxDialectTest 1)
+  endif()
+  if(CMAKE_CXX_COMPILER_ID STREQUAL Clang
+        AND NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 2.9)
+    if(NOT APPLE OR POLICY CMP0025)
+      set(runCxxDialectTest 1)
+    endif()
+  endif()
+  if(runCxxDialectTest)
+    ADD_TEST_MACRO(CxxDialect CxxDialect)
+  endif()
   set_tests_properties(EmptyLibrary PROPERTIES
     PASS_REGULAR_EXPRESSION "CMake Error: CMake can not determine linker language for target: test")
   ADD_TEST_MACRO(CrossCompile CrossCompile)
@@ -798,7 +814,7 @@ ${CMake_BINARY_DIR}/bin/cmake -DDIR=dev -P ${CMake_SOURCE_DIR}/Utilities/Release
   set(CTEST_package_X11_TEST ${CTEST_TEST_CPACK})
   set(CTEST_RUN_CPackComponentsForAll ${CTEST_TEST_CPACK})
 
-  if (CMAKE_SYSTEM_NAME MATCHES "Linux" AND NOT CMAKE_CURRENT_BINARY_DIR MATCHES ".* .*")
+  if (CMAKE_SYSTEM_NAME MATCHES "Linux" AND NOT CMAKE_CURRENT_BINARY_DIR MATCHES " ")
     find_program(RPMBUILD NAMES rpmbuild)
   endif()
   # Do not try to build RPM
@@ -899,7 +915,7 @@ ${CMake_BINARY_DIR}/bin/cmake -DDIR=dev -P ${CMake_SOURCE_DIR}/Utilities/Release
     if(APPLE)
       list(APPEND GENLST "DragNDrop")
     endif()
-    if (NOT CMAKE_CURRENT_BINARY_DIR MATCHES ".* .*")
+    if (NOT CMAKE_CURRENT_BINARY_DIR MATCHES " ")
       list(FIND ACTIVE_CPACK_GENERATORS "RPM" RPM_ACTIVE)
       if (NOT ${RPM_ACTIVE} EQUAL -1)
         list(APPEND GENLST "RPM")

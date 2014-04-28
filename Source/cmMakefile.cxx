@@ -41,6 +41,53 @@
 #include <ctype.h> // for isspace
 #include <assert.h>
 
+#define FOR_EACH_CXX_FEATURE(F) \
+  F(cxx_alias_templates) \
+  F(cxx_alignas) \
+  F(cxx_alignof) \
+  F(cxx_attributes) \
+  F(cxx_auto_type) \
+  F(cxx_constexpr) \
+  F(cxx_decltype) \
+  F(cxx_decltype_incomplete_return_types) \
+  F(cxx_default_function_template_args) \
+  F(cxx_defaulted_functions) \
+  F(cxx_defaulted_move_initializers) \
+  F(cxx_delegating_constructors) \
+  F(cxx_deleted_functions) \
+  F(cxx_enum_forward_declarations) \
+  F(cxx_explicit_conversions) \
+  F(cxx_extended_friend_declarations) \
+  F(cxx_extern_templates) \
+  F(cxx_final) \
+  F(cxx_func_identifier) \
+  F(cxx_generalized_initializers) \
+  F(cxx_inheriting_constructors) \
+  F(cxx_inline_namespaces) \
+  F(cxx_lambdas) \
+  F(cxx_local_type_template_args) \
+  F(cxx_long_long_type) \
+  F(cxx_noexcept) \
+  F(cxx_nonstatic_member_init) \
+  F(cxx_nullptr) \
+  F(cxx_override) \
+  F(cxx_range_for) \
+  F(cxx_raw_string_literals) \
+  F(cxx_reference_qualified_functions) \
+  F(cxx_right_angle_brackets) \
+  F(cxx_rvalue_references) \
+  F(cxx_sizeof_member) \
+  F(cxx_static_assert) \
+  F(cxx_strong_enums) \
+  F(cxx_thread_local) \
+  F(cxx_trailing_return_types) \
+  F(cxx_unicode_literals) \
+  F(cxx_uniform_initialization) \
+  F(cxx_unrestricted_unions) \
+  F(cxx_user_literals) \
+  F(cxx_variadic_macros) \
+  F(cxx_variadic_templates)
+
 class cmMakefile::Internals
 {
 public:
@@ -2451,6 +2498,12 @@ const char* cmMakefile::GetDefinition(const std::string& name) const
     {
     this->Internal->VarUsageStack.top().insert(name);
     }
+  if (name == "CMAKE_CXX_KNOWN_FEATURES")
+    {
+#define STRING_LIST_ELEMENT(F) ";" #F
+    return FOR_EACH_CXX_FEATURE(STRING_LIST_ELEMENT) + 1;
+#undef STRING_LIST_ELEMENT
+    }
   const char* def = this->Internal->VarStack.top().Get(name);
   if(!def)
     {
@@ -4493,4 +4546,148 @@ void cmMakefile::RecordPolicies(cmPolicies::PolicyMap& pm)
     {
     pm[pid] = this->GetPolicyStatus(pid);
     }
+}
+
+#define FEATURE_STRING(F) , #F
+
+static const char * const CXX_FEATURES[] = {
+  0
+  FOR_EACH_CXX_FEATURE(FEATURE_STRING)
+};
+
+static const char * const CXX_STANDARDS[] = {
+    "98"
+  , "11"
+};
+
+//----------------------------------------------------------------------------
+bool cmMakefile::
+AddRequiredTargetFeature(cmTarget *target, const std::string& feature,
+                         std::string *error) const
+{
+  if (cmGeneratorExpression::Find(feature) != std::string::npos)
+    {
+    target->AppendProperty("COMPILE_FEATURES", feature.c_str());
+    return true;
+    }
+  bool isCxxFeature = std::find_if(cmArrayBegin(CXX_FEATURES) + 1,
+              cmArrayEnd(CXX_FEATURES), cmStrCmp(feature))
+              != cmArrayEnd(CXX_FEATURES);
+  if (!isCxxFeature)
+    {
+    cmOStringStream e;
+    if (error)
+      {
+      e << "specified";
+      }
+    else
+      {
+      e << "Specified";
+      }
+    e << " unknown feature \"" << feature << "\" for "
+      "target \"" << target->GetName() << "\".";
+    if (error)
+      {
+      *error = e.str();
+      }
+    else
+      {
+      this->IssueMessage(cmake::FATAL_ERROR, e.str());
+      }
+    return false;
+    }
+
+  std::string lang = "CXX";
+
+  const char* featuresKnown =
+    this->GetDefinition("CMAKE_" + lang + "_COMPILE_FEATURES");
+
+  if (!featuresKnown || !*featuresKnown)
+    {
+    cmOStringStream e;
+    if (error)
+      {
+      e << "no";
+      }
+    else
+      {
+      e << "No";
+      }
+    e << " known features for compiler\n\""
+      << this->GetDefinition("CMAKE_" + lang + "_COMPILER_ID")
+      << "\"\nversion "
+      << this->GetDefinition("CMAKE_" + lang + "_COMPILER_VERSION") << ".";
+    if (error)
+      {
+      *error = e.str();
+      }
+    else
+      {
+      this->IssueMessage(cmake::FATAL_ERROR, e.str());
+      }
+    return false;
+    }
+
+  std::vector<std::string> availableFeatures;
+  cmSystemTools::ExpandListArgument(featuresKnown, availableFeatures);
+  if (std::find(availableFeatures.begin(),
+                availableFeatures.end(),
+                feature) == availableFeatures.end())
+    {
+    cmOStringStream e;
+    e << "The compiler feature \"" << feature
+      << "\" is not known to compiler\n\""
+      << this->GetDefinition("CMAKE_" + lang + "_COMPILER_ID")
+      << "\"\nversion "
+      << this->GetDefinition("CMAKE_" + lang + "_COMPILER_VERSION") << ".";
+    this->IssueMessage(cmake::FATAL_ERROR, e.str());
+    return false;
+    }
+
+  target->AppendProperty("COMPILE_FEATURES", feature.c_str());
+
+  bool needCxx11 = false;
+
+  if (const char *propCxx11 =
+          this->GetDefinition("CMAKE_CXX11_COMPILE_FEATURES"))
+    {
+    std::vector<std::string> props;
+    cmSystemTools::ExpandListArgument(propCxx11, props);
+    needCxx11 = std::find(props.begin(), props.end(), feature) != props.end();
+    }
+
+  const char *existingCxxStandard = target->GetProperty("CXX_STANDARD");
+  if (existingCxxStandard)
+    {
+    if (std::find_if(cmArrayBegin(CXX_STANDARDS), cmArrayEnd(CXX_STANDARDS),
+                  cmStrCmp(existingCxxStandard)) == cmArrayEnd(CXX_STANDARDS))
+      {
+      cmOStringStream e;
+      e << "The CXX_STANDARD property on target \"" << target->GetName()
+        << "\" contained an invalid value: \"" << existingCxxStandard << "\".";
+      this->IssueMessage(cmake::FATAL_ERROR, e.str());
+      return false;
+      }
+    }
+  const char * const *existingCxxIt = existingCxxStandard
+                                    ? std::find_if(cmArrayBegin(CXX_STANDARDS),
+                                      cmArrayEnd(CXX_STANDARDS),
+                                      cmStrCmp(existingCxxStandard))
+                                    : cmArrayEnd(CXX_STANDARDS);
+
+  bool setCxx11 = needCxx11 && !existingCxxStandard;
+
+  if (needCxx11 && existingCxxStandard && existingCxxIt <
+                                    std::find_if(cmArrayBegin(CXX_STANDARDS),
+                                      cmArrayEnd(CXX_STANDARDS),
+                                      cmStrCmp("11")))
+    {
+    setCxx11 = true;
+    }
+
+  if (setCxx11)
+    {
+    target->SetProperty("CXX_STANDARD", "11");
+    }
+  return true;
 }

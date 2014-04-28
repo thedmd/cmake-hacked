@@ -34,28 +34,32 @@ else()
 endif()
 
 #silence duplicate symbol warnings on AIX
-if(CMAKE_SYSTEM MATCHES "AIX.*")
+if(CMAKE_SYSTEM_NAME MATCHES "AIX")
   if(NOT CMAKE_COMPILER_IS_GNUCXX)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -bhalt:5 ")
   endif()
 endif()
 
-if(CMAKE_SYSTEM MATCHES "IRIX.*")
+if(CMAKE_SYSTEM_NAME MATCHES "IRIX")
   if(NOT CMAKE_COMPILER_IS_GNUCXX)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wl,-woff84 -no_auto_include")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-woff15")
   endif()
 endif()
 
-if(CMAKE_SYSTEM MATCHES "OSF1-V.*")
+if(CMAKE_SYSTEM MATCHES "OSF1-V")
   if(NOT CMAKE_COMPILER_IS_GNUCXX)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -timplicit_local -no_implicit_include ")
   endif()
 endif()
 
 if(CMAKE_SYSTEM_NAME MATCHES "HP-UX" AND CMAKE_CXX_COMPILER_ID MATCHES "HP")
-  # it is known that version 3.85 fails and 6.25 works without these flags
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4)
+  # HP aCC since version 3.80 supports the flag +hpxstd98 to get ANSI C++98
+  # template support. It is known that version 6.25 doesn't need that flag.
+  # Versions prior to 3.80 will not be able to build CMake. Current assumption:
+  # it is needed for every version from 3.80 to 4 to get it working.
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4 AND
+         NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 3.80)
     # use new C++ library and improved template support
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -AA +hpxstd98")
   endif()
