@@ -7,6 +7,12 @@ target-language-features
   :variable:`CMAKE_CXX_STANDARD` and :variable:`CMAKE_CXX_EXTENSIONS`
   variables may be set to initialize the target properties.
 
+* New :prop_tgt:`C_STANDARD` and :prop_tgt:`C_EXTENSIONS` target
+  properties may specify values which CMake uses to compute required
+  compile options such as ``-std=c11`` or ``-std=gnu11``. The
+  :variable:`CMAKE_C_STANDARD` and :variable:`CMAKE_C_EXTENSIONS`
+  variables may be set to initialize the target properties.
+
 * New :prop_tgt:`COMPILE_FEATURES` target property may contain a list
   of features required to compile a target.  CMake uses this
   information to ensure that the compiler in use is capable of building
@@ -16,3 +22,7 @@ target-language-features
 * New :command:`target_compile_features` command allows populating the
   :prop_tgt:`COMPILE_FEATURES` target property, just like any other
   build variable.
+
+* New ``COMPILE_FEATURES``
+  :manual:`generator expression <cmake-generator-expressions(7)>` allows
+  setting build properties based on available compiler features.

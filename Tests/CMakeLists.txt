@@ -411,6 +411,8 @@ if(BUILD_TESTING)
   ADD_TEST_MACRO(Module.GenerateExportHeader GenerateExportHeader)
   ADD_TEST_MACRO(Module.FindDependency FindDependency)
 
+  ADD_TEST_MACRO(Module.WriteCompilerDetectionHeader WriteCompilerDetectionHeader)
+
   if (APPLE OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     include(CheckCXXCompilerFlag)
     check_cxx_compiler_flag(-fPIE run_pic_test)
@@ -2134,6 +2136,7 @@ ${CMake_BINARY_DIR}/bin/cmake -DDIR=dev -P ${CMake_SOURCE_DIR}/Utilities/Release
   configure_file(
      "${CMake_SOURCE_DIR}/Tests/MumpsCoverage/gtm_coverage.mcov.in"
      "${CMake_BINARY_DIR}/Testing/MumpsCoverage/gtm_coverage.mcov")
+  file(REMOVE_RECURSE "${CMake_BINARY_DIR}/Testing/MumpsCoverage/VistA-FOIA")
   file(COPY "${CMake_SOURCE_DIR}/Tests/MumpsCoverage/VistA-FOIA"
     DESTINATION "${CMake_BINARY_DIR}/Testing/MumpsCoverage")
   add_test(NAME CTestGTMCoverage
@@ -2142,7 +2145,7 @@ ${CMake_BINARY_DIR}/bin/cmake -DDIR=dev -P ${CMake_SOURCE_DIR}/Utilities/Release
     $<TARGET_FILE:ctest> -T Coverage --debug)
   set_tests_properties(CTestGTMCoverage PROPERTIES
       PASS_REGULAR_EXPRESSION
-      "Process file.*XINDEX.m.*Total LOC:.*127.*Percentage Coverage: 85.83.*"
+      "Process file.*ZZCOVTST.m.*Total LOC:.*23.*Percentage Coverage: 82.61*"
       ENVIRONMENT COVFILE=)
 
   configure_file(
@@ -2151,6 +2154,7 @@ ${CMake_BINARY_DIR}/bin/cmake -DDIR=dev -P ${CMake_SOURCE_DIR}/Utilities/Release
   configure_file(
     "${CMake_SOURCE_DIR}/Tests/MumpsCoverage/cache_coverage.cmcov.in"
     "${CMake_BINARY_DIR}/Testing/MumpsCacheCoverage/cache_coverage.cmcov")
+  file(REMOVE_RECURSE "${CMake_BINARY_DIR}/Testing/MumpsCacheCoverage/VistA-FOIA")
   file(COPY "${CMake_SOURCE_DIR}/Tests/MumpsCoverage/VistA-FOIA"
     DESTINATION "${CMake_BINARY_DIR}/Testing/MumpsCacheCoverage")
   add_test(NAME CTestCacheCoverage
@@ -2159,7 +2163,7 @@ ${CMake_BINARY_DIR}/bin/cmake -DDIR=dev -P ${CMake_SOURCE_DIR}/Utilities/Release
     $<TARGET_FILE:ctest> -T Coverage --debug)
   set_tests_properties(CTestCacheCoverage PROPERTIES
       PASS_REGULAR_EXPRESSION
-      "Process file.*XINDEX.m.*Total LOC:.*125.*Percentage Coverage: 85.60.*"
+      "Process file.*ZZCOVTST.m.*Total LOC:.*22.*Percentage Coverage: 86.36.*"
       ENVIRONMENT COVFILE=)
 
   # Adding a test case for Python Coverage
@@ -2263,6 +2267,18 @@ ${CMake_BINARY_DIR}/bin/cmake -DDIR=dev -P ${CMake_SOURCE_DIR}/Utilities/Release
   endif()
   set_tests_properties(CTestTestBadExe PROPERTIES
     PASS_REGULAR_EXPRESSION "${CTestTestBadExe_REGEX}")
+
+  configure_file(
+    "${CMake_SOURCE_DIR}/Tests/CTestTestBadGenerator/test.cmake.in"
+    "${CMake_BINARY_DIR}/Tests/CTestTestBadGenerator/test.cmake"
+    @ONLY ESCAPE_QUOTES)
+  add_test(CTestTestBadGenerator ${CMAKE_CTEST_COMMAND}
+    -C "\${CTestTest_CONFIG}"
+    -S "${CMake_BINARY_DIR}/Tests/CTestTestBadGenerator/test.cmake" -V
+    --output-log "${CMake_BINARY_DIR}/Tests/CTestTestBadGenerator/testOutput.log"
+    )
+  set_property(TEST CTestTestBadGenerator PROPERTY
+    PASS_REGULAR_EXPRESSION "could not create generator named \"Bad Generator\"")
 
   configure_file(
     "${CMake_SOURCE_DIR}/Tests/CTestTestParallel/test.cmake.in"
@@ -2378,7 +2394,7 @@ ${CMake_BINARY_DIR}/bin/cmake -DDIR=dev -P ${CMake_SOURCE_DIR}/Utilities/Release
     --output-log "${CMake_BINARY_DIR}/Tests/CTestTestTimeout/testOutput.log"
     )
   set_tests_properties(CTestTestTimeout PROPERTIES
-    PASS_REGULAR_EXPRESSION "TestTimeout *\\.+ *\\*\\*\\*Timeout.*CheckChild *\\.+ *Passed")
+    PASS_REGULAR_EXPRESSION "TestTimeout *\\.+ *\\*\\*\\*Timeout.*TestSleep *\\.+ *Passed.*timeout correctly killed child")
 
   add_test(
     NAME CTestTestRerunFailed

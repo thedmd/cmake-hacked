@@ -319,6 +319,9 @@ void cmGlobalGenerator::FindMakeProgram(cmMakefile* mf)
 //   CMakeSystem.cmake - configured file created by
 //                       CMakeDetermineSystem.cmake IF CMAKE_SYSTEM_LOADED
 
+// CMakeSystemSpecificInitialize.cmake
+//   - includes Platform/${CMAKE_SYSTEM_NAME}-Initialize.cmake
+
 // Next try and enable all languages found in the languages vector
 //
 // FOREACH LANG in languages
@@ -443,6 +446,18 @@ cmGlobalGenerator::EnableLanguage(std::vector<std::string>const& languages,
     fpath += "/CMakeSystem.cmake";
     mf->ReadListFile(0,fpath.c_str());
     }
+
+  // **** Load the system specific initialization if not yet loaded
+  if (!mf->GetDefinition("CMAKE_SYSTEM_SPECIFIC_INITIALIZE_LOADED"))
+    {
+    fpath = mf->GetModulesFile("CMakeSystemSpecificInitialize.cmake");
+    if(!mf->ReadListFile(0,fpath.c_str()))
+      {
+      cmSystemTools::Error("Could not find cmake module file: ",
+                           fpath.c_str());
+      }
+    }
+
   std::map<std::string, bool> needTestLanguage;
   std::map<std::string, bool> needSetLanguageEnabledMaps;
   // foreach language
@@ -2070,15 +2085,13 @@ cmGlobalGenerator::FindTarget(const std::string& name,
 {
   if (!excludeAliases)
     {
-    std::map<std::string, cmTarget*>::const_iterator ai
-                                            = this->AliasTargets.find(name);
+    TargetMap::const_iterator ai = this->AliasTargets.find(name);
     if (ai != this->AliasTargets.end())
       {
       return ai->second;
       }
     }
-  std::map<std::string,cmTarget *>::const_iterator i =
-    this->TotalTargets.find ( name );
+  TargetMap::const_iterator i = this->TotalTargets.find ( name );
   if ( i != this->TotalTargets.end() )
     {
     return i->second;
@@ -2859,7 +2872,7 @@ void cmGlobalGenerator::WriteSummary()
   cmGeneratedFileStream fout(fname.c_str());
 
   // Generate summary information files for each target.
-  for(std::map<std::string,cmTarget *>::const_iterator ti =
+  for(TargetMap::const_iterator ti =
         this->TotalTargets.begin(); ti != this->TotalTargets.end(); ++ti)
     {
     if ((ti->second)->GetType() == cmTarget::INTERFACE_LIBRARY)

@@ -231,13 +231,14 @@ public:
   void AppendProperty(const std::string&  prop, const char* value,
           bool asString=false);
   const char *GetProperty(const std::string& prop) const;
-  const char *GetProperty(const std::string& prop,
-          cmProperty::ScopeType scope) const;
+  const char *GetProperty(const std::string& prop, cmMakefile* context) const;
   bool GetPropertyAsBool(const std::string& prop) const;
   void CheckProperty(const std::string& prop, cmMakefile* context) const;
 
   const char* GetFeature(const std::string& feature,
                          const std::string& config) const;
+  bool GetFeatureAsBool(const std::string& feature,
+                        const std::string& config) const;
 
   bool IsImported() const {return this->IsImportedTarget;}
 
@@ -588,8 +589,14 @@ public:
                             const std::string &report,
                             const std::string &compatibilityType) const;
 
+  std::map<std::string, std::string> const&
+  GetMaxLanguageStandards() const
+  {
+    return this->MaxLanguageStandards;
+  }
+
 private:
-  bool HandleLocationPropertyPolicy() const;
+  bool HandleLocationPropertyPolicy(cmMakefile* context) const;
 
   // The set of include directories that are marked as system include
   // directories.
@@ -719,6 +726,7 @@ private:
   mutable bool DebugSourcesDone;
   mutable bool DebugCompileFeaturesDone;
   mutable std::set<std::string> LinkImplicitNullProperties;
+  mutable std::map<std::string, std::string> MaxLanguageStandards;
   bool BuildInterfaceIncludesAppended;
 
   // Cache target output paths for each configuration.

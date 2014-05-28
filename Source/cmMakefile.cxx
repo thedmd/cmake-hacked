@@ -41,53 +41,6 @@
 #include <ctype.h> // for isspace
 #include <assert.h>
 
-#define FOR_EACH_CXX_FEATURE(F) \
-  F(cxx_alias_templates) \
-  F(cxx_alignas) \
-  F(cxx_alignof) \
-  F(cxx_attributes) \
-  F(cxx_auto_type) \
-  F(cxx_constexpr) \
-  F(cxx_decltype) \
-  F(cxx_decltype_incomplete_return_types) \
-  F(cxx_default_function_template_args) \
-  F(cxx_defaulted_functions) \
-  F(cxx_defaulted_move_initializers) \
-  F(cxx_delegating_constructors) \
-  F(cxx_deleted_functions) \
-  F(cxx_enum_forward_declarations) \
-  F(cxx_explicit_conversions) \
-  F(cxx_extended_friend_declarations) \
-  F(cxx_extern_templates) \
-  F(cxx_final) \
-  F(cxx_func_identifier) \
-  F(cxx_generalized_initializers) \
-  F(cxx_inheriting_constructors) \
-  F(cxx_inline_namespaces) \
-  F(cxx_lambdas) \
-  F(cxx_local_type_template_args) \
-  F(cxx_long_long_type) \
-  F(cxx_noexcept) \
-  F(cxx_nonstatic_member_init) \
-  F(cxx_nullptr) \
-  F(cxx_override) \
-  F(cxx_range_for) \
-  F(cxx_raw_string_literals) \
-  F(cxx_reference_qualified_functions) \
-  F(cxx_right_angle_brackets) \
-  F(cxx_rvalue_references) \
-  F(cxx_sizeof_member) \
-  F(cxx_static_assert) \
-  F(cxx_strong_enums) \
-  F(cxx_thread_local) \
-  F(cxx_trailing_return_types) \
-  F(cxx_unicode_literals) \
-  F(cxx_uniform_initialization) \
-  F(cxx_unrestricted_unions) \
-  F(cxx_user_literals) \
-  F(cxx_variadic_macros) \
-  F(cxx_variadic_templates)
-
 class cmMakefile::Internals
 {
 public:
@@ -148,6 +101,9 @@ cmMakefile::cmMakefile(): Internal(new Internals)
   this->Initialize();
   this->PreOrder = false;
   this->GeneratingBuildSystem = false;
+
+  this->NumLastMatches = 0;
+  this->SuppressWatches = false;
 }
 
 cmMakefile::cmMakefile(const cmMakefile& mf): Internal(new Internals)
@@ -196,6 +152,9 @@ cmMakefile::cmMakefile(const cmMakefile& mf): Internal(new Internals)
   this->CheckSystemVars = mf.CheckSystemVars;
   this->ListFileStack = mf.ListFileStack;
   this->OutputToSource = mf.OutputToSource;
+
+  this->NumLastMatches = mf.NumLastMatches;
+  this->SuppressWatches = mf.SuppressWatches;
 }
 
 //----------------------------------------------------------------------------
@@ -204,6 +163,7 @@ void cmMakefile::Initialize()
   this->cmDefineRegex.compile("#cmakedefine[ \t]+([A-Za-z_0-9]*)");
   this->cmDefine01Regex.compile("#cmakedefine01[ \t]+([A-Za-z_0-9]*)");
   this->cmAtVarRegex.compile("(@[A-Za-z_0-9/.+-]+@)");
+  this->cmNamedCurly.compile("^[A-Za-z0-9/_.+-]+{");
 
   // Enter a policy level for this directory.
   this->PushPolicy();
@@ -2498,12 +2458,6 @@ const char* cmMakefile::GetDefinition(const std::string& name) const
     {
     this->Internal->VarUsageStack.top().insert(name);
     }
-  if (name == "CMAKE_CXX_KNOWN_FEATURES")
-    {
-#define STRING_LIST_ELEMENT(F) ";" #F
-    return FOR_EACH_CXX_FEATURE(STRING_LIST_ELEMENT) + 1;
-#undef STRING_LIST_ELEMENT
-    }
   const char* def = this->Internal->VarStack.top().Get(name);
   if(!def)
     {
@@ -2511,7 +2465,7 @@ const char* cmMakefile::GetDefinition(const std::string& name) const
     }
 #ifdef CMAKE_BUILD_WITH_CMAKE
   cmVariableWatch* vv = this->GetVariableWatch();
-  if ( vv )
+  if ( vv && !this->SuppressWatches )
     {
     if ( def )
       {
@@ -2520,19 +2474,8 @@ const char* cmMakefile::GetDefinition(const std::string& name) const
       }
     else
       {
-      // are unknown access allowed
-      const char* allow = this->Internal->VarStack.top()
-        .Get("CMAKE_ALLOW_UNKNOWN_VARIABLE_READ_ACCESS");
-      if(cmSystemTools::IsOn(allow))
-        {
-        vv->VariableAccessed(name,
-          cmVariableWatch::ALLOWED_UNKNOWN_VARIABLE_READ_ACCESS, def, this);
-        }
-      else
-        {
-        vv->VariableAccessed(name,
+      vv->VariableAccessed(name,
           cmVariableWatch::UNKNOWN_VARIABLE_READ_ACCESS, def, this);
-        }
       }
     }
 #endif
@@ -2589,23 +2532,133 @@ const char *cmMakefile::ExpandVariablesInString(std::string& source,
                                                 bool removeEmpty,
                                                 bool replaceAt) const
 {
-  if ( source.empty() || source.find_first_of("$@\\") == source.npos)
+  bool compareResults = false;
+  cmake::MessageType mtype = cmake::LOG;
+  std::string errorstr;
+  std::string original;
+
+  // Sanity check the @ONLY mode.
+  if(atOnly && (!noEscapes || !removeEmpty))
     {
+    // This case should never be called.  At-only is for
+    // configure-file/string which always does no escapes.
+    this->IssueMessage(cmake::INTERNAL_ERROR,
+                       "ExpandVariablesInString @ONLY called "
+                       "on something with escapes.");
     return source.c_str();
+    }
+
+  // Variables used in the WARN case.
+  std::string newResult;
+  std::string newErrorstr;
+  cmake::MessageType newError = cmake::LOG;
+
+  switch(this->GetPolicyStatus(cmPolicies::CMP0053))
+    {
+    case cmPolicies::WARN:
+      {
+      // Save the original string for the warning.
+      original = source;
+      newResult = source;
+      compareResults = true;
+      // Suppress variable watches to avoid calling hooks twice. Suppress new
+      // dereferences since the OLD behavior is still what is actually used.
+      this->SuppressWatches = true;
+      newError =
+        ExpandVariablesInStringNew(newErrorstr, newResult, escapeQuotes,
+                                   noEscapes, atOnly, filename, line,
+                                   removeEmpty, replaceAt);
+      this->SuppressWatches = false;
+      }
+    case cmPolicies::OLD:
+      mtype = ExpandVariablesInStringOld(errorstr, source, escapeQuotes,
+                                         noEscapes, atOnly, filename,
+                                         line, removeEmpty, true);
+      break;
+    case cmPolicies::REQUIRED_IF_USED:
+    case cmPolicies::REQUIRED_ALWAYS:
+      // Messaging here would be *very* verbose.
+    case cmPolicies::NEW:
+      mtype = ExpandVariablesInStringNew(errorstr, source, escapeQuotes,
+                                         noEscapes, atOnly, filename,
+                                         line, removeEmpty, replaceAt);
+      break;
+    }
+
+  // If it's an error in either case, just report the error...
+  if(mtype != cmake::LOG)
+    {
+    if(mtype == cmake::FATAL_ERROR)
+      {
+      cmSystemTools::SetFatalErrorOccured();
+      }
+    this->IssueMessage(mtype, errorstr);
+    }
+  // ...otherwise, see if there's a difference that needs to be warned about.
+  else if(compareResults && (newResult != source || newError != mtype))
+    {
+    std::string msg =
+      this->GetPolicies()->GetPolicyWarning(cmPolicies::CMP0053);
+    msg += "\n";
+
+    std::string msg_input = original;
+    cmSystemTools::ReplaceString(msg_input, "\n", "\n  ");
+    msg += "For input:\n  '";
+    msg += msg_input;
+    msg += "'\n";
+
+    std::string msg_old = source;
+    cmSystemTools::ReplaceString(msg_old, "\n", "\n  ");
+    msg += "the old evaluation rules produce:\n  '";
+    msg += msg_old;
+    msg += "'\n";
+
+    if(newError == mtype)
+      {
+      std::string msg_new = newResult;
+      cmSystemTools::ReplaceString(msg_new, "\n", "\n  ");
+      msg += "but the new evaluation rules produce:\n  '";
+      msg += msg_new;
+      msg += "'\n";
+      }
+    else
+      {
+      std::string msg_err = newErrorstr;
+      cmSystemTools::ReplaceString(msg_err, "\n", "\n  ");
+      msg += "but the new evaluation rules produce an error:\n  ";
+      msg += msg_err;
+      msg += "\n";
+      }
+
+    msg +=
+      "Using the old result for compatibility since the policy is not set.";
+
+    this->IssueMessage(cmake::AUTHOR_WARNING, msg);
+    }
+
+  return source.c_str();
+}
+
+cmake::MessageType cmMakefile::ExpandVariablesInStringOld(
+                                                std::string& errorstr,
+                                                std::string& source,
+                                                bool escapeQuotes,
+                                                bool noEscapes,
+                                                bool atOnly,
+                                                const char* filename,
+                                                long line,
+                                                bool removeEmpty,
+                                                bool replaceAt) const
+{
+  // Fast path strings without any special characters.
+  if ( source.find_first_of("$@\\") == source.npos)
+    {
+    return cmake::LOG;
     }
 
   // Special-case the @ONLY mode.
   if(atOnly)
     {
-    if(!noEscapes || !removeEmpty || !replaceAt)
-      {
-      // This case should never be called.  At-only is for
-      // configure-file/string which always does no escapes.
-      this->IssueMessage(cmake::INTERNAL_ERROR,
-                         "ExpandVariablesInString @ONLY called "
-                         "on something with escapes.");
-      }
-
     // Store an original copy of the input.
     std::string input = source;
 
@@ -2645,7 +2698,7 @@ const char *cmMakefile::ExpandVariablesInString(std::string& source,
     // Append the rest of the unchanged part of the string.
     source.append(in);
 
-    return source.c_str();
+    return cmake::LOG;
     }
 
   // This method replaces ${VAR} and @VAR@ where VAR is looked up
@@ -2662,6 +2715,7 @@ const char *cmMakefile::ExpandVariablesInString(std::string& source,
   parser.SetRemoveEmpty(removeEmpty);
   int res = parser.ParseString(source.c_str(), 0);
   const char* emsg = parser.GetError();
+  cmake::MessageType mtype = cmake::LOG;
   if ( res && !emsg[0] )
     {
     source = parser.GetResult();
@@ -2688,7 +2742,7 @@ const char *cmMakefile::ExpandVariablesInString(std::string& source,
     // parser reported an error message without failing because the
     // helper implementation is unhappy, which has always reported an
     // error.
-    cmake::MessageType mtype = cmake::FATAL_ERROR;
+    mtype = cmake::FATAL_ERROR;
     if(!res)
       {
       // This is a real argument parsing error.  Use policy CMP0010 to
@@ -2710,13 +2764,334 @@ const char *cmMakefile::ExpandVariablesInString(std::string& source,
                     ->GetRequiredPolicyError(cmPolicies::CMP0010));
         case cmPolicies::NEW:
           // NEW behavior is to report the error.
-          cmSystemTools::SetFatalErrorOccured();
           break;
         }
       }
-    this->IssueMessage(mtype, error.str());
+    errorstr = error.str();
     }
-  return source.c_str();
+  return mtype;
+}
+
+typedef enum
+  {
+  NORMAL,
+  ENVIRONMENT,
+  CACHE
+  } t_domain;
+struct t_lookup
+  {
+  t_lookup(): domain(NORMAL), loc(0) {}
+  t_domain domain;
+  size_t loc;
+  };
+
+cmake::MessageType cmMakefile::ExpandVariablesInStringNew(
+                                            std::string& errorstr,
+                                            std::string& source,
+                                            bool escapeQuotes,
+                                            bool noEscapes,
+                                            bool atOnly,
+                                            const char* filename,
+                                            long line,
+                                            bool removeEmpty,
+                                            bool replaceAt) const
+{
+  // This method replaces ${VAR} and @VAR@ where VAR is looked up
+  // with GetDefinition(), if not found in the map, nothing is expanded.
+  // It also supports the $ENV{VAR} syntax where VAR is looked up in
+  // the current environment variables.
+
+  const char* in = source.c_str();
+  const char* last = in;
+  std::string result;
+  result.reserve(source.size());
+  std::stack<t_lookup> openstack;
+  bool error = false;
+  bool done = false;
+  openstack.push(t_lookup());
+  cmake::MessageType mtype = cmake::LOG;
+
+  do
+    {
+    char inc = *in;
+    switch(inc)
+      {
+      case '}':
+        if(openstack.size() > 1)
+          {
+          t_lookup var = openstack.top();
+          openstack.pop();
+          result.append(last, in - last);
+          std::string const& lookup = result.substr(var.loc);
+          const char* value = NULL;
+          std::string varresult;
+          static const std::string lineVar = "CMAKE_CURRENT_LIST_LINE";
+          switch(var.domain)
+            {
+            case NORMAL:
+              if(filename && lookup == lineVar)
+                {
+                cmOStringStream ostr;
+                ostr << line;
+                varresult = ostr.str();
+                }
+              else
+                {
+                value = this->GetDefinition(lookup);
+                }
+              break;
+            case ENVIRONMENT:
+              value = cmSystemTools::GetEnv(lookup.c_str());
+              break;
+            case CACHE:
+              value = this->GetCacheManager()->GetCacheValue(lookup);
+              break;
+            }
+          // Get the string we're meant to append to.
+          if(value)
+            {
+            if(escapeQuotes)
+              {
+              varresult = cmSystemTools::EscapeQuotes(value);
+              }
+            else
+              {
+              varresult = value;
+              }
+            }
+          else if(!removeEmpty)
+            {
+            // check to see if we need to print a warning
+            // if strict mode is on and the variable has
+            // not been "cleared"/initialized with a set(foo ) call
+            if(this->GetCMakeInstance()->GetWarnUninitialized() &&
+               !this->VariableInitialized(lookup))
+              {
+              if (this->CheckSystemVars ||
+                  cmSystemTools::IsSubDirectory(filename,
+                                                this->GetHomeDirectory()) ||
+                  cmSystemTools::IsSubDirectory(filename,
+                                             this->GetHomeOutputDirectory()))
+                {
+                cmOStringStream msg;
+                cmListFileBacktrace bt;
+                cmListFileContext lfc;
+                lfc.FilePath = filename;
+                lfc.Line = line;
+                bt.push_back(lfc);
+                msg << "uninitialized variable \'" << lookup << "\'";
+                this->GetCMakeInstance()->IssueMessage(cmake::AUTHOR_WARNING,
+                                                       msg.str().c_str(), bt);
+                }
+              }
+            }
+          result.replace(var.loc, result.size() - var.loc, varresult);
+          // Start looking from here on out.
+          last = in + 1;
+          }
+        break;
+      case '$':
+        if(!atOnly)
+          {
+          t_lookup lookup;
+          const char* next = in + 1;
+          const char* start = NULL;
+          char nextc = *next;
+          if(nextc == '{')
+            {
+            // Looking for a variable.
+            start = in + 2;
+            lookup.domain = NORMAL;
+            }
+          else if(nextc == '<')
+            {
+            }
+          else if(!nextc)
+            {
+            result.append(last, next - last);
+            last = next;
+            }
+          else if(cmHasLiteralPrefix(next, "ENV{"))
+            {
+            // Looking for an environment variable.
+            start = in + 5;
+            lookup.domain = ENVIRONMENT;
+            }
+          else if(cmHasLiteralPrefix(next, "CACHE{"))
+            {
+            // Looking for a cache variable.
+            start = in + 7;
+            lookup.domain = CACHE;
+            }
+          else
+            {
+            if(this->cmNamedCurly.find(next))
+              {
+              errorstr = "Syntax $"
+                  + std::string(next, this->cmNamedCurly.end())
+                  + "{} is not supported.  Only ${}, $ENV{}, "
+                    "and $CACHE{} are allowed.";
+              mtype = cmake::FATAL_ERROR;
+              error = true;
+              }
+            }
+          if(start)
+            {
+            result.append(last, in - last);
+            last = start;
+            in = start - 1;
+            lookup.loc = result.size();
+            openstack.push(lookup);
+            }
+          break;
+          }
+      case '\\':
+        if(!noEscapes)
+          {
+          const char* next = in + 1;
+          char nextc = *next;
+          if(nextc == 't')
+            {
+            result.append(last, in - last);
+            result.append("\t");
+            last = next + 1;
+            }
+          else if(nextc == 'n')
+            {
+            result.append(last, in - last);
+            result.append("\n");
+            last = next + 1;
+            }
+          else if(nextc == 'r')
+            {
+            result.append(last, in - last);
+            result.append("\r");
+            last = next + 1;
+            }
+          else if(nextc == ';' && openstack.size() == 1)
+            {
+            // Handled in ExpandListArgument; pass the backslash literally.
+            }
+          else if (isalnum(nextc) || nextc == '\0')
+            {
+            errorstr += "Invalid character escape '\\";
+            if (nextc)
+              {
+              errorstr += nextc;
+              errorstr += "'.";
+              }
+            else
+              {
+              errorstr += "' (at end of input).";
+              }
+            error = true;
+            }
+          else
+            {
+            // Take what we've found so far, skipping the escape character.
+            result.append(last, in - last);
+            // Start tracking from the next character.
+            last = in + 1;
+            }
+          // Skip the next character since it was escaped, but don't read past
+          // the end of the string.
+          if(*last)
+            {
+            ++in;
+            }
+          }
+        break;
+      case '\n':
+        // Onto the next line.
+        ++line;
+        break;
+      case '\0':
+        done = true;
+        break;
+      case '@':
+        if(replaceAt)
+          {
+          const char* nextAt = strchr(in + 1, '@');
+          if(nextAt && nextAt != in + 1 &&
+             nextAt == in + 1 + strspn(in + 1,
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                "abcdefghijklmnopqrstuvwxyz"
+                "0123456789/_.+-"))
+            {
+            std::string variable(in + 1, nextAt - in - 1);
+            std::string varresult = this->GetSafeDefinition(variable);
+            if(escapeQuotes)
+              {
+              varresult = cmSystemTools::EscapeQuotes(varresult);
+              }
+            // Skip over the variable.
+            result.append(last, in - last);
+            result.append(varresult);
+            in = nextAt;
+            last = in + 1;
+            break;
+            }
+          }
+        // Failed to find a valid @ expansion; treat it as literal.
+        /* FALLTHROUGH */
+      default:
+        {
+        if(openstack.size() > 1 &&
+           !(isalnum(inc) || inc == '_' ||
+             inc == '/' || inc == '.' ||
+             inc == '+' || inc == '-'))
+          {
+          errorstr += "Invalid character (\'";
+          errorstr += inc;
+          result.append(last, in - last);
+          errorstr += "\') in a variable name: "
+                      "'" + result.substr(openstack.top().loc) + "'";
+          mtype = cmake::FATAL_ERROR;
+          error = true;
+          }
+        break;
+        }
+      }
+    // Look at the next character.
+    } while(!error && !done && *++in);
+
+  // Check for open variable references yet.
+  if(!error && openstack.size() != 1)
+    {
+    // There's an open variable reference waiting.  Policy CMP0010 flags
+    // whether this is an error or not.  The new parser now enforces
+    // CMP0010 as well.
+    errorstr += "There is an unterminated variable reference.";
+    error = true;
+    }
+
+  if(error)
+    {
+    cmOStringStream emsg;
+    emsg << "Syntax error in cmake code ";
+    if(filename)
+      {
+      // This filename and line number may be more specific than the
+      // command context because one command invocation can have
+      // arguments on multiple lines.
+      emsg << "at\n"
+            << "  " << filename << ":" << line << "\n";
+      }
+    emsg << "when parsing string\n"
+         << "  " << source << "\n";
+    emsg << errorstr;
+    mtype = cmake::FATAL_ERROR;
+    errorstr = emsg.str();
+    }
+  else
+    {
+    // Append the rest of the unchanged part of the string.
+    result.append(last);
+
+    source = result;
+    }
+
+  return mtype;
 }
 
 void cmMakefile::RemoveVariablesInString(std::string& source,
@@ -2939,7 +3314,7 @@ bool cmMakefile::ExpandArguments(
     value = i->Value;
     this->ExpandVariablesInString(value, false, false, false,
                                   i->FilePath, i->Line,
-                                  false, true);
+                                  false, false);
 
     // If the argument is quoted, it should be one argument.
     // Otherwise, it may be a list of arguments.
@@ -3500,7 +3875,7 @@ void cmMakefile::ConfigureString(const std::string& input,
 
   // Perform variable replacements.
   this->ExpandVariablesInString(output, escapeQuotes, true,
-                                atOnly, 0, -1, true);
+                                atOnly, 0, -1, true, true);
 }
 
 int cmMakefile::ConfigureFile(const char* infile, const char* outfile,
@@ -3911,8 +4286,7 @@ cmTarget* cmMakefile::FindTarget(const std::string& name,
 {
   if (!excludeAliases)
     {
-    std::map<std::string, cmTarget*>::const_iterator i
-                                              = this->AliasTargets.find(name);
+    TargetMap::const_iterator i = this->AliasTargets.find(name);
     if (i != this->AliasTargets.end())
       {
       return i->second;
@@ -4134,7 +4508,7 @@ cmTarget* cmMakefile::FindTargetToUse(const std::string& name,
 {
   // Look for an imported target.  These take priority because they
   // are more local in scope and do not have to be globally unique.
-  std::map<std::string, cmTarget*>::const_iterator
+  TargetMap::const_iterator
     imported = this->ImportedTargets.find(name);
   if(imported != this->ImportedTargets.end())
     {
@@ -4326,6 +4700,51 @@ void cmMakefile::AddQtUiFileWithOptions(cmSourceFile *sf)
 std::vector<cmSourceFile*> cmMakefile::GetQtUiFilesWithOptions() const
 {
   return this->QtUiFilesWithOptions;
+}
+
+static std::string matchVariables[] = {
+  "CMAKE_MATCH_0",
+  "CMAKE_MATCH_1",
+  "CMAKE_MATCH_2",
+  "CMAKE_MATCH_3",
+  "CMAKE_MATCH_4",
+  "CMAKE_MATCH_5",
+  "CMAKE_MATCH_6",
+  "CMAKE_MATCH_7",
+  "CMAKE_MATCH_8",
+  "CMAKE_MATCH_9"
+};
+
+//----------------------------------------------------------------------------
+void cmMakefile::ClearMatches()
+{
+  for (unsigned int i=0; i<this->NumLastMatches; i++)
+    {
+    std::string const& var = matchVariables[i];
+    std::string const& s = this->GetSafeDefinition(var);
+    if(!s.empty())
+      {
+      this->AddDefinition(var, "");
+      this->MarkVariableAsUsed(var);
+      }
+    }
+  this->NumLastMatches = 0;
+}
+
+//----------------------------------------------------------------------------
+void cmMakefile::StoreMatches(cmsys::RegularExpression& re)
+{
+  for (unsigned int i=0; i<10; i++)
+    {
+    std::string const& m = re.match(i);
+    if(!m.empty())
+      {
+      std::string const& var = matchVariables[i];
+      this->AddDefinition(var, m.c_str());
+      this->MarkVariableAsUsed(var);
+      this->NumLastMatches = i + 1;
+      }
+    }
 }
 
 //----------------------------------------------------------------------------
@@ -4549,12 +4968,22 @@ void cmMakefile::RecordPolicies(cmPolicies::PolicyMap& pm)
 }
 
 #define FEATURE_STRING(F) , #F
+static const char * const C_FEATURES[] = {
+  0
+  FOR_EACH_C_FEATURE(FEATURE_STRING)
+};
 
 static const char * const CXX_FEATURES[] = {
   0
   FOR_EACH_CXX_FEATURE(FEATURE_STRING)
 };
+#undef FEATURE_STRING
 
+static const char * const C_STANDARDS[] = {
+    "90"
+  , "99"
+  , "11"
+};
 static const char * const CXX_STANDARDS[] = {
     "98"
   , "11"
@@ -4570,35 +4999,91 @@ AddRequiredTargetFeature(cmTarget *target, const std::string& feature,
     target->AppendProperty("COMPILE_FEATURES", feature.c_str());
     return true;
     }
-  bool isCxxFeature = std::find_if(cmArrayBegin(CXX_FEATURES) + 1,
-              cmArrayEnd(CXX_FEATURES), cmStrCmp(feature))
-              != cmArrayEnd(CXX_FEATURES);
-  if (!isCxxFeature)
+
+  std::string lang;
+  if (!this->CompileFeatureKnown(target, feature, lang, error))
     {
-    cmOStringStream e;
-    if (error)
-      {
-      e << "specified";
-      }
-    else
-      {
-      e << "Specified";
-      }
-    e << " unknown feature \"" << feature << "\" for "
-      "target \"" << target->GetName() << "\".";
-    if (error)
-      {
-      *error = e.str();
-      }
-    else
-      {
-      this->IssueMessage(cmake::FATAL_ERROR, e.str());
-      }
     return false;
     }
 
-  std::string lang = "CXX";
+  const char* features = this->CompileFeaturesAvailable(lang, error);
+  if (!features)
+    {
+    return false;
+    }
 
+  std::vector<std::string> availableFeatures;
+  cmSystemTools::ExpandListArgument(features, availableFeatures);
+  if (std::find(availableFeatures.begin(),
+                availableFeatures.end(),
+                feature) == availableFeatures.end())
+    {
+    cmOStringStream e;
+    e << "The compiler feature \"" << feature
+      << "\" is not known to " << lang << " compiler\n\""
+      << this->GetDefinition("CMAKE_" + lang + "_COMPILER_ID")
+      << "\"\nversion "
+      << this->GetDefinition("CMAKE_" + lang + "_COMPILER_VERSION") << ".";
+    this->IssueMessage(cmake::FATAL_ERROR, e.str());
+    return false;
+    }
+
+  target->AppendProperty("COMPILE_FEATURES", feature.c_str());
+
+  return lang == "C"
+      ? this->AddRequiredTargetCFeature(target, feature)
+      : this->AddRequiredTargetCxxFeature(target, feature);
+}
+
+//----------------------------------------------------------------------------
+bool cmMakefile::
+CompileFeatureKnown(cmTarget const* target, const std::string& feature,
+                    std::string& lang, std::string *error) const
+{
+  assert(cmGeneratorExpression::Find(feature) == std::string::npos);
+
+  bool isCFeature = std::find_if(cmArrayBegin(C_FEATURES) + 1,
+              cmArrayEnd(C_FEATURES), cmStrCmp(feature))
+              != cmArrayEnd(C_FEATURES);
+  if (isCFeature)
+    {
+    lang = "C";
+    return true;
+    }
+  bool isCxxFeature = std::find_if(cmArrayBegin(CXX_FEATURES) + 1,
+              cmArrayEnd(CXX_FEATURES), cmStrCmp(feature))
+              != cmArrayEnd(CXX_FEATURES);
+  if (isCxxFeature)
+    {
+    lang = "CXX";
+    return true;
+    }
+  cmOStringStream e;
+  if (error)
+    {
+    e << "specified";
+    }
+  else
+    {
+    e << "Specified";
+    }
+  e << " unknown feature \"" << feature << "\" for "
+    "target \"" << target->GetName() << "\".";
+  if (error)
+    {
+    *error = e.str();
+    }
+  else
+    {
+    this->IssueMessage(cmake::FATAL_ERROR, e.str());
+    }
+  return false;
+}
+
+//----------------------------------------------------------------------------
+const char* cmMakefile::
+CompileFeaturesAvailable(const std::string& lang, std::string *error) const
+{
   const char* featuresKnown =
     this->GetDefinition("CMAKE_" + lang + "_COMPILE_FEATURES");
 
@@ -4613,7 +5098,7 @@ AddRequiredTargetFeature(cmTarget *target, const std::string& feature,
       {
       e << "No";
       }
-    e << " known features for compiler\n\""
+    e << " known features for " << lang << " compiler\n\""
       << this->GetDefinition("CMAKE_" + lang + "_COMPILER_ID")
       << "\"\nversion "
       << this->GetDefinition("CMAKE_" + lang + "_COMPILER_VERSION") << ".";
@@ -4625,29 +5110,157 @@ AddRequiredTargetFeature(cmTarget *target, const std::string& feature,
       {
       this->IssueMessage(cmake::FATAL_ERROR, e.str());
       }
+    return 0;
+    }
+  return featuresKnown;
+}
+
+//----------------------------------------------------------------------------
+bool cmMakefile::HaveFeatureAvailable(cmTarget const* target,
+                                      std::string const& lang,
+                                      const std::string& feature) const
+{
+  return lang == "C"
+      ? this->HaveCFeatureAvailable(target, feature)
+      : this->HaveCxxFeatureAvailable(target, feature);
+}
+
+//----------------------------------------------------------------------------
+bool cmMakefile::
+HaveCFeatureAvailable(cmTarget const* target, const std::string& feature) const
+{
+  bool needC90 = false;
+  bool needC99 = false;
+  bool needC11 = false;
+
+  this->CheckNeededCLanguage(feature, needC90, needC99, needC11);
+
+  const char *existingCStandard = target->GetProperty("C_STANDARD");
+  if (!existingCStandard)
+    {
+    existingCStandard = this->GetDefinition("CMAKE_C_STANDARD_DEFAULT");
+    }
+
+  if (std::find_if(cmArrayBegin(C_STANDARDS), cmArrayEnd(C_STANDARDS),
+                cmStrCmp(existingCStandard)) == cmArrayEnd(C_STANDARDS))
+    {
+    cmOStringStream e;
+    e << "The C_STANDARD property on target \"" << target->GetName()
+      << "\" contained an invalid value: \"" << existingCStandard << "\".";
+    this->IssueMessage(cmake::FATAL_ERROR, e.str().c_str());
     return false;
     }
 
-  std::vector<std::string> availableFeatures;
-  cmSystemTools::ExpandListArgument(featuresKnown, availableFeatures);
-  if (std::find(availableFeatures.begin(),
-                availableFeatures.end(),
-                feature) == availableFeatures.end())
+  const char * const *existingCIt = existingCStandard
+                                    ? std::find_if(cmArrayBegin(C_STANDARDS),
+                                      cmArrayEnd(C_STANDARDS),
+                                      cmStrCmp(existingCStandard))
+                                    : cmArrayEnd(C_STANDARDS);
+
+  if (needC11 && existingCStandard && existingCIt <
+                                    std::find_if(cmArrayBegin(C_STANDARDS),
+                                      cmArrayEnd(C_STANDARDS),
+                                      cmStrCmp("11")))
+    {
+    return false;
+    }
+  else if(needC99 && existingCStandard && existingCIt <
+                                    std::find_if(cmArrayBegin(C_STANDARDS),
+                                      cmArrayEnd(C_STANDARDS),
+                                      cmStrCmp("99")))
+    {
+    return false;
+    }
+  else if(needC90 && existingCStandard && existingCIt <
+                                    std::find_if(cmArrayBegin(C_STANDARDS),
+                                      cmArrayEnd(C_STANDARDS),
+                                      cmStrCmp("90")))
+    {
+    return false;
+    }
+  return true;
+}
+
+//----------------------------------------------------------------------------
+bool cmMakefile::IsLaterStandard(std::string const& lang,
+                                 std::string const& lhs,
+                                 std::string const& rhs)
+{
+  if (lang == "C")
+    {
+    const char * const *rhsIt = std::find_if(cmArrayBegin(C_STANDARDS),
+                                            cmArrayEnd(C_STANDARDS),
+                                            cmStrCmp(rhs));
+
+    return std::find_if(rhsIt, cmArrayEnd(C_STANDARDS),
+                        cmStrCmp(lhs)) != cmArrayEnd(C_STANDARDS);
+    }
+  const char * const *rhsIt = std::find_if(cmArrayBegin(CXX_STANDARDS),
+                                           cmArrayEnd(CXX_STANDARDS),
+                                           cmStrCmp(rhs));
+
+  return std::find_if(rhsIt, cmArrayEnd(CXX_STANDARDS),
+                      cmStrCmp(lhs)) != cmArrayEnd(CXX_STANDARDS);
+}
+
+//----------------------------------------------------------------------------
+bool cmMakefile::HaveCxxFeatureAvailable(cmTarget const* target,
+                                         const std::string& feature) const
+{
+  bool needCxx98 = false;
+  bool needCxx11 = false;
+  this->CheckNeededCxxLanguage(feature, needCxx98, needCxx11);
+
+  const char *existingCxxStandard = target->GetProperty("CXX_STANDARD");
+  if (!existingCxxStandard)
+    {
+    existingCxxStandard = this->GetDefinition("CMAKE_CXX_STANDARD_DEFAULT");
+    }
+
+  if (std::find_if(cmArrayBegin(CXX_STANDARDS), cmArrayEnd(CXX_STANDARDS),
+                cmStrCmp(existingCxxStandard)) == cmArrayEnd(CXX_STANDARDS))
     {
     cmOStringStream e;
-    e << "The compiler feature \"" << feature
-      << "\" is not known to compiler\n\""
-      << this->GetDefinition("CMAKE_" + lang + "_COMPILER_ID")
-      << "\"\nversion "
-      << this->GetDefinition("CMAKE_" + lang + "_COMPILER_VERSION") << ".";
+    e << "The CXX_STANDARD property on target \"" << target->GetName()
+      << "\" contained an invalid value: \"" << existingCxxStandard << "\".";
     this->IssueMessage(cmake::FATAL_ERROR, e.str());
     return false;
     }
 
-  target->AppendProperty("COMPILE_FEATURES", feature.c_str());
+  const char * const *existingCxxIt = existingCxxStandard
+                                    ? std::find_if(cmArrayBegin(CXX_STANDARDS),
+                                      cmArrayEnd(CXX_STANDARDS),
+                                      cmStrCmp(existingCxxStandard))
+                                    : cmArrayEnd(CXX_STANDARDS);
 
-  bool needCxx11 = false;
+  if (needCxx11 && existingCxxIt < std::find_if(cmArrayBegin(CXX_STANDARDS),
+                                      cmArrayEnd(CXX_STANDARDS),
+                                      cmStrCmp("11")))
+    {
+    return false;
+    }
+  else if(needCxx98 && existingCxxIt <
+                                    std::find_if(cmArrayBegin(CXX_STANDARDS),
+                                      cmArrayEnd(CXX_STANDARDS),
+                                      cmStrCmp("98")))
+    {
+    return false;
+    }
+  return true;
+}
 
+//----------------------------------------------------------------------------
+void cmMakefile::CheckNeededCxxLanguage(const std::string& feature,
+                                        bool& needCxx98,
+                                        bool& needCxx11) const
+{
+  if (const char *propCxx98 =
+          this->GetDefinition("CMAKE_CXX98_COMPILE_FEATURES"))
+    {
+    std::vector<std::string> props;
+    cmSystemTools::ExpandListArgument(propCxx98, props);
+    needCxx98 = std::find(props.begin(), props.end(), feature) != props.end();
+    }
   if (const char *propCxx11 =
           this->GetDefinition("CMAKE_CXX11_COMPILE_FEATURES"))
     {
@@ -4655,6 +5268,17 @@ AddRequiredTargetFeature(cmTarget *target, const std::string& feature,
     cmSystemTools::ExpandListArgument(propCxx11, props);
     needCxx11 = std::find(props.begin(), props.end(), feature) != props.end();
     }
+}
+
+//----------------------------------------------------------------------------
+bool cmMakefile::
+AddRequiredTargetCxxFeature(cmTarget *target,
+                            const std::string& feature) const
+{
+  bool needCxx98 = false;
+  bool needCxx11 = false;
+
+  this->CheckNeededCxxLanguage(feature, needCxx98, needCxx11);
 
   const char *existingCxxStandard = target->GetProperty("CXX_STANDARD");
   if (existingCxxStandard)
@@ -4675,6 +5299,7 @@ AddRequiredTargetFeature(cmTarget *target, const std::string& feature,
                                       cmStrCmp(existingCxxStandard))
                                     : cmArrayEnd(CXX_STANDARDS);
 
+  bool setCxx98 = needCxx98 && !existingCxxStandard;
   bool setCxx11 = needCxx11 && !existingCxxStandard;
 
   if (needCxx11 && existingCxxStandard && existingCxxIt <
@@ -4684,10 +5309,120 @@ AddRequiredTargetFeature(cmTarget *target, const std::string& feature,
     {
     setCxx11 = true;
     }
+  else if(needCxx98 && existingCxxStandard && existingCxxIt <
+                                    std::find_if(cmArrayBegin(CXX_STANDARDS),
+                                      cmArrayEnd(CXX_STANDARDS),
+                                      cmStrCmp("98")))
+    {
+    setCxx98 = true;
+    }
 
   if (setCxx11)
     {
     target->SetProperty("CXX_STANDARD", "11");
+    }
+  else if (setCxx98)
+    {
+    target->SetProperty("CXX_STANDARD", "98");
+    }
+  return true;
+}
+
+//----------------------------------------------------------------------------
+void cmMakefile::CheckNeededCLanguage(const std::string& feature,
+                                        bool& needC90,
+                                        bool& needC99,
+                                        bool& needC11) const
+{
+  if (const char *propC90 =
+          this->GetDefinition("CMAKE_C90_COMPILE_FEATURES"))
+    {
+    std::vector<std::string> props;
+    cmSystemTools::ExpandListArgument(propC90, props);
+    needC90 = std::find(props.begin(), props.end(), feature) != props.end();
+    }
+  if (const char *propC99 =
+          this->GetDefinition("CMAKE_C99_COMPILE_FEATURES"))
+    {
+    std::vector<std::string> props;
+    cmSystemTools::ExpandListArgument(propC99, props);
+    needC99 = std::find(props.begin(), props.end(), feature) != props.end();
+    }
+  if (const char *propC11 =
+          this->GetDefinition("CMAKE_C11_COMPILE_FEATURES"))
+    {
+    std::vector<std::string> props;
+    cmSystemTools::ExpandListArgument(propC11, props);
+    needC11 = std::find(props.begin(), props.end(), feature) != props.end();
+    }
+}
+
+//----------------------------------------------------------------------------
+bool cmMakefile::
+AddRequiredTargetCFeature(cmTarget *target, const std::string& feature) const
+{
+  bool needC90 = false;
+  bool needC99 = false;
+  bool needC11 = false;
+
+  this->CheckNeededCLanguage(feature, needC90, needC99, needC11);
+
+  const char *existingCStandard = target->GetProperty("C_STANDARD");
+  if (existingCStandard)
+    {
+    if (std::find_if(cmArrayBegin(C_STANDARDS), cmArrayEnd(C_STANDARDS),
+                  cmStrCmp(existingCStandard)) == cmArrayEnd(C_STANDARDS))
+      {
+      cmOStringStream e;
+      e << "The C_STANDARD property on target \"" << target->GetName()
+        << "\" contained an invalid value: \"" << existingCStandard << "\".";
+      this->IssueMessage(cmake::FATAL_ERROR, e.str().c_str());
+      return false;
+      }
+    }
+  const char * const *existingCIt = existingCStandard
+                                    ? std::find_if(cmArrayBegin(C_STANDARDS),
+                                      cmArrayEnd(C_STANDARDS),
+                                      cmStrCmp(existingCStandard))
+                                    : cmArrayEnd(C_STANDARDS);
+
+  bool setC90 = needC90 && !existingCStandard;
+  bool setC99 = needC99 && !existingCStandard;
+  bool setC11 = needC11 && !existingCStandard;
+
+  if (needC11 && existingCStandard && existingCIt <
+                                    std::find_if(cmArrayBegin(C_STANDARDS),
+                                      cmArrayEnd(C_STANDARDS),
+                                      cmStrCmp("11")))
+    {
+    setC11 = true;
+    }
+  else if(needC99 && existingCStandard && existingCIt <
+                                    std::find_if(cmArrayBegin(C_STANDARDS),
+                                      cmArrayEnd(C_STANDARDS),
+                                      cmStrCmp("99")))
+    {
+    setC99 = true;
+    }
+  else if(needC90 && existingCStandard && existingCIt <
+                                    std::find_if(cmArrayBegin(C_STANDARDS),
+                                      cmArrayEnd(C_STANDARDS),
+                                      cmStrCmp("90")))
+    {
+    setC90 = true;
+    }
+
+  if (setC11)
+    {
+    target->SetProperty("C_STANDARD", "11");
+    }
+  else if (setC99)
+    {
+    target->SetProperty("C_STANDARD", "99");
+    }
+  else if (setC90)
+    {
+    target->SetProperty("C_STANDARD", "90");
     }
   return true;
 }

@@ -657,10 +657,10 @@ void cmLocalGenerator::AddBuildTargetRule(const std::string& llang,
 {
   std::string objs;
   std::vector<std::string> objVector;
+  std::string config = this->Makefile->GetSafeDefinition("CMAKE_BUILD_TYPE");
   // Add all the sources outputs to the depends of the target
   std::vector<cmSourceFile*> classes;
-  target.GetSourceFiles(classes,
-                      this->Makefile->GetSafeDefinition("CMAKE_BUILD_TYPE"));
+  target.GetSourceFiles(classes, config);
   for(std::vector<cmSourceFile*>::const_iterator i = classes.begin();
       i != classes.end(); ++i)
     {
@@ -686,9 +686,7 @@ void cmLocalGenerator::AddBuildTargetRule(const std::string& llang,
         }
       }
     }
-  std::string createRule = "CMAKE_";
-  createRule += llang;
-  createRule += target.GetCreateRuleVariable();
+  std::string createRule = target.GetCreateRuleVariable(llang, config);
   bool useWatcomQuote = this->Makefile->IsOn(createRule+"_USE_WATCOM_QUOTE");
   std::string targetName = target.Target->GetFullName();
   // Executable :
@@ -1344,6 +1342,12 @@ std::string cmLocalGenerator::GetIncludeFlags(
   const char* fwSearchFlag =
     this->Makefile->GetDefinition(fwSearchFlagVar);
 
+  std::string sysFwSearchFlagVar = "CMAKE_";
+  sysFwSearchFlagVar += lang;
+  sysFwSearchFlagVar += "_SYSTEM_FRAMEWORK_SEARCH_FLAG";
+  const char* sysFwSearchFlag =
+    this->Makefile->GetDefinition(sysFwSearchFlagVar);
+
   bool flagUsed = false;
   std::set<std::string> emitted;
 #ifdef __APPLE__
@@ -1360,9 +1364,17 @@ std::string cmLocalGenerator::GetIncludeFlags(
       frameworkDir = cmSystemTools::CollapseFullPath(frameworkDir.c_str());
       if(emitted.insert(frameworkDir).second)
         {
-        includeFlags
-          << fwSearchFlag << this->Convert(frameworkDir,
-                                           START_OUTPUT, shellFormat, true)
+        if (sysFwSearchFlag && target &&
+            target->IsSystemIncludeDirectory(*i, config))
+          {
+          includeFlags << sysFwSearchFlag;
+          }
+        else
+          {
+          includeFlags << fwSearchFlag;
+          }
+        includeFlags << this->Convert(frameworkDir, START_OUTPUT,
+                                      shellFormat, true)
           << " ";
         }
       continue;
@@ -1467,6 +1479,31 @@ void cmLocalGenerator::AddCompileOptions(
     {
      if (!this->Makefile->AddRequiredTargetFeature(target, *it))
       {
+      return;
+      }
+    }
+
+  for(std::map<std::string, std::string>::const_iterator it
+      = target->GetMaxLanguageStandards().begin();
+      it != target->GetMaxLanguageStandards().end(); ++it)
+    {
+    const char* standard = target->GetProperty(it->first + "_STANDARD");
+    if(!standard)
+      {
+      continue;
+      }
+    if (this->Makefile->IsLaterStandard(it->first, standard, it->second))
+      {
+      cmOStringStream e;
+      e << "The COMPILE_FEATURES property of target \""
+        << target->GetName() << "\" was evaluated when computing the link "
+        "implementation, and the \"" << it->first << "_STANDARD\" was \""
+        << it->second << "\" for that computation.  Computing the "
+        "COMPILE_FEATURES based on the link implementation resulted in a "
+        "higher \"" << it->first << "_STANDARD\" \"" << standard << "\".  "
+        "This is not permitted. The COMPILE_FEATURES may not both depend on "
+        "and be depended on by the link implementation." << std::endl;
+      this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
       return;
       }
     }
@@ -2152,8 +2189,8 @@ AddCompilerRequirementFlag(std::string &flags, cmTarget* target,
     return;
     }
   std::string stdProp = lang + "_STANDARD";
-  const char *standard = target->GetProperty(stdProp);
-  if (!standard)
+  const char *standardProp = target->GetProperty(stdProp);
+  if (!standardProp)
     {
     return;
     }
@@ -2161,12 +2198,70 @@ AddCompilerRequirementFlag(std::string &flags, cmTarget* target,
   bool ext = target->GetPropertyAsBool(extProp);
   std::string type = ext ? "EXTENSION" : "STANDARD";
 
-  std::string compile_option =
-            "CMAKE_" + lang + std::string(standard)
-                     + "_" + type + "_COMPILE_OPTION";
-  if (const char *opt = target->GetMakefile()->GetDefinition(compile_option))
+  if (target->GetPropertyAsBool(lang + "_STANDARD_REQUIRED"))
     {
+    std::string option_flag =
+              "CMAKE_" + lang + standardProp
+                      + "_" + type + "_COMPILE_OPTION";
+
+    const char *opt = target->GetMakefile()->GetDefinition(option_flag);
+    if (!opt)
+      {
+      cmOStringStream e;
+      e << "Target \"" << target->GetName() << "\" requires the language "
+           "dialect \"" << lang << standardProp << "\" "
+        << (ext ? "(with compiler extensions)" : "") << ", but CMake "
+           "does not know the compile flags to use to enable it.";
+      this->GetMakefile()->IssueMessage(cmake::FATAL_ERROR, e.str());
+      }
     this->AppendFlags(flags, opt);
+    return;
+    }
+
+  static std::map<std::string, std::vector<std::string> > langStdMap;
+  if (langStdMap.empty())
+    {
+    // Maintain sorted order, most recent first.
+    langStdMap["CXX"].push_back("11");
+    langStdMap["CXX"].push_back("98");
+
+    langStdMap["C"].push_back("11");
+    langStdMap["C"].push_back("99");
+    langStdMap["C"].push_back("90");
+    }
+
+  std::string standard(standardProp);
+
+  std::vector<std::string>& stds = langStdMap[lang];
+
+  std::vector<std::string>::const_iterator stdIt =
+                                std::find(stds.begin(), stds.end(), standard);
+  assert(stdIt != stds.end());
+
+  const char* defaultStd
+      = this->Makefile->GetDefinition("CMAKE_" + lang + "_STANDARD_DEFAULT");
+  std::vector<std::string>::const_iterator defaultStdIt;
+  if (defaultStd)
+    {
+    defaultStdIt = std::find(stds.begin(), stds.end(), defaultStd);
+    assert(defaultStdIt != stds.end());
+    }
+  else
+    {
+    defaultStdIt = stds.end() - 1;
+    }
+
+  for ( ; stdIt <= defaultStdIt; ++stdIt)
+    {
+    std::string option_flag =
+              "CMAKE_" + lang + *stdIt
+                      + "_" + type + "_COMPILE_OPTION";
+
+    if (const char *opt = target->GetMakefile()->GetDefinition(option_flag))
+      {
+      this->AppendFlags(flags, opt);
+      return;
+      }
     }
 }
 
@@ -2200,7 +2295,7 @@ static void AddVisibilityCompileOption(std::string &flags, cmTarget* target,
     return;
     }
   std::string option = std::string(opt) + prop;
-  lg->AppendFlags(flags, option.c_str());
+  lg->AppendFlags(flags, option);
 }
 
 static void AddInlineVisibilityCompileOption(std::string &flags,
@@ -2384,11 +2479,10 @@ void cmLocalGenerator::AddConfigVariableFlags(std::string& flags,
 
 //----------------------------------------------------------------------------
 void cmLocalGenerator::AppendFlags(std::string& flags,
-                                                const char* newFlags)
+                                   const std::string& newFlags)
 {
-  if(newFlags && *newFlags)
+  if(!newFlags.empty())
     {
-    std::string newf = newFlags;
     if(flags.size())
       {
       flags += " ";
@@ -2398,10 +2492,20 @@ void cmLocalGenerator::AppendFlags(std::string& flags,
 }
 
 //----------------------------------------------------------------------------
+void cmLocalGenerator::AppendFlags(std::string& flags,
+                                   const char* newFlags)
+{
+  if(newFlags && *newFlags)
+    {
+    this->AppendFlags(flags, std::string(newFlags));
+    }
+}
+
+//----------------------------------------------------------------------------
 void cmLocalGenerator::AppendFlagEscape(std::string& flags,
                                         const std::string& rawFlag)
 {
-  this->AppendFlags(flags, this->EscapeForShell(rawFlag).c_str());
+  this->AppendFlags(flags, this->EscapeForShell(rawFlag));
 }
 
 //----------------------------------------------------------------------------

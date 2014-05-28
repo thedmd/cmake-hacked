@@ -679,7 +679,7 @@ public:
                                       const char* filename = 0,
                                       long line = -1,
                                       bool removeEmpty = false,
-                                      bool replaceAt = true) const;
+                                      bool replaceAt = false) const;
 
   /**
    * Remove any remaining variables in the string. Anything with ${var} or
@@ -889,6 +889,22 @@ public:
                                 const std::string& feature,
                                 std::string *error = 0) const;
 
+  bool CompileFeatureKnown(cmTarget const* target, const std::string& feature,
+                           std::string& lang, std::string *error) const;
+
+  const char* CompileFeaturesAvailable(const std::string& lang,
+                                       std::string *error) const;
+
+  bool HaveFeatureAvailable(cmTarget const* target, std::string const& lang,
+                            const std::string& feature) const;
+
+  bool IsLaterStandard(std::string const& lang,
+                       std::string const& lhs,
+                       std::string const& rhs);
+
+  void ClearMatches();
+  void StoreMatches(cmsys::RegularExpression& re);
+
 protected:
   // add link libraries and directories to the target
   void AddGlobalLinkInformation(const std::string& name, cmTarget& target);
@@ -909,7 +925,12 @@ protected:
 
   // libraries, classes, and executables
   mutable cmTargets Targets;
-  std::map<std::string, cmTarget*> AliasTargets;
+#if defined(CMAKE_BUILD_WITH_CMAKE)
+  typedef cmsys::hash_map<std::string, cmTarget*> TargetMap;
+#else
+  typedef std::map<std::string, cmTarget*> TargetMap;
+#endif
+  TargetMap AliasTargets;
   cmGeneratorTargetsType GeneratorTargets;
   std::vector<cmSourceFile*> SourceFiles;
 
@@ -986,6 +1007,7 @@ private:
   mutable cmsys::RegularExpression cmDefineRegex;
   mutable cmsys::RegularExpression cmDefine01Regex;
   mutable cmsys::RegularExpression cmAtVarRegex;
+  mutable cmsys::RegularExpression cmNamedCurly;
 
   cmPropertyMap Properties;
 
@@ -1010,7 +1032,7 @@ private:
   friend class cmMakefileCall;
 
   std::vector<cmTarget*> ImportedTargetsOwned;
-  std::map<std::string, cmTarget*> ImportedTargets;
+  TargetMap ImportedTargets;
 
   // Internal policy stack management.
   void PushPolicy(bool weak = false,
@@ -1042,6 +1064,28 @@ private:
   // Enforce rules about CMakeLists.txt files.
   void EnforceDirectoryLevelRules() const;
 
+  // CMP0053 == old
+  cmake::MessageType ExpandVariablesInStringOld(
+                                  std::string& errorstr,
+                                  std::string& source,
+                                  bool escapeQuotes,
+                                  bool noEscapes,
+                                  bool atOnly,
+                                  const char* filename,
+                                  long line,
+                                  bool removeEmpty,
+                                  bool replaceAt) const;
+  // CMP0053 == new
+  cmake::MessageType ExpandVariablesInStringNew(
+                                  std::string& errorstr,
+                                  std::string& source,
+                                  bool escapeQuotes,
+                                  bool noEscapes,
+                                  bool atOnly,
+                                  const char* filename,
+                                  long line,
+                                  bool removeEmpty,
+                                  bool replaceAt) const;
   bool GeneratingBuildSystem;
   /**
    * Old version of GetSourceFileWithOutput(const std::string&) kept for
@@ -1065,6 +1109,26 @@ private:
                                cmSourceFile* source);
 
   std::vector<cmSourceFile*> QtUiFilesWithOptions;
+
+  unsigned int NumLastMatches;
+
+  bool AddRequiredTargetCFeature(cmTarget *target,
+                                 const std::string& feature) const;
+
+  bool AddRequiredTargetCxxFeature(cmTarget *target,
+                                   const std::string& feature) const;
+
+  void CheckNeededCLanguage(const std::string& feature, bool& needC90,
+                            bool& needC99, bool& needC11) const;
+  void CheckNeededCxxLanguage(const std::string& feature, bool& needCxx98,
+                              bool& needCxx11) const;
+
+  bool HaveCFeatureAvailable(cmTarget const* target,
+                             const std::string& feature) const;
+  bool HaveCxxFeatureAvailable(cmTarget const* target,
+                               const std::string& feature) const;
+
+  mutable bool SuppressWatches;
 };
 
 //----------------------------------------------------------------------------

@@ -83,6 +83,14 @@ otherwise expands to nothing.
   else ``0``.  If the policy was not set, the warning message for the policy
   will be emitted. This generator expression only works for a subset of
   policies.
+``$<COMPILE_FEATURES:feature[,feature]...>``
+  ``1`` if all of the ``feature`` features are available for the 'head'
+  target, and ``0`` otherwise. If this expression is used while evaluating
+  the link implementation of a target and if any dependency transitively
+  increases the required :prop_tgt:`C_STANDARD` or :prop_tgt:`CXX_STANDARD`
+  for the 'head' target, an error is reported.  See the
+  :manual:`cmake-compile-features(7)` manual for information on
+  compile features.
 
 Informational Expressions
 =========================
