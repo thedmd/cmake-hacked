@@ -19,6 +19,8 @@
 # libraries are installed when both debug and release are available.  If
 # CMAKE_INSTALL_MFC_LIBRARIES is set then the MFC run time libraries are
 # installed as well as the CRT run time libraries.  If
+# CMAKE_INSTALL_OPENMP_LIBRARIES is set then the OpenMP run time libraries
+# are installed as well.  If
 # CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION is set then the libraries are
 # installed to that directory rather than the default.  If
 # CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_NO_WARNINGS is NOT set, then this
@@ -94,6 +96,8 @@ if(MSVC)
         "${MSVC80_CRT_DIR}/msvcp80.dll"
         "${MSVC80_CRT_DIR}/msvcr80.dll"
         )
+    else()
+      set(__install__libs)
     endif()
 
     if(CMAKE_INSTALL_DEBUG_LIBRARIES)
@@ -132,6 +136,8 @@ if(MSVC)
         "${MSVC90_CRT_DIR}/msvcp90.dll"
         "${MSVC90_CRT_DIR}/msvcr90.dll"
         )
+    else()
+      set(__install__libs)
     endif()
 
     if(CMAKE_INSTALL_DEBUG_LIBRARIES)
@@ -168,6 +174,8 @@ if(MSVC)
         "${MSVC${v}_CRT_DIR}/msvcp${v}0.dll"
         "${MSVC${v}_CRT_DIR}/msvcr${v}0.dll"
         )
+    else()
+      set(__install__libs)
     endif()
 
     if(CMAKE_INSTALL_DEBUG_LIBRARIES)
@@ -190,6 +198,10 @@ if(MSVC)
 
   if(MSVC12)
     MSVCRT_FILES_FOR_VERSION(12)
+  endif()
+
+  if(MSVC14)
+    MSVCRT_FILES_FOR_VERSION(14)
   endif()
 
   if(CMAKE_INSTALL_MFC_LIBRARIES)
@@ -360,6 +372,44 @@ if(MSVC)
 
     if(MSVC12)
       MFC_FILES_FOR_VERSION(12)
+    endif()
+
+    if(MSVC14)
+      MFC_FILES_FOR_VERSION(14)
+    endif()
+  endif()
+
+  # MSVC 8 was the first version with OpenMP
+  # Furthermore, there is no debug version of this
+  if(CMAKE_INSTALL_OPENMP_LIBRARIES)
+    macro(OPENMP_FILES_FOR_VERSION version_a version_b)
+      set(va "${version_a}")
+      set(vb "${version_b}")
+      set(MSVC${va}_OPENMP_DIR "${MSVC${va}_REDIST_DIR}/${CMAKE_MSVC_ARCH}/Microsoft.VC${vb}.OPENMP")
+
+      if(NOT CMAKE_INSTALL_DEBUG_LIBRARIES_ONLY)
+        set(__install__libs ${__install__libs}
+          "${MSVC${va}_OPENMP_DIR}/vcomp${vb}.dll")
+      endif()
+    endmacro()
+
+    if(MSVC80)
+      OPENMP_FILES_FOR_VERSION(80 80)
+    endif()
+    if(MSVC90)
+      OPENMP_FILES_FOR_VERSION(90 90)
+    endif()
+    if(MSVC10)
+      OPENMP_FILES_FOR_VERSION(10 100)
+    endif()
+    if(MSVC11)
+      OPENMP_FILES_FOR_VERSION(11 110)
+    endif()
+    if(MSVC12)
+      OPENMP_FILES_FOR_VERSION(12 120)
+    endif()
+    if(MSVC14)
+      OPENMP_FILES_FOR_VERSION(14 140)
     endif()
   endif()
 

@@ -15,6 +15,7 @@
 #include <cmSystemTools.h>
 #include <cmGeneratedFileStream.h>
 #include <cmCryptoHash.h>
+#include <cmInstalledFile.h>
 #include <CPack/cmCPackLog.h>
 #include <CPack/cmCPackComponentGroup.h>
 
@@ -358,6 +359,29 @@ void cmCPackWIXGenerator::CreateWiXPropertiesIncludeFile()
       includeFile.AddAttribute("Value", value);
       includeFile.EndElement("Property");
       }
+    }
+
+  if(GetOption("CPACK_WIX_PROPERTY_ARPINSTALLLOCATION") == 0)
+    {
+    includeFile.BeginElement("Property");
+    includeFile.AddAttribute("Id", "INSTALL_ROOT");
+    includeFile.AddAttribute("Secure", "yes");
+
+    includeFile.BeginElement("RegistrySearch");
+    includeFile.AddAttribute("Id", "FindInstallLocation");
+    includeFile.AddAttribute("Root", "HKLM");
+    includeFile.AddAttribute("Key", "Software\\Microsoft\\Windows\\"
+      "CurrentVersion\\Uninstall\\[WIX_UPGRADE_DETECTED]");
+    includeFile.AddAttribute("Name", "InstallLocation");
+    includeFile.AddAttribute("Type", "raw");
+    includeFile.EndElement("RegistrySearch");
+    includeFile.EndElement("Property");
+
+    includeFile.BeginElement("SetProperty");
+    includeFile.AddAttribute("Id", "ARPINSTALLLOCATION");
+    includeFile.AddAttribute("Value", "[INSTALL_ROOT]");
+    includeFile.AddAttribute("After", "CostFinalize");
+    includeFile.EndElement("SetProperty");
     }
 }
 
@@ -823,13 +847,42 @@ void cmCPackWIXGenerator::AddDirectoryAndFileDefinitons(
   cmsys::Directory dir;
   dir.Load(topdir.c_str());
 
-  if(dir.GetNumberOfFiles() == 2)
+  std::string relativeDirectoryPath =
+    cmSystemTools::RelativePath(toplevel.c_str(), topdir.c_str());
+
+  if(relativeDirectoryPath.empty())
+    {
+    relativeDirectoryPath = ".";
+    }
+
+  cmInstalledFile const* directoryInstalledFile =
+    this->GetInstalledFile(relativeDirectoryPath);
+
+  bool emptyDirectory = dir.GetNumberOfFiles() == 2;
+  bool createDirectory = false;
+
+  if(emptyDirectory)
+    {
+    createDirectory = true;
+    }
+
+  if(directoryInstalledFile)
+    {
+    if(directoryInstalledFile->HasProperty("CPACK_WIX_ACL"))
+      {
+      createDirectory = true;
+      }
+    }
+
+  if(createDirectory)
     {
     std::string componentId = fileDefinitions.EmitComponentCreateFolder(
-      directoryId, GenerateGUID());
-
+      directoryId, GenerateGUID(), directoryInstalledFile);
     featureDefinitions.EmitComponentRef(componentId);
+    }
 
+  if(emptyDirectory)
+    {
     return;
     }
 
@@ -871,8 +924,11 @@ void cmCPackWIXGenerator::AddDirectoryAndFileDefinitons(
       }
     else
       {
+      cmInstalledFile const* installedFile =
+        this->GetInstalledFile(relativePath);
+
       std::string componentId = fileDefinitions.EmitComponentFile(
-        directoryId, id, fullPath, *(this->Patch));
+        directoryId, id, fullPath, *(this->Patch), installedFile);
 
       featureDefinitions.EmitComponentRef(componentId);
 

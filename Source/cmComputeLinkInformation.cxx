@@ -239,12 +239,10 @@ because this need be done only for shared libraries without soname-s.
 
 //----------------------------------------------------------------------------
 cmComputeLinkInformation
-::cmComputeLinkInformation(cmTarget const* target, const std::string& config,
-                           cmTarget const* headTarget)
+::cmComputeLinkInformation(cmTarget const* target, const std::string& config)
 {
   // Store context information.
   this->Target = target;
-  this->HeadTarget = headTarget;
   this->Makefile = this->Target->GetMakefile();
   this->LocalGenerator = this->Makefile->GetLocalGenerator();
   this->GlobalGenerator = this->LocalGenerator->GetGlobalGenerator();
@@ -267,7 +265,7 @@ cmComputeLinkInformation
   this->OrderDependentRPath = 0;
 
   // Get the language used for linking this target.
-  this->LinkLanguage = this->Target->GetLinkerLanguage(config, headTarget);
+  this->LinkLanguage = this->Target->GetLinkerLanguage(config);
   if(this->LinkLanguage.empty())
     {
     // The Compute method will do nothing, so skip the rest of the
@@ -505,8 +503,7 @@ bool cmComputeLinkInformation::Compute()
     }
 
   // Compute the ordered link line items.
-  cmComputeLinkDepends cld(this->Target, this->Config,
-                           this->HeadTarget);
+  cmComputeLinkDepends cld(this->Target, this->Config);
   cld.SetOldLinkDirMode(this->OldLinkDirMode);
   cmComputeLinkDepends::EntryVector const& linkEntries = cld.Compute();
 
@@ -572,8 +569,7 @@ bool cmComputeLinkInformation::Compute()
 void cmComputeLinkInformation::AddImplicitLinkInfo()
 {
   // The link closure lists all languages whose implicit info is needed.
-  cmTarget::LinkClosure const* lc=this->Target->GetLinkClosure(this->Config,
-                                                          this->HeadTarget);
+  cmTarget::LinkClosure const* lc=this->Target->GetLinkClosure(this->Config);
   for(std::vector<std::string>::const_iterator li = lc->Languages.begin();
       li != lc->Languages.end(); ++li)
     {
@@ -679,7 +675,7 @@ void cmComputeLinkInformation::AddItem(std::string const& item,
     // This is not a CMake target.  Use the name given.
     if(cmSystemTools::FileIsFullPath(item.c_str()))
       {
-      if(cmSystemTools::FileIsDirectory(item.c_str()))
+      if(cmSystemTools::FileIsDirectory(item))
         {
         // This is a directory.
         this->AddDirectoryItem(item);
@@ -1811,7 +1807,7 @@ cmComputeLinkInformation::AddLibraryRuntimeInfo(std::string const& fullPath)
       }
     }
 
-  is_shared_library = this->ExtractSharedLibraryName.find(file.c_str());
+  is_shared_library = this->ExtractSharedLibraryName.find(file);
 
   if(!is_shared_library)
     {
@@ -1831,8 +1827,8 @@ cmComputeLinkInformation::AddLibraryRuntimeInfo(std::string const& fullPath)
     {
     if(fullPath.find(".framework") != std::string::npos)
       {
-      cmsys::RegularExpression splitFramework;
-      splitFramework.compile("^(.*)/(.*).framework/(.*)$");
+      static cmsys::RegularExpression
+        splitFramework("^(.*)/(.*).framework/(.*)$");
       if(splitFramework.find(fullPath) &&
         (std::string::npos !=
          splitFramework.match(3).find(splitFramework.match(2))))
@@ -1941,10 +1937,10 @@ void cmComputeLinkInformation::GetRPath(std::vector<std::string>& runtimeDirs,
         // Do not add any path inside the source or build tree.
         const char* topSourceDir = this->Makefile->GetHomeDirectory();
         const char* topBinaryDir = this->Makefile->GetHomeOutputDirectory();
-        if(!cmSystemTools::ComparePath(ri->c_str(), topSourceDir) &&
-           !cmSystemTools::ComparePath(ri->c_str(), topBinaryDir) &&
-           !cmSystemTools::IsSubDirectory(ri->c_str(), topSourceDir) &&
-           !cmSystemTools::IsSubDirectory(ri->c_str(), topBinaryDir))
+        if(!cmSystemTools::ComparePath(*ri, topSourceDir) &&
+           !cmSystemTools::ComparePath(*ri, topBinaryDir) &&
+           !cmSystemTools::IsSubDirectory(*ri, topSourceDir) &&
+           !cmSystemTools::IsSubDirectory(*ri, topBinaryDir))
           {
           std::string d = *ri;
           if (!rootPath.empty() && d.find(rootPath) == 0)
@@ -1972,7 +1968,7 @@ void cmComputeLinkInformation::GetRPath(std::vector<std::string>& runtimeDirs,
   // present.  This is done even when skipping rpath support.
   {
   cmTarget::LinkClosure const* lc =
-    this->Target->GetLinkClosure(this->Config, this->HeadTarget);
+    this->Target->GetLinkClosure(this->Config);
   for(std::vector<std::string>::const_iterator li = lc->Languages.begin();
       li != lc->Languages.end(); ++li)
     {

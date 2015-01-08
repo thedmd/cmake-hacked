@@ -69,6 +69,8 @@ if(SPHINX_TEXT)
   list(APPEND doc_formats text)
 endif()
 if(SPHINX_QTHELP)
+  find_package(PythonInterp REQUIRED)
+
   find_program(QCOLLECTIONGENERATOR_EXECUTABLE
     NAMES qcollectiongenerator
     DOC "qcollectiongenerator tool"
@@ -88,7 +90,15 @@ if(SPHINX_QTHELP)
     COMMAND ${CMAKE_COMMAND} "-DQTHELP_DIR=${CMAKE_CURRENT_BINARY_DIR}/qthelp/"
       "-DCMake_VERSION=${CMake_VERSION_MAJOR}${CMake_VERSION_MINOR}${CMake_VERSION_PATCH}"
       -P "${CMAKE_CURRENT_SOURCE_DIR}/fixup_qthelp_names.cmake"
-    COMMAND qcollectiongenerator ${CMAKE_CURRENT_BINARY_DIR}/qthelp/CMake.qhcp
+
+    # Create proper identifiers. Workaround for
+    # https://bitbucket.org/birkenfeld/sphinx/issue/1491/qthelp-should-generate-identifiers-for
+    COMMAND "${PYTHON_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/create_identifiers.py"
+      "${CMAKE_CURRENT_BINARY_DIR}/qthelp/"
+
+    COMMAND ${QCOLLECTIONGENERATOR_EXECUTABLE}
+      ${CMAKE_CURRENT_BINARY_DIR}/qthelp/CMake.qhcp
   )
 endif()
 

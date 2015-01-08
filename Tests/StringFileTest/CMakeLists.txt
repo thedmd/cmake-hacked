@@ -55,6 +55,16 @@ else()
     "file(STRINGS) incorrectly read from srec file [${infile_strings}]")
 endif()
 
+#this file has utf-8 content
+file(STRINGS test.utf8 infile_strings ENCODING UTF-8)
+list(LENGTH infile_strings content_len)
+if(content_len MATCHES "3")
+  message("file(STRINGS) correctly read from utf8 file [${infile_strings}]")
+else()
+  message(SEND_ERROR
+    "file(STRINGS) incorrectly read from utf8 file [${infile_strings}]")
+endif()
+
 # String test
 string(REGEX MATCH "[cC][mM][aA][kK][eE]" rmvar "CMake is great")
 string(REGEX MATCHALL "[cC][mM][aA][kK][eE]" rmallvar "CMake is better than cmake or CMake")
@@ -113,7 +123,7 @@ string(STRIP "ST2 " ST2)
 string(STRIP "  ST3" ST3)
 
 foreach(var ST1 ST2 ST3)
-  if("${var}" STREQUAL "${${var}}")
+  if("x${var}" STREQUAL "x${${var}}")
     message("[${var}] == [${${var}}]")
   else()
     message(SEND_ERROR "Problem with the STRIP command for ${var}: [${${var}}]")
@@ -179,7 +189,7 @@ string(CONFIGURE "${infile}" infile+-/out @ONLY)
 set(infile "${infile+-/out}")
 
 # Write include file to a file
-string(REGEX REPLACE "includefile" "${file}" outfile "${infile}")
+string(REGEX REPLACE "includefile" "Includes/Values.h" outfile "${infile}")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/OutputFile.h-tmp" "${outfile}")
 file(RENAME "${CMAKE_CURRENT_BINARY_DIR}/OutputFile.h-tmp"
             "${CMAKE_CURRENT_BINARY_DIR}/OutputFile.h")

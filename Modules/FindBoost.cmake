@@ -321,7 +321,7 @@ macro(_Boost_FIND_LIBRARY var)
 
   # If Boost_LIBRARY_DIR is known then search only there.
   if(Boost_LIBRARY_DIR)
-    set(_boost_LIBRARY_SEARCH_DIRS ${Boost_LIBRARY_DIR} NO_DEFAULT_PATH)
+    set(_boost_LIBRARY_SEARCH_DIRS ${Boost_LIBRARY_DIR} NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
   endif()
 endmacro()
 
@@ -375,14 +375,16 @@ endfunction()
 # Guesses Boost's compiler prefix used in built library names
 # Returns the guess by setting the variable pointed to by _ret
 function(_Boost_GUESS_COMPILER_PREFIX _ret)
-  if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel"
-      OR "${CMAKE_CXX_COMPILER}" MATCHES "icl"
-      OR "${CMAKE_CXX_COMPILER}" MATCHES "icpc")
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "Intel"
+      OR CMAKE_CXX_COMPILER MATCHES "icl"
+      OR CMAKE_CXX_COMPILER MATCHES "icpc")
     if(WIN32)
       set (_boost_COMPILER "-iw")
     else()
       set (_boost_COMPILER "-il")
     endif()
+  elseif (MSVC14)
+    set(_boost_COMPILER "-vc140")
   elseif (MSVC12)
     set(_boost_COMPILER "-vc120")
   elseif (MSVC11)
@@ -401,7 +403,7 @@ function(_Boost_GUESS_COMPILER_PREFIX _ret)
     set(_boost_COMPILER "-vc6") # yes, this is correct
   elseif (BORLAND)
     set(_boost_COMPILER "-bcb")
-  elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "SunPro")
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "SunPro")
     set(_boost_COMPILER "-sw")
   elseif (MINGW)
     if(${Boost_MAJOR_VERSION}.${Boost_MINOR_VERSION} VERSION_LESS 1.34)
@@ -853,7 +855,7 @@ if(_Boost_CHANGE_LIBDIR AND NOT _Boost_LIBRARY_DIR_CHANGED)
 endif()
 
 if(Boost_LIBRARY_DIR)
-  set(_boost_LIBRARY_SEARCH_DIRS ${Boost_LIBRARY_DIR} NO_DEFAULT_PATH)
+  set(_boost_LIBRARY_SEARCH_DIRS ${Boost_LIBRARY_DIR} NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
 else()
   set(_boost_LIBRARY_SEARCH_DIRS "")
   if(BOOST_LIBRARYDIR)

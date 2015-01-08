@@ -12,15 +12,13 @@
 #include "cmListFileCache.h"
 
 #include "cmListFileLexer.h"
+#include "cmLocalGenerator.h"
 #include "cmSystemTools.h"
 #include "cmMakefile.h"
 #include "cmVersion.h"
 
 #include <cmsys/RegularExpression.hxx>
 
-#ifdef __BORLANDC__
-# pragma warn -8060 /* possibly incorrect assignment */
-#endif
 
 //----------------------------------------------------------------------------
 struct cmListFileParser
@@ -141,7 +139,8 @@ bool cmListFile::ParseFile(const char* filename,
                            bool topLevel,
                            cmMakefile *mf)
 {
-  if(!cmSystemTools::FileExists(filename))
+  if(!cmSystemTools::FileExists(filename) ||
+     cmSystemTools::FileIsDirectory(filename))
     {
     return false;
     }
@@ -406,6 +405,23 @@ bool cmListFileParser::AddArgument(cmListFileLexer_Token* token,
     return true;
     }
 }
+
+//----------------------------------------------------------------------------
+void cmListFileBacktrace::MakeRelative()
+{
+  if (this->Relative)
+    {
+    return;
+    }
+  for (cmListFileBacktrace::iterator i = this->begin();
+       i != this->end(); ++i)
+    {
+    i->FilePath = this->LocalGenerator->Convert(i->FilePath,
+                                                cmLocalGenerator::HOME);
+    }
+  this->Relative = true;
+}
+
 
 //----------------------------------------------------------------------------
 std::ostream& operator<<(std::ostream& os, cmListFileContext const& lfc)

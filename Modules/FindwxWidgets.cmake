@@ -229,13 +229,12 @@ else()
 endif()
 
 #=====================================================================
+# Determine whether unix or win32 paths should be used
 #=====================================================================
-if(WIN32 AND NOT CYGWIN AND NOT MSYS)
+if(WIN32 AND NOT CYGWIN AND NOT MSYS AND NOT CMAKE_CROSSCOMPILING)
   set(wxWidgets_FIND_STYLE "win32")
 else()
-  if(UNIX OR MSYS)
-    set(wxWidgets_FIND_STYLE "unix")
-  endif()
+  set(wxWidgets_FIND_STYLE "unix")
 endif()
 
 #=====================================================================
@@ -461,6 +460,8 @@ if(wxWidgets_FIND_STYLE STREQUAL "win32")
       D:/
       ENV ProgramFiles
     PATH_SUFFIXES
+      wxWidgets-3.0.2
+      wxWidgets-3.0.1
       wxWidgets-3.0.0
       wxWidgets-2.9.5
       wxWidgets-2.9.4

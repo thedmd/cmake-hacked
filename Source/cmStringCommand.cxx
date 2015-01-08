@@ -20,6 +20,7 @@
 #include <time.h>
 
 #include <cmTimestamp.h>
+#include <cmUuid.h>
 
 //----------------------------------------------------------------------------
 bool cmStringCommand
@@ -104,6 +105,10 @@ bool cmStringCommand
   else if(subCommand == "GENEX_STRIP")
     {
     return this->HandleGenexStripCommand(args);
+    }
+  else if(subCommand == "UUID")
+    {
+    return this->HandleUuidCommand(args);
     }
 
   std::string e = "does not recognize sub-command "+subCommand;
@@ -706,12 +711,10 @@ bool cmStringCommand::HandleSubstringCommand(std::vector<std::string> const&
     this->SetError(ostr.str());
     return false;
     }
-  int leftOverLength = intStringLength - begin;
-  if ( end < -1 || end > leftOverLength )
+  if ( end < -1 )
     {
     cmOStringStream ostr;
-    ostr << "end index: " << end << " is out of range -1 - "
-         << leftOverLength;
+    ostr << "end index: " << end << " should be -1 or greater";
     this->SetError(ostr.str());
     return false;
     }
@@ -777,7 +780,7 @@ bool cmStringCommand
   const std::string& variableName = args[2];
 
   this->Makefile->AddDefinition(variableName,
-                      cmSystemTools::MakeCidentifier(input.c_str()).c_str());
+                      cmSystemTools::MakeCidentifier(input).c_str());
   return true;
 }
 
@@ -980,4 +983,115 @@ bool cmStringCommand
   this->Makefile->AddDefinition(outputVariable, result.c_str());
 
   return true;
+}
+
+bool cmStringCommand
+::HandleUuidCommand(std::vector<std::string> const& args)
+{
+#if defined(CMAKE_BUILD_WITH_CMAKE)
+  unsigned int argsIndex = 1;
+
+  if(args.size() < 2)
+    {
+    this->SetError("UUID sub-command requires an output variable.");
+    return false;
+    }
+
+  const std::string &outputVariable = args[argsIndex++];
+
+  std::string uuidNamespaceString;
+  std::string uuidName;
+  std::string uuidType;
+  bool uuidUpperCase = false;
+
+  while(args.size() > argsIndex)
+    {
+    if(args[argsIndex] == "NAMESPACE")
+      {
+      ++argsIndex;
+      if(argsIndex >= args.size())
+        {
+        this->SetError("UUID sub-command, NAMESPACE requires a value.");
+        return false;
+        }
+      uuidNamespaceString = args[argsIndex++];
+      }
+    else if(args[argsIndex] == "NAME")
+      {
+      ++argsIndex;
+      if(argsIndex >= args.size())
+        {
+        this->SetError("UUID sub-command, NAME requires a value.");
+        return false;
+        }
+      uuidName = args[argsIndex++];
+      }
+    else if(args[argsIndex] == "TYPE")
+      {
+      ++argsIndex;
+      if(argsIndex >= args.size())
+        {
+        this->SetError("UUID sub-command, TYPE requires a value.");
+        return false;
+        }
+      uuidType = args[argsIndex++];
+      }
+    else if(args[argsIndex] == "UPPER")
+      {
+      ++argsIndex;
+      uuidUpperCase = true;
+      }
+    else
+      {
+      std::string e = "UUID sub-command does not recognize option " +
+          args[argsIndex] + ".";
+      this->SetError(e);
+      return false;
+      }
+    }
+
+  std::string uuid;
+  cmUuid uuidGenerator;
+
+  std::vector<unsigned char> uuidNamespace;
+  if(!uuidGenerator.StringToBinary(uuidNamespaceString, uuidNamespace))
+    {
+    this->SetError("UUID sub-command, malformed NAMESPACE UUID.");
+    return false;
+    }
+
+  if(uuidType == "MD5")
+    {
+    uuid = uuidGenerator.FromMd5(uuidNamespace, uuidName);
+    }
+  else if(uuidType == "SHA1")
+    {
+    uuid = uuidGenerator.FromSha1(uuidNamespace, uuidName);
+    }
+  else
+    {
+    std::string e = "UUID sub-command, unknown TYPE '" + uuidType + "'.";
+    this->SetError(e);
+    return false;
+    }
+
+  if(uuid.empty())
+    {
+    this->SetError("UUID sub-command, generation failed.");
+    return false;
+    }
+
+  if(uuidUpperCase)
+    {
+    uuid = cmSystemTools::UpperCase(uuid);
+    }
+
+  this->Makefile->AddDefinition(outputVariable, uuid.c_str());
+  return true;
+#else
+  cmOStringStream e;
+  e << args[0] << " not available during bootstrap";
+  this->SetError(e.str().c_str());
+  return false;
+#endif
 }

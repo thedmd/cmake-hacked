@@ -160,7 +160,7 @@ set(_MPI_XL_Fortran_COMPILER_NAMES         mpixlf95   mpixlf95_r mpxlf95 mpxlf95
 # or if we know it matches the regular compiler.
 foreach (lang C CXX Fortran)
   foreach (id GNU Intel PGI XL)
-    if (NOT CMAKE_${lang}_COMPILER_ID OR "${CMAKE_${lang}_COMPILER_ID}" STREQUAL "${id}")
+    if (NOT CMAKE_${lang}_COMPILER_ID OR CMAKE_${lang}_COMPILER_ID STREQUAL id)
       list(APPEND _MPI_${lang}_COMPILER_NAMES ${_MPI_${id}_${lang}_COMPILER_NAMES})
     endif()
     unset(_MPI_${id}_${lang}_COMPILER_NAMES)    # clean up the namespace here
@@ -174,6 +174,7 @@ set(_MPI_EXEC_NAMES                        mpiexec mpirun lamexec srun)
 # Grab the path to MPI from the registry if we're on windows.
 set(_MPI_PREFIX_PATH)
 if(WIN32)
+  list(APPEND _MPI_PREFIX_PATH "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\MPI;InstallRoot]/Bin")
   list(APPEND _MPI_PREFIX_PATH "[HKEY_LOCAL_MACHINE\\SOFTWARE\\MPICH\\SMPD;binary]/..")
   list(APPEND _MPI_PREFIX_PATH "[HKEY_LOCAL_MACHINE\\SOFTWARE\\MPICH2;Path]")
   list(APPEND _MPI_PREFIX_PATH "$ENV{ProgramW6432}/MPICH2/")
@@ -188,6 +189,21 @@ foreach(SystemPrefixDir ${CMAKE_SYSTEM_PREFIX_PATH})
   endforeach()
 endforeach()
 
+function (_mpi_check_compiler compiler options cmdvar resvar)
+  execute_process(
+    COMMAND "${compiler}" ${options}
+    OUTPUT_VARIABLE  cmdline OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_VARIABLE   cmdline ERROR_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE  success)
+  # Intel MPI 5.0.1 will return a zero return code even when the
+  # argument to the MPI compiler wrapper is unknown.  Attempt to
+  # catch this case.
+  if("${cmdline}" MATCHES "undefined reference")
+    set(success 255 )
+  endif()
+  set(${cmdvar} "${cmdline}" PARENT_SCOPE)
+  set(${resvar} "${success}" PARENT_SCOPE)
+endfunction()
 
 #
 # interrogate_mpi_compiler(lang try_libs)
@@ -220,12 +236,7 @@ function (interrogate_mpi_compiler lang try_libs)
     if (MPI_${lang}_COMPILER)
       # Check whether the -showme:compile option works. This indicates that we have either OpenMPI
       # or a newer version of LAM-MPI, and implies that -showme:link will also work.
-      execute_process(
-        COMMAND ${MPI_${lang}_COMPILER} -showme:compile
-        OUTPUT_VARIABLE  MPI_COMPILE_CMDLINE OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_VARIABLE   MPI_COMPILE_CMDLINE ERROR_STRIP_TRAILING_WHITESPACE
-        RESULT_VARIABLE  MPI_COMPILER_RETURN)
-
+      _mpi_check_compiler("${MPI_${lang}_COMPILER}" "-showme:compile" MPI_COMPILE_CMDLINE MPI_COMPILER_RETURN)
       if (MPI_COMPILER_RETURN EQUAL 0)
         # If we appear to have -showme:compile, then we should
         # also have -showme:link. Try it.
@@ -257,20 +268,12 @@ function (interrogate_mpi_compiler lang try_libs)
 
       # Older versions of LAM-MPI have "-showme". Try to find that.
       if (NOT MPI_COMPILER_RETURN EQUAL 0)
-        execute_process(
-          COMMAND ${MPI_${lang}_COMPILER} -showme
-          OUTPUT_VARIABLE  MPI_COMPILE_CMDLINE OUTPUT_STRIP_TRAILING_WHITESPACE
-          ERROR_VARIABLE   MPI_COMPILE_CMDLINE ERROR_STRIP_TRAILING_WHITESPACE
-          RESULT_VARIABLE  MPI_COMPILER_RETURN)
+        _mpi_check_compiler("${MPI_${lang}_COMPILER}" "-showme" MPI_COMPILE_CMDLINE MPI_COMPILER_RETURN)
       endif()
 
       # MVAPICH uses -compile-info and -link-info.  Try them.
       if (NOT MPI_COMPILER_RETURN EQUAL 0)
-        execute_process(
-          COMMAND ${MPI_${lang}_COMPILER} -compile-info
-          OUTPUT_VARIABLE  MPI_COMPILE_CMDLINE OUTPUT_STRIP_TRAILING_WHITESPACE
-          ERROR_VARIABLE   MPI_COMPILE_CMDLINE ERROR_STRIP_TRAILING_WHITESPACE
-          RESULT_VARIABLE  MPI_COMPILER_RETURN)
+        _mpi_check_compiler("${MPI_${lang}_COMPILER}" "-compile-info" MPI_COMPILE_CMDLINE MPI_COMPILER_RETURN)
 
         # If we have compile-info, also have link-info.
         if (MPI_COMPILER_RETURN EQUAL 0)
@@ -290,11 +293,7 @@ function (interrogate_mpi_compiler lang try_libs)
 
       # MPICH just uses "-show". Try it.
       if (NOT MPI_COMPILER_RETURN EQUAL 0)
-        execute_process(
-          COMMAND ${MPI_${lang}_COMPILER} -show
-          OUTPUT_VARIABLE  MPI_COMPILE_CMDLINE OUTPUT_STRIP_TRAILING_WHITESPACE
-          ERROR_VARIABLE   MPI_COMPILE_CMDLINE ERROR_STRIP_TRAILING_WHITESPACE
-          RESULT_VARIABLE  MPI_COMPILER_RETURN)
+        _mpi_check_compiler("${MPI_${lang}_COMPILER}" "-show" MPI_COMPILE_CMDLINE MPI_COMPILER_RETURN)
       endif()
 
       if (MPI_COMPILER_RETURN EQUAL 0)
@@ -365,7 +364,7 @@ function (interrogate_mpi_compiler lang try_libs)
         endif()
 
         # Extract linker flags from the link command line
-        string(REGEX MATCHALL "(^| )-Wl,([^\" ]+|\"[^\"]+\")" MPI_ALL_LINK_FLAGS "${MPI_LINK_CMDLINE}")
+        string(REGEX MATCHALL "(^| )(-Wl,|-Xlinker )([^\" ]+|\"[^\"]+\")" MPI_ALL_LINK_FLAGS "${MPI_LINK_CMDLINE}")
         set(MPI_LINK_FLAGS_WORK)
         foreach(FLAG ${MPI_ALL_LINK_FLAGS})
           if (MPI_LINK_FLAGS_WORK)
@@ -522,6 +521,7 @@ endfunction()
 # Most mpi distros have some form of mpiexec which gives us something we can reliably look for.
 find_program(MPIEXEC
   NAMES ${_MPI_EXEC_NAMES}
+  HINTS ${MPI_HOME} $ENV{MPI_HOME}
   PATHS ${_MPI_PREFIX_PATH}
   PATH_SUFFIXES bin
   DOC "Executable for running MPI programs.")
@@ -584,7 +584,9 @@ foreach (lang C CXX Fortran)
 
     find_program(MPI_${lang}_COMPILER
       NAMES  ${_MPI_${lang}_COMPILER_NAMES}
-      PATHS  "${MPI_HOME}/bin" "$ENV{MPI_HOME}/bin" ${_MPI_PREFIX_PATH})
+      HINTS  ${_MPI_BASE_DIR}/bin
+      PATHS  ${_MPI_PREFIX_PATH}
+      )
     interrogate_mpi_compiler(${lang} ${try_libs})
     mark_as_advanced(MPI_${lang}_COMPILER)
 

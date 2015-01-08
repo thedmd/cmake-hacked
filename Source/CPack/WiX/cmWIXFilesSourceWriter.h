@@ -47,13 +47,15 @@ public:
 
   std::string EmitComponentCreateFolder(
     std::string const& directoryId,
-    std::string const& guid);
+    std::string const& guid,
+    cmInstalledFile const* installedFile);
 
   std::string EmitComponentFile(
     std::string const& directoryId,
     std::string const& id,
     std::string const& filePath,
-    cmWIXPatch &patch);
+    cmWIXPatch &patch,
+    cmInstalledFile const* installedFile);
 
 private:
   void EmitInstallRegistryValue(

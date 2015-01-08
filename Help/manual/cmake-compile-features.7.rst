@@ -3,7 +3,7 @@
 cmake-compile-features(7)
 *************************
 
-.. only:: html or latex
+.. only:: html
 
    .. contents::
 
@@ -28,7 +28,7 @@ CMake knows are known to the compiler, regardless of language standard
 or compile flags needed to use them.
 
 Features known to CMake are named mostly following the same convention
-as the Clang feature test macros.  The are some execptions, such as
+as the Clang feature test macros.  The are some exceptions, such as
 CMake using ``cxx_final`` and ``cxx_override`` instead of the single
 ``cxx_override_control`` used by Clang.
 
@@ -47,7 +47,7 @@ be compiled with compiler support for the
 
 In processing the requirement for the ``cxx_constexpr`` feature,
 :manual:`cmake(1)` will ensure that the in-use C++ compiler is capable
-of the feature, and will add any necessary flags such as ``-std=c++11``
+of the feature, and will add any necessary flags such as ``-std=gnu++11``
 to the compile lines of C++ files in the ``mylib`` target.  A
 ``FATAL_ERROR`` is issued if the compiler is not capable of the
 feature.
@@ -59,8 +59,8 @@ for each target.
 
 Such compile flags are added even if the compiler supports the
 particular feature without the flag. For example, the GNU compiler
-supports variadic templates (with a warning) even if ``-std=c++98`` is
-used.  CMake adds the ``-std=c++11`` flag if ``cxx_variadic_templates``
+supports variadic templates (with a warning) even if ``-std=gnu++98`` is
+used.  CMake adds the ``-std=gnu++11`` flag if ``cxx_variadic_templates``
 is specified as a requirement.
 
 In the above example, ``mylib`` requires ``cxx_constexpr`` when it
@@ -76,7 +76,7 @@ known feature), that may be specified with the ``PUBLIC`` or
   # cxx_constexpr is a usage-requirement
   target_compile_features(mylib PUBLIC cxx_constexpr)
 
-  # main.cpp will be compiled with -std=c++11 on GNU for cxx_constexpr.
+  # main.cpp will be compiled with -std=gnu++11 on GNU for cxx_constexpr.
   add_executable(myexe main.cpp)
   target_link_libraries(myexe mylib)
 
@@ -84,16 +84,13 @@ Feature requirements are evaluated transitively by consuming the link
 implementation.  See :manual:`cmake-buildsystem(7)` for more on
 transitive behavior of build properties and usage requirements.
 
-Note that new use of compile feature requirements may expose
-cross-platform bugs in user code.  For example, the GNU compiler uses the
-``gnu++98`` language by default as of GCC version 4.8.  User code may
-be relying on that by expecting the ``typeof`` GNU extension to work.
-However, if the :command:`target_compile_features` command is used to
-specify the requirement for ``cxx_constexpr``, a ``-std=c++11`` flag may
-be added, and the ``typeof`` extension would no longer be available.  The
-solution is to specify that compiler extensions are relied upon by setting
-the :prop_tgt:`CXX_EXTENSIONS` target property to ``ON`` when starting to
-use the :command:`target_compile_features` command.
+Because the :prop_tgt:`CXX_EXTENSIONS` target property is ``ON`` by default,
+CMake uses extended variants of language dialects by default, such as
+``-std=gnu++11`` instead of ``-std=c++11``.  That target property may be
+set to ``OFF`` to use the non-extended variant of the dialect flag.  Note
+that because most compilers enable extensions by default, this could
+expose cross-platform bugs in user code or in the headers of third-party
+dependencies.
 
 Optional Compile Features
 =========================
@@ -169,11 +166,11 @@ symbol, and compiler support determines what it is expanded to:
     virtual void Execute() = 0;
   };
 
-  struct Concrete Foo_CXX_FINAL {
-    void Execute() Foo_CXX_OVERRIDE;
+  struct Concrete Foo_FINAL {
+    void Execute() Foo_OVERRIDE;
   };
 
-In this case, ``Foo_CXX_FINAL`` will expand to ``final`` if the
+In this case, ``Foo_FINAL`` will expand to ``final`` if the
 compiler supports the keyword, or to empty otherwise.
 
 In this use-case, the CMake code will wish to enable a particular language
@@ -192,13 +189,13 @@ set to influence all following targets:
       cxx_final cxx_override
   )
 
-  # Includes foo_compiler_detection.h and uses the Foo_DECL_CXX_FINAL symbol
+  # Includes foo_compiler_detection.h and uses the Foo_FINAL symbol
   # which will expand to 'final' if the compiler supports the requested
   # CXX_STANDARD.
   add_library(foo foo.cpp)
   set_property(TARGET foo PROPERTY CXX_STANDARD 11)
 
-  # Includes foo_compiler_detection.h and uses the Foo_DECL_CXX_FINAL symbol
+  # Includes foo_compiler_detection.h and uses the Foo_FINAL symbol
   # which will expand to 'final' if the compiler supports the feature,
   # even though CXX_STANDARD is not set explicitly.  The requirement of
   # cxx_constexpr causes CMake to set CXX_STANDARD internally, which
@@ -279,10 +276,13 @@ properties:
 .. code-block:: cmake
 
   add_library(foo INTERFACE)
+  set(with_variadics ${CMAKE_CURRENT_SOURCE_DIR}/with_variadics)
+  set(no_variadics ${CMAKE_CURRENT_SOURCE_DIR}/no_variadics)
   target_link_libraries(foo
     INTERFACE
-      "$<$<COMPILE_FEATURES:cxx_variadic_templates>:${CMAKE_CURRENT_SOURCE_DIR}/with_variadics>"
-      "$<$<NOT:$<COMPILE_FEATURES:cxx_variadic_templates>>:${CMAKE_CURRENT_SOURCE_DIR}/no_variadics>")
+      "$<$<COMPILE_FEATURES:cxx_variadic_templates>:${with_variadics}>"
+      "$<$<NOT:$<COMPILE_FEATURES:cxx_variadic_templates>>:${no_variadics}>"
+    )
 
 Consuming code then simply links to the ``foo`` target as usual and uses
 the feature-appropriate include directory

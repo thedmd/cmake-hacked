@@ -102,7 +102,7 @@ bool cmDocumentation::PrintVersion(std::ostream& os)
     this->GetNameString() <<
     " version " << cmVersion::GetCMakeVersion() << "\n"
     "\n"
-    "CMake suite maintained by Kitware, Inc. (kitware.com).\n"
+    "CMake suite maintained and supported by Kitware (kitware.com/cmake).\n"
     ;
   return true;
 }
@@ -113,7 +113,9 @@ bool cmDocumentation::PrintDocumentation(Type ht, std::ostream& os)
   switch (ht)
     {
     case cmDocumentation::Usage:
-      return this->PrintDocumentationUsage(os);
+      return this->PrintUsage(os);
+    case cmDocumentation::Help:
+      return this->PrintHelp(os);
     case cmDocumentation::Full:
       return this->PrintHelpFull(os);
     case cmDocumentation::OneManual:
@@ -300,7 +302,7 @@ bool cmDocumentation::CheckOptions(int argc, const char* const* argv,
        (strcmp(argv[i], "-h") == 0) ||
        (strcmp(argv[i], "-H") == 0))
       {
-      help.HelpType = cmDocumentation::Usage;
+      help.HelpType = cmDocumentation::Help;
       GET_OPT_ARGUMENT(help.Argument);
       help.Argument = cmSystemTools::LowerCase(help.Argument);
       // special case for single command
@@ -841,7 +843,19 @@ bool cmDocumentation::PrintHelpListVariables(std::ostream& os)
 }
 
 //----------------------------------------------------------------------------
-bool cmDocumentation::PrintDocumentationUsage(std::ostream& os)
+bool cmDocumentation::PrintUsage(std::ostream& os)
+{
+  std::map<std::string,cmDocumentationSection*>::iterator si;
+  si = this->AllSections.find("Usage");
+  if(si != this->AllSections.end())
+    {
+    this->Formatter.PrintSection(os, *si->second);
+    }
+  return true;
+}
+
+//----------------------------------------------------------------------------
+bool cmDocumentation::PrintHelp(std::ostream& os)
 {
   std::map<std::string,cmDocumentationSection*>::iterator si;
   si = this->AllSections.find("Usage");

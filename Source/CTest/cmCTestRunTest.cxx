@@ -280,12 +280,12 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
 
   // Set the working directory to the tests directory
   std::string oldpath = cmSystemTools::GetCurrentWorkingDirectory();
-  cmSystemTools::ChangeDirectory(this->TestProperties->Directory.c_str());
+  cmSystemTools::ChangeDirectory(this->TestProperties->Directory);
 
   this->DartProcessing();
 
   // restore working directory
-  cmSystemTools::ChangeDirectory(oldpath.c_str());
+  cmSystemTools::ChangeDirectory(oldpath);
 
 
   // if this is doing MemCheck then all the output needs to be put into
@@ -392,20 +392,7 @@ void cmCTestRunTest::MemCheckPostProcess()
              << this->TestResult.Name << std::endl);
   cmCTestMemCheckHandler * handler = static_cast<cmCTestMemCheckHandler*>
     (this->TestHandler);
-  switch ( handler->MemoryTesterStyle )
-    {
-    case cmCTestMemCheckHandler::VALGRIND:
-      handler->PostProcessValgrindTest(this->TestResult, this->Index);
-      break;
-    case cmCTestMemCheckHandler::PURIFY:
-      handler->PostProcessPurifyTest(this->TestResult, this->Index);
-      break;
-    case cmCTestMemCheckHandler::BOUNDS_CHECKER:
-      handler->PostProcessBoundsCheckerTest(this->TestResult, this->Index);
-      break;
-    default:
-      break;
-    }
+  handler->PostProcessTest(this->TestResult, this->Index);
 }
 
 //----------------------------------------------------------------------

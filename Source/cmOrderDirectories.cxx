@@ -39,8 +39,8 @@ public:
 
     if(file.rfind(".framework") != std::string::npos)
       {
-      cmsys::RegularExpression splitFramework;
-      splitFramework.compile("^(.*)/(.*).framework/(.*)$");
+      static cmsys::RegularExpression
+        splitFramework("^(.*)/(.*).framework/(.*)$");
       if(splitFramework.find(file) &&
         (std::string::npos !=
          splitFramework.match(3).find(splitFramework.match(2))))
@@ -72,7 +72,10 @@ public:
       {
       // Check if this directory conflicts with the entry.
       std::string const& dir = this->OD->OriginalDirectories[i];
-      if(dir != this->Directory && this->FindConflict(dir))
+      if(dir != this->Directory &&
+         cmSystemTools::GetRealPath(dir) !=
+         cmSystemTools::GetRealPath(this->Directory) &&
+         this->FindConflict(dir))
         {
         // The library will be found in this directory but this is not
         // the directory named for it.  Add an entry to make sure the
@@ -90,7 +93,10 @@ public:
       {
       // Check if this directory conflicts with the entry.
       std::string const& dir = this->OD->OriginalDirectories[i];
-      if(dir != this->Directory && this->FindConflict(dir))
+      if(dir != this->Directory &&
+         cmSystemTools::GetRealPath(dir) !=
+         cmSystemTools::GetRealPath(this->Directory) &&
+         this->FindConflict(dir))
         {
         // The library will be found in this directory but it is
         // supposed to be found in an implicit search directory.
@@ -134,7 +140,7 @@ bool cmOrderDirectoriesConstraint::FileMayConflict(std::string const& dir,
     {
     // The file conflicts only if it is not the same as the original
     // file due to a symlink or hardlink.
-    return !cmSystemTools::SameFile(this->FullPath.c_str(), file.c_str());
+    return !cmSystemTools::SameFile(this->FullPath, file);
     }
 
   // Check if the file will be built by cmake.
@@ -326,8 +332,8 @@ void cmOrderDirectories::AddRuntimeLibrary(std::string const& fullPath,
 
       if(fullPath.rfind(".framework") != std::string::npos)
         {
-        cmsys::RegularExpression splitFramework;
-        splitFramework.compile("^(.*)/(.*).framework/(.*)$");
+        static cmsys::RegularExpression
+          splitFramework("^(.*)/(.*).framework/(.*)$");
         if(splitFramework.find(fullPath) &&
           (std::string::npos !=
            splitFramework.match(3).find(splitFramework.match(2))))

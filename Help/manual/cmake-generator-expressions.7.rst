@@ -3,7 +3,7 @@
 cmake-generator-expressions(7)
 ******************************
 
-.. only:: html or latex
+.. only:: html
 
    .. contents::
 
@@ -37,6 +37,8 @@ create conditional output::
 
 expands to ``DEBUG_MODE`` when the ``Debug`` configuration is used, and
 otherwise expands to nothing.
+
+Available logical expressions are:
 
 ``$<0:...>``
   Empty string (ignores ``...``)
@@ -111,20 +113,27 @@ expands to ``OLD_COMPILER`` if the
 :variable:`CMAKE_CXX_COMPILER_VERSION <CMAKE_<LANG>_COMPILER_VERSION>` is less
 than 4.2.0.
 
+Available informational expressions are:
+
 ``$<CONFIGURATION>``
   Configuration name. Deprecated. Use ``CONFIG`` instead.
 ``$<CONFIG>``
   Configuration name
 ``$<PLATFORM_ID>``
-  The CMake-id of the platform
+  The CMake-id of the platform.
+  See also the :variable:`CMAKE_SYSTEM_NAME` variable.
 ``$<C_COMPILER_ID>``
   The CMake-id of the C compiler used.
+  See also the :variable:`CMAKE_<LANG>_COMPILER_ID` variable.
 ``$<CXX_COMPILER_ID>``
   The CMake-id of the CXX compiler used.
+  See also the :variable:`CMAKE_<LANG>_COMPILER_ID` variable.
 ``$<C_COMPILER_VERSION>``
   The version of the C compiler used.
+  See also the :variable:`CMAKE_<LANG>_COMPILER_VERSION` variable.
 ``$<CXX_COMPILER_VERSION>``
   The version of the CXX compiler used.
+  See also the :variable:`CMAKE_<LANG>_COMPILER_VERSION` variable.
 ``$<TARGET_FILE:tgt>``
   Full path to main file (.exe, .so.1.2, .a) where ``tgt`` is the name of a target.
 ``$<TARGET_FILE_NAME:tgt>``
@@ -143,6 +152,17 @@ than 4.2.0.
   Name of file with soname (.so.3).
 ``$<TARGET_SONAME_FILE_DIR:tgt>``
   Directory of with soname (.so.3).
+``$<TARGET_PDB_FILE:tgt>``
+  Full path to the linker generated program database file (.pdb)
+  where ``tgt`` is the name of a target.
+
+  See also the :prop_tgt:`PDB_NAME` and :prop_tgt:`PDB_OUTPUT_DIRECTORY`
+  target properties and their configuration specific variants
+  :prop_tgt:`PDB_NAME_<CONFIG>` and :prop_tgt:`PDB_OUTPUT_DIRECTORY_<CONFIG>`.
+``$<TARGET_PDB_FILE_NAME:tgt>``
+  Name of the linker generated program database file (.pdb).
+``$<TARGET_PDB_FILE_DIR:tgt>``
+  Directory of the linker generated program database file (.pdb).
 ``$<TARGET_PROPERTY:tgt,prop>``
   Value of the property ``prop`` on the target ``tgt``.
 
@@ -169,7 +189,13 @@ property with each entry preceeded by ``-I``. Note that a more-complete use
 in this situation would require first checking if the INCLUDE_DIRECTORIES
 property is non-empty::
 
-  $<$<BOOL:$<TARGET_PROPERTY:INCLUDE_DIRECTORIES>>:-I$<JOIN:$<TARGET_PROPERTY:INCLUDE_DIRECTORIES>, -I>>
+  $<$<BOOL:${prop}>:-I$<JOIN:${prop}, -I>>
+
+where ``${prop}`` refers to a helper variable::
+
+  set(prop "$<TARGET_PROPERTY:INCLUDE_DIRECTORIES>")
+
+Available output expressions are:
 
 ``$<JOIN:list,...>``
   Joins the list with the content of ``...``
@@ -183,6 +209,13 @@ property is non-empty::
   Marks ``...`` as being the name of a target.  This is required if exporting
   targets to multiple dependent export sets.  The ``...`` must be a literal
   name of a target- it may not contain generator expressions.
+``$<LINK_ONLY:...>``
+  Content of ``...`` except when evaluated in a link interface while
+  propagating :ref:`Target Usage Requirements`, in which case it is the
+  empty string.
+  Intended for use only in an :prop_tgt:`INTERFACE_LINK_LIBRARIES` target
+  property, perhaps via the :command:`target_link_libraries` command,
+  to specify private link dependencies without other usage requirements.
 ``$<INSTALL_INTERFACE:...>``
   Content of ``...`` when the property is exported using :command:`install(EXPORT)`,
   and empty otherwise.

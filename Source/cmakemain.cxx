@@ -25,6 +25,7 @@
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
 #include <cmsys/Encoding.hxx>
+#include <locale.h>
 
 #ifdef CMAKE_BUILD_WITH_CMAKE
 //----------------------------------------------------------------------------
@@ -41,6 +42,18 @@ static const char * cmDocumentationUsage[][2] =
   {0,
    "  cmake [options] <path-to-source>\n"
    "  cmake [options] <path-to-existing-build>"},
+  {0,
+   "Specify a source directory to (re-)generate a build system for "
+   "it in the current working directory.  Specify an existing build "
+   "directory to re-generate its build system."},
+  {0,0}
+};
+
+//----------------------------------------------------------------------------
+static const char * cmDocumentationUsageNote[][2] =
+{
+  {0,
+   "Run 'cmake --help' for more information."},
   {0,0}
 };
 
@@ -162,6 +175,7 @@ static void cmakemainProgressCallback(const char *m, float prog,
 
 int main(int ac, char const* const* av)
 {
+  setlocale(LC_CTYPE, "");
   cmsys::Encoding::CommandLineArguments args =
     cmsys::Encoding::CommandLineArguments::Main(ac, av);
   ac = args.argc();
@@ -221,6 +235,10 @@ int do_cmake(int ac, char const* const* av)
     doc.SetName("cmake");
     doc.SetSection("Name",cmDocumentationName);
     doc.SetSection("Usage",cmDocumentationUsage);
+    if ( ac == 1 )
+      {
+      doc.AppendSection("Usage",cmDocumentationUsageNote);
+      }
     doc.AppendSection("Generators",generators);
     doc.PrependSection("Options",cmDocumentationOptions);
 

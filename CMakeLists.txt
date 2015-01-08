@@ -36,6 +36,14 @@ if("${CMake_SOURCE_DIR}" STREQUAL "${CMAKE_SOURCE_DIR}")
   endmacro()
 endif()
 
+# Use most-recent available language dialects with GNU and Clang
+if(NOT DEFINED CMAKE_C_STANDARD)
+  set(CMAKE_C_STANDARD 11)
+endif()
+if(NOT DEFINED CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
+
 # option to set the internal encoding of CMake to UTF-8
 option(CMAKE_ENCODING_UTF8 "Use UTF-8 encoding internally (experimental)." OFF)
 mark_as_advanced(CMAKE_ENCODING_UTF8)
@@ -57,7 +65,7 @@ macro(CMAKE_HANDLE_SYSTEM_LIBRARIES)
 
   # Allow the user to enable/disable all system utility library options by
   # defining CMAKE_USE_SYSTEM_LIBRARIES or CMAKE_USE_SYSTEM_LIBRARY_${util}.
-  set(UTILITIES BZIP2 CURL EXPAT LIBARCHIVE ZLIB)
+  set(UTILITIES BZIP2 CURL EXPAT FORM LIBARCHIVE LIBLZMA ZLIB)
   foreach(util ${UTILITIES})
     if(NOT DEFINED CMAKE_USE_SYSTEM_LIBRARY_${util}
         AND DEFINED CMAKE_USE_SYSTEM_LIBRARIES)
@@ -93,6 +101,9 @@ macro(CMAKE_HANDLE_SYSTEM_LIBRARIES)
     "${CMAKE_USE_SYSTEM_LIBRARY_ZLIB}" "NOT CMAKE_USE_SYSTEM_LIBARCHIVE;NOT CMAKE_USE_SYSTEM_CURL" ON)
   CMAKE_DEPENDENT_OPTION(CMAKE_USE_SYSTEM_BZIP2 "Use system-installed bzip2"
     "${CMAKE_USE_SYSTEM_LIBRARY_BZIP2}" "NOT CMAKE_USE_SYSTEM_LIBARCHIVE" ON)
+  CMAKE_DEPENDENT_OPTION(CMAKE_USE_SYSTEM_LIBLZMA "Use system-installed liblzma"
+    "${CMAKE_USE_SYSTEM_LIBRARY_LIBLZMA}" "NOT CMAKE_USE_SYSTEM_LIBARCHIVE" ON)
+  option(CMAKE_USE_SYSTEM_FORM "Use system-installed libform" "${CMAKE_USE_SYSTEM_LIBRARY_FORM}")
 
   # Mention to the user what system libraries are being used.
   foreach(util ${UTILITIES})
@@ -113,7 +124,7 @@ endmacro()
 
 if(NOT CMake_TEST_EXTERNAL_CMAKE)
   set(CMAKE_BUILD_ON_VISUAL_STUDIO 0)
-  if(WIN32 AND NOT UNIX AND NOT BORLAND AND NOT MINGW )
+  if(WIN32 AND NOT UNIX AND NOT MINGW)
     set(CMAKE_BUILD_ON_VISUAL_STUDIO 1)
   endif()
 endif()
@@ -201,12 +212,6 @@ endmacro()
 #-----------------------------------------------------------------------
 macro (CMAKE_BUILD_UTILITIES)
   #---------------------------------------------------------------------
-  # Create the KWIML library for CMake.
-  set(KWIML cmIML)
-  set(KWIML_HEADER_ROOT ${CMake_BINARY_DIR}/Utilities)
-  add_subdirectory(Utilities/KWIML)
-
-  #---------------------------------------------------------------------
   # Create the kwsys library for CMake.
   set(KWSYS_NAMESPACE cmsys)
   set(KWSYS_USE_SystemTools 1)
@@ -275,10 +280,7 @@ macro (CMAKE_BUILD_UTILITIES)
     set(CURL_SPECIAL_ZLIB_H ${CMAKE_ZLIB_HEADER})
     set(CURL_SPECIAL_LIBZ_INCLUDES ${CMAKE_ZLIB_INCLUDES})
     set(CURL_SPECIAL_LIBZ ${CMAKE_ZLIB_LIBRARIES})
-    option(CMAKE_BUILD_CURL_SHARED "Should curl be built shared" FALSE)
-    if(NOT CMAKE_BUILD_CURL_SHARED)
-      add_definitions(-DCURL_STATICLIB)
-    endif()
+    add_definitions(-DCURL_STATICLIB)
     set(CMAKE_CURL_INCLUDES)
     set(CMAKE_CURL_LIBRARIES cmcurl)
     if(CMAKE_TESTS_CDASH_SERVER)
@@ -307,6 +309,23 @@ macro (CMAKE_BUILD_UTILITIES)
   endif()
 
   #---------------------------------------------------------------------
+  # Build or use system liblzma for libarchive.
+  if(CMAKE_USE_SYSTEM_LIBLZMA)
+    find_package(LibLZMA)
+    if(NOT LIBLZMA_FOUND)
+      message(FATAL_ERROR "CMAKE_USE_SYSTEM_LIBLZMA is ON but LibLZMA is not found!")
+    endif()
+    set(LZMA_INCLUDE_DIR ${LIBLZMA_INCLUDE_DIRS})
+    set(LZMA_LIBRARY ${LIBLZMA_LIBRARIES})
+  else()
+    add_subdirectory(Utilities/cmliblzma)
+    CMAKE_SET_TARGET_FOLDER(cmliblzma "Utilities/3rdParty")
+    set(LZMA_INCLUDE_DIR
+      "${CMAKE_CURRENT_SOURCE_DIR}/Utilities/cmliblzma/liblzma/api")
+    set(LZMA_LIBRARY cmliblzma)
+  endif()
+
+  #---------------------------------------------------------------------
   # Build or use system libarchive for CMake and CTest.
   if(CMAKE_USE_SYSTEM_LIBARCHIVE)
     find_package(LibArchive)
@@ -321,7 +340,7 @@ macro (CMAKE_BUILD_UTILITIES)
     add_definitions(-DLIBARCHIVE_STATIC)
     set(ENABLE_NETTLE OFF CACHE INTERNAL "Enable use of Nettle")
     set(ENABLE_OPENSSL ${CMAKE_USE_OPENSSL} CACHE INTERNAL "Enable use of OpenSSL")
-    set(ENABLE_LZMA OFF CACHE INTERNAL "Enable the use of the system found LZMA library if found")
+    set(ENABLE_LZMA ON CACHE INTERNAL "Enable the use of the system found LZMA library if found")
     set(ENABLE_ZLIB ON CACHE INTERNAL "Enable the use of the system found ZLIB library if found")
     set(ENABLE_BZip2 ON CACHE INTERNAL "Enable the use of the system found BZip2 library if found")
     set(ENABLE_EXPAT OFF CACHE INTERNAL "Enable the use of the system found EXPAT library if found")
@@ -368,7 +387,7 @@ macro (CMAKE_BUILD_UTILITIES)
   # Use curses?
   if (UNIX)
     # there is a bug in the Syllable libraries which makes linking ccmake fail, Alex
-    if(NOT "${CMAKE_SYSTEM_NAME}" MATCHES syllable)
+    if(NOT CMAKE_SYSTEM_NAME MATCHES syllable)
       set(CURSES_NEED_NCURSES TRUE)
       find_package(Curses QUIET)
       if (CURSES_LIBRARY)
@@ -384,7 +403,11 @@ macro (CMAKE_BUILD_UTILITIES)
     set(BUILD_CursesDialog 0)
   endif ()
   if(BUILD_CursesDialog)
-    add_subdirectory(Source/CursesDialog/form)
+    if(NOT CMAKE_USE_SYSTEM_FORM)
+      add_subdirectory(Source/CursesDialog/form)
+    elseif(NOT CURSES_FORM_LIBRARY)
+      message( FATAL_ERROR "CMAKE_USE_SYSTEM_FORM in ON but CURSES_FORM_LIBRARY is not set!" )
+    endif()
   endif()
 endmacro ()
 
@@ -451,7 +474,7 @@ endif()
 # CMAKE_TESTS_CDASH_SERVER: CDash server used by CMake/Tests.
 #
 # If not defined or "", this variable defaults to the server at
-# http://www.cdash.org/CDash.
+# "http://open.cdash.org".
 #
 # If set explicitly to "NOTFOUND", curl tests and ctest tests that use
 # the network are skipped.
@@ -462,8 +485,13 @@ endif()
 # should be run first.
 #
 if("x${CMAKE_TESTS_CDASH_SERVER}" STREQUAL "x")
-  set(CMAKE_TESTS_CDASH_SERVER "http://www.cdash.org/CDash")
+  set(CMAKE_TESTS_CDASH_SERVER "http://open.cdash.org")
 endif()
+
+# Create the KWIML library for CMake.
+set(KWIML cmIML)
+set(KWIML_HEADER_ROOT ${CMake_BINARY_DIR}/Utilities)
+add_subdirectory(Utilities/KWIML)
 
 if(NOT CMake_TEST_EXTERNAL_CMAKE)
   # build the utilities (a macro defined in this file)
@@ -534,14 +562,10 @@ endif()
 
 # setup some Testing support (a macro defined in this file)
 CMAKE_SETUP_TESTING()
-configure_file(
-  "${CMAKE_CURRENT_SOURCE_DIR}/DartLocal.conf.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/DartLocal.conf"
-  COPYONLY)
 
 if(NOT CMake_TEST_EXTERNAL_CMAKE)
   if(NOT CMake_VERSION_IS_RELEASE)
-    if("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU" AND
+    if(CMAKE_C_COMPILER_ID STREQUAL "GNU" AND
         NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS 4.2)
       set(C_FLAGS_LIST -Wcast-align -Werror-implicit-function-declaration -Wchar-subscripts
                        -Wall -W -Wpointer-arith -Wwrite-strings -Wformat-security

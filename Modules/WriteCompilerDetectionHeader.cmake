@@ -11,6 +11,7 @@
 #    write_compiler_detection_header(
 #              FILE <file>
 #              PREFIX <prefix>
+#              [OUTPUT_FILES_VAR <output_files_var> OUTPUT_DIR <output_dir>]
 #              COMPILERS <compiler> [...]
 #              FEATURES <feature> [...]
 #              [VERSION <version>]
@@ -20,6 +21,33 @@
 #
 # The ``write_compiler_detection_header`` function generates the
 # file ``<file>`` with macros which all have the prefix ``<prefix>``.
+#
+# By default, all content is written directly to the ``<file>``.  The
+# ``OUTPUT_FILES_VAR`` may be specified to cause the compiler-specific
+# content to be written to separate files.  The separate files are then
+# available in the ``<output_files_var>`` and may be consumed by the caller
+# for installation for example.  The ``OUTPUT_DIR`` specifies a relative
+# path from the main ``<file>`` to the compiler-specific files. For example:
+#
+# .. code-block:: cmake
+#
+#    write_compiler_detection_header(
+#      FILE climbingstats_compiler_detection.h
+#      PREFIX ClimbingStats
+#      OUTPUT_FILES_VAR support_files
+#      OUTPUT_DIR compilers
+#      COMPILERS GNU Clang
+#      FEATURES cxx_variadic_templates
+#    )
+#    install(FILES
+#      ${CMAKE_CURRENT_BINARY_DIR}/climbingstats_compiler_detection.h
+#      DESTINATION include
+#    )
+#    install(FILES
+#      ${support_files}
+#      DESTINATION include/compilers
+#    )
+#
 #
 # ``VERSION`` may be used to specify the API version to be generated.
 # Future versions of CMake may introduce alternative APIs.  A given
@@ -52,7 +80,15 @@
 # Feature Test Macros
 # ===================
 #
-# For each compiler, a preprocessor test of the compiler version is generated
+# For each compiler, a preprocessor macro is generated matching
+# ``<PREFIX>_COMPILER_IS_<compiler>`` which has the content either ``0``
+# or ``1``, depending on the compiler in use. Preprocessor macros for
+# compiler version components are generated matching
+# ``<PREFIX>_COMPILER_VERSION_MAJOR`` ``<PREFIX>_COMPILER_VERSION_MINOR``
+# and ``<PREFIX>_COMPILER_VERSION_PATCH`` containing decimal values
+# for the corresponding compiler version components, if defined.
+#
+# A preprocessor test is generated based on the compiler version
 # denoting whether each feature is enabled.  A preprocessor macro
 # matching ``<PREFIX>_COMPILER_<FEATURE>``, where ``<FEATURE>`` is the
 # upper-case ``<feature>`` name, is generated to contain the value
@@ -64,7 +100,7 @@
 #    write_compiler_detection_header(
 #      FILE climbingstats_compiler_detection.h
 #      PREFIX ClimbingStats
-#      COMPILERS GNU Clang MSVC
+#      COMPILERS GNU Clang AppleClang
 #      FEATURES cxx_variadic_templates
 #    )
 #
@@ -91,14 +127,14 @@
 #
 # .. code-block:: c++
 #
-#    class MyClass ClimbingStats_DECL_CXX_FINAL
+#    class MyClass ClimbingStats_FINAL
 #    {
-#        ClimbingStats_DECL_CXX_CONSTEXPR int someInterface() { return 42; }
+#        ClimbingStats_CONSTEXPR int someInterface() { return 42; }
 #    };
 #
-# The ``ClimbingStats_DECL_CXX_FINAL`` macro will expand to ``final`` if the
+# The ``ClimbingStats_FINAL`` macro will expand to ``final`` if the
 # compiler (and its flags) support the ``cxx_final`` feature, and the
-# ``ClimbingStats_DECL_CXX_CONSTEXPR`` macro will expand to ``constexpr``
+# ``ClimbingStats_CONSTEXPR`` macro will expand to ``constexpr``
 # if ``cxx_constexpr`` is supported.
 #
 # The following features generate corresponding symbol defines:
@@ -133,16 +169,47 @@
 # ``static_assert``, or ignored if using the backward compatibility
 # implementation.
 #
-# ====================== ================================ ===================
-#         Feature                    Define                     Symbol
-# ====================== ================================ ===================
-# ``cxx_alignas``         ``<PREFIX>_ALIGNAS``             ``alignas``
-# ``cxx_alignof``         ``<PREFIX>_ALIGNOF``             ``alignof``
-# ``cxx_nullptr``         ``<PREFIX>_NULLPTR``             ``nullptr``
-# ``cxx_static_assert``   ``<PREFIX>_STATIC_ASSERT``       ``static_assert``
-# ``cxx_static_assert``   ``<PREFIX>_STATIC_ASSERT_MSG``   ``static_assert``
-# ====================== ================================ ===================
-
+# The ``cxx_attribute_deprecated`` feature provides a macro definition
+# ``<PREFIX>_DEPRECATED``, which expands to either the standard
+# ``[[deprecated]]`` attribute or a compiler-specific decorator such
+# as ``__attribute__((__deprecated__))`` used by GNU compilers.
+#
+# The ``cxx_alignas`` feature provides a macro definition
+# ``<PREFIX>_ALIGNAS`` which expands to either the standard ``alignas``
+# decorator or a compiler-specific decorator such as
+# ``__attribute__ ((__aligned__))`` used by GNU compilers.
+#
+# The ``cxx_alignof`` feature provides a macro definition
+# ``<PREFIX>_ALIGNOF`` which expands to either the standard ``alignof``
+# decorator or a compiler-specific decorator such as ``__alignof__``
+# used by GNU compilers.
+#
+# ============================= ================================ =====================
+#           Feature                          Define                     Symbol
+# ============================= ================================ =====================
+# ``cxx_alignas``                ``<PREFIX>_ALIGNAS``             ``alignas``
+# ``cxx_alignof``                ``<PREFIX>_ALIGNOF``             ``alignof``
+# ``cxx_nullptr``                ``<PREFIX>_NULLPTR``             ``nullptr``
+# ``cxx_static_assert``          ``<PREFIX>_STATIC_ASSERT``       ``static_assert``
+# ``cxx_static_assert``          ``<PREFIX>_STATIC_ASSERT_MSG``   ``static_assert``
+# ``cxx_attribute_deprecated``   ``<PREFIX>_DEPRECATED``          ``[[deprecated]]``
+# ``cxx_attribute_deprecated``   ``<PREFIX>_DEPRECATED_MSG``      ``[[deprecated]]``
+# ============================= ================================ =====================
+#
+# A use-case which arises with such deprecation macros is the deprecation
+# of an entire library.  In that case, all public API in the library may
+# be decorated with the ``<PREFIX>_DEPRECATED`` macro.  This results in
+# very noisy build output when building the library itself, so the macro
+# may be may be defined to empty in that case when building the deprecated
+# library:
+#
+# .. code-block:: cmake
+#
+#   add_library(compat_support ${srcs})
+#   target_compile_definitions(compat_support
+#     PRIVATE
+#       CompatSupport_DEPRECATED=
+#   )
 
 #=============================================================================
 # Copyright 2014 Stephen Kelly <steveire@gmail.com>
@@ -166,6 +233,8 @@ function(_load_compiler_variables CompilerId lang)
   foreach(feature ${ARGN})
     set(_cmake_feature_test_${CompilerId}_${feature} ${_cmake_feature_test_${feature}} PARENT_SCOPE)
   endforeach()
+  include("${CMAKE_ROOT}/Modules/Compiler/${CompilerId}-DetermineCompiler.cmake" OPTIONAL)
+  set(_compiler_id_version_compute_${CompilerId} ${_compiler_id_version_compute} PARENT_SCOPE)
 endfunction()
 
 function(write_compiler_detection_header
@@ -179,7 +248,7 @@ function(write_compiler_detection_header
     message(FATAL_ERROR "write_compiler_detection_header: PREFIX parameter missing.")
   endif()
   set(options)
-  set(oneValueArgs VERSION EPILOG PROLOG)
+  set(oneValueArgs VERSION EPILOG PROLOG OUTPUT_FILES_VAR OUTPUT_DIR)
   set(multiValueArgs COMPILERS FEATURES)
   cmake_parse_arguments(_WCD "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -194,21 +263,73 @@ function(write_compiler_detection_header
     message(FATAL_ERROR "Unparsed arguments: ${_WCD_UNPARSED_ARGUMENTS}")
   endif()
 
+  if (prefix_arg STREQUAL "")
+    message(FATAL_ERROR "A prefix must be specified")
+  endif()
+  string(MAKE_C_IDENTIFIER ${prefix_arg} cleaned_prefix)
+  if (NOT prefix_arg STREQUAL cleaned_prefix)
+    message(FATAL_ERROR "The prefix must be a valid C identifier.")
+  endif()
+
   if(NOT _WCD_VERSION)
     set(_WCD_VERSION ${CMAKE_MINIMUM_REQUIRED_VERSION})
   endif()
-  if (_WCD_VERSION VERSION_LESS 3.1.0) # Version which introduced this function
-    message(FATAL_ERROR "VERSION parameter too low.")
+  set(_min_version 3.1.0) # Version which introduced this function
+  if (_WCD_VERSION VERSION_LESS _min_version)
+    set(err "VERSION compatibility for write_compiler_detection_header is set to ${_WCD_VERSION}, which is too low.")
+    set(err "${err}  It must be set to at least ${_min_version}.  ")
+    set(err "${err}  Either set the VERSION parameter to the write_compiler_detection_header function, or update")
+    set(err "${err} your minimum required CMake version with the cmake_minimum_required command.")
+    message(FATAL_ERROR "${err}")
+  endif()
+
+  if(_WCD_OUTPUT_FILES_VAR)
+    if(NOT _WCD_OUTPUT_DIR)
+      message(FATAL_ERROR "If OUTPUT_FILES_VAR is specified, then OUTPUT_DIR must also be specified.")
+    endif()
+  endif()
+  if(_WCD_OUTPUT_DIR)
+    if(NOT _WCD_OUTPUT_FILES_VAR)
+      message(FATAL_ERROR "If OUTPUT_DIR is specified, then OUTPUT_FILES_VAR must also be specified.")
+    endif()
+    get_filename_component(main_file_dir ${file_arg} DIRECTORY)
+    if (NOT IS_ABSOLUTE ${main_file_dir})
+      set(main_file_dir "${CMAKE_CURRENT_BINARY_DIR}/${main_file_dir}")
+    endif()
+    if (NOT IS_ABSOLUTE ${_WCD_OUTPUT_DIR})
+      set(_WCD_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/${_WCD_OUTPUT_DIR}")
+    endif()
+    get_filename_component(out_file_dir ${_WCD_OUTPUT_DIR} ABSOLUTE)
+    string(FIND ${out_file_dir} ${main_file_dir} idx)
+    if (NOT idx EQUAL 0)
+      message(FATAL_ERROR "The compiler-specific output directory must be within the same directory as the main file.")
+    endif()
+
+    if (main_file_dir STREQUAL out_file_dir)
+      unset(_WCD_OUTPUT_DIR)
+    else()
+      string(REPLACE "${main_file_dir}/" "" _WCD_OUTPUT_DIR "${out_file_dir}/")
+    endif()
   endif()
 
   set(compilers
     GNU
     Clang
+    AppleClang
   )
+
+  set(_hex_compilers ADSP Borland Embarcadero SunPro)
+
   foreach(_comp ${_WCD_COMPILERS})
     list(FIND compilers ${_comp} idx)
     if (idx EQUAL -1)
       message(FATAL_ERROR "Unsupported compiler ${_comp}.")
+    endif()
+    if (NOT _need_hex_conversion)
+      list(FIND _hex_compilers ${_comp} idx)
+      if (NOT idx EQUAL -1)
+        set(_need_hex_conversion TRUE)
+      endif()
     endif()
   endforeach()
 
@@ -223,6 +344,21 @@ function(write_compiler_detection_header
     set(file_content "${file_content}\n${_WCD_PROLOG}\n")
   endif()
 
+  if (_need_hex_conversion)
+    set(file_content "${file_content}
+#define ${prefix_arg}_DEC(X) (X)
+#define ${prefix_arg}_HEX(X) ( \\
+    ((X)>>28 & 0xF) * 10000000 + \\
+    ((X)>>24 & 0xF) *  1000000 + \\
+    ((X)>>20 & 0xF) *   100000 + \\
+    ((X)>>16 & 0xF) *    10000 + \\
+    ((X)>>12 & 0xF) *     1000 + \\
+    ((X)>>8  & 0xF) *      100 + \\
+    ((X)>>4  & 0xF) *       10 + \\
+    ((X)     & 0xF) \\
+    )\n")
+  endif()
+
   foreach(feature ${_WCD_FEATURES})
     if (feature MATCHES "^cxx_")
       list(APPEND _langs CXX)
@@ -235,6 +371,14 @@ function(write_compiler_detection_header
     endif()
   endforeach()
   list(REMOVE_DUPLICATES _langs)
+
+  if(_WCD_OUTPUT_FILES_VAR)
+    get_filename_component(main_file_name ${file_arg} NAME)
+    set(compiler_file_content_
+"#ifndef ${prefix_arg}_COMPILER_DETECTION_H
+#  error This file may only be included from ${main_file_name}
+#endif\n")
+  endif()
 
   foreach(_lang ${_langs})
 
@@ -262,10 +406,37 @@ function(write_compiler_detection_header
     foreach(compiler ${_WCD_COMPILERS})
       _load_compiler_variables(${compiler} ${_lang} ${${_lang}_features})
       set(file_content "${file_content}\n#  ${pp_if} ${prefix_arg}_COMPILER_IS_${compiler}\n")
-      set(file_content "${file_content}
+
+      if(_WCD_OUTPUT_FILES_VAR)
+        set(compile_file_name "${_WCD_OUTPUT_DIR}${prefix_arg}_COMPILER_INFO_${compiler}.h")
+        set(file_content "${file_content}\n#    include \"${compile_file_name}\"\n")
+      endif()
+
+      if(_WCD_OUTPUT_FILES_VAR)
+        set(compiler_file_content compiler_file_content_${compiler})
+      else()
+        set(compiler_file_content file_content)
+      endif()
+
+      set(${compiler_file_content} "${${compiler_file_content}}
 #    if !(${_cmake_oldestSupported_${compiler}})
 #      error Unsupported compiler version
 #    endif\n")
+
+      set(PREFIX ${prefix_arg}_)
+      if (_need_hex_conversion)
+        set(MACRO_DEC ${prefix_arg}_DEC)
+        set(MACRO_HEX ${prefix_arg}_HEX)
+      else()
+        set(MACRO_DEC)
+        set(MACRO_HEX)
+      endif()
+      string(CONFIGURE "${_compiler_id_version_compute_${compiler}}" VERSION_BLOCK @ONLY)
+      set(${compiler_file_content} "${${compiler_file_content}}${VERSION_BLOCK}\n")
+      set(PREFIX)
+      set(MACRO_DEC)
+      set(MACRO_HEX)
+
       set(pp_if "elif")
       foreach(feature ${${_lang}_features})
         string(TOUPPER ${feature} feature_upper)
@@ -277,7 +448,7 @@ function(write_compiler_detection_header
           set(_define_item "\n#      define ${prefix_arg}_${feature_PP} 0\n")
           set(_define_item "\n#    if ${_cmake_feature_test_${compiler}_${feature}}\n#      define ${prefix_arg}_${feature_PP} 1\n#    else${_define_item}#    endif\n")
         endif()
-        set(file_content "${file_content}${_define_item}")
+        set(${compiler_file_content} "${${compiler_file_content}}${_define_item}")
       endforeach()
     endforeach()
     if(pp_if STREQUAL "elif")
@@ -301,7 +472,7 @@ function(write_compiler_detection_header
 \n")
       endif()
       if (feature STREQUAL cxx_constexpr)
-        set(def_value "${prefix_arg}_DECL_${feature_upper}")
+        set(def_value "${prefix_arg}_CONSTEXPR")
         set(file_content "${file_content}
 #  if ${def_name}
 #    define ${def_value} constexpr
@@ -311,7 +482,7 @@ function(write_compiler_detection_header
 \n")
       endif()
       if (feature STREQUAL cxx_final)
-        set(def_value "${prefix_arg}_DECL_${feature_upper}")
+        set(def_value "${prefix_arg}_FINAL")
         set(file_content "${file_content}
 #  if ${def_name}
 #    define ${def_value} final
@@ -321,7 +492,7 @@ function(write_compiler_detection_header
 \n")
       endif()
       if (feature STREQUAL cxx_override)
-        set(def_value "${prefix_arg}_DECL_${feature_upper}")
+        set(def_value "${prefix_arg}_OVERRIDE")
         set(file_content "${file_content}
 #  if ${def_name}
 #    define ${def_value} override
@@ -343,7 +514,7 @@ function(write_compiler_detection_header
         set(file_content "${file_content}
 #  if ${def_name}
 #    define ${def_value} alignas(X)
-#  elif ${prefix_arg}_COMPILER_IS_GNU
+#  elif ${prefix_arg}_COMPILER_IS_GNU || ${prefix_arg}_COMPILER_IS_Clang || ${prefix_arg}_COMPILER_IS_AppleClang
 #    define ${def_value} __attribute__ ((__aligned__(X)))
 #  else
 #    define ${def_value}
@@ -355,7 +526,7 @@ function(write_compiler_detection_header
         set(file_content "${file_content}
 #  if ${def_name}
 #    define ${def_value} alignof(X)
-#  elif ${prefix_arg}_COMPILER_IS_GNU
+#  elif ${prefix_arg}_COMPILER_IS_GNU || ${prefix_arg}_COMPILER_IS_Clang || ${prefix_arg}_COMPILER_IS_AppleClang
 #    define ${def_value} __alignof__(X)
 #  endif
 \n")
@@ -402,11 +573,48 @@ function(write_compiler_detection_header
 #  endif
 \n")
       endif()
+      if (feature STREQUAL cxx_attribute_deprecated)
+        set(def_name ${prefix_arg}_${feature_PP})
+        set(def_value "${prefix_arg}_DEPRECATED")
+        set(file_content "${file_content}
+#  ifndef ${def_value}
+#    if ${def_name}
+#      define ${def_value} [[deprecated]]
+#      define ${def_value}_MSG(MSG) [[deprecated(MSG)]]
+#    elif ${prefix_arg}_COMPILER_IS_GNU || ${prefix_arg}_COMPILER_IS_Clang
+#      define ${def_value} __attribute__((__deprecated__))
+#      define ${def_value}_MSG(MSG) __attribute__((__deprecated__(MSG)))
+#    elif ${prefix_arg}_COMPILER_IS_MSVC
+#      define ${def_value} __declspec(deprecated)
+#      define ${def_value}_MSG(MSG) __declspec(deprecated(MSG))
+#    else
+#      define ${def_value}
+#      define ${def_value}_MSG(MSG)
+#    endif
+#  endif
+\n")
+      endif()
     endforeach()
 
     set(file_content "${file_content}#endif\n")
 
   endforeach()
+
+  if(_WCD_OUTPUT_FILES_VAR)
+    foreach(compiler ${_WCD_COMPILERS})
+      set(CMAKE_CONFIGURABLE_FILE_CONTENT "${compiler_file_content_}")
+      set(CMAKE_CONFIGURABLE_FILE_CONTENT "${CMAKE_CONFIGURABLE_FILE_CONTENT}${compiler_file_content_${compiler}}")
+
+      set(compile_file_name "${_WCD_OUTPUT_DIR}${prefix_arg}_COMPILER_INFO_${compiler}.h")
+      set(full_path "${main_file_dir}/${compile_file_name}")
+      list(APPEND ${_WCD_OUTPUT_FILES_VAR} ${full_path})
+      configure_file("${CMAKE_ROOT}/Modules/CMakeConfigurableFile.in"
+        "${full_path}"
+        @ONLY
+      )
+    endforeach()
+    set(${_WCD_OUTPUT_FILES_VAR} ${${_WCD_OUTPUT_FILES_VAR}} PARENT_SCOPE)
+  endif()
 
   if (_WCD_EPILOG)
     set(file_content "${file_content}\n${_WCD_EPILOG}\n")

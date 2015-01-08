@@ -79,9 +79,15 @@ public:
     this->GG = lg->GetGlobalGenerator();
     this->LG = this->GG->GetCurrentLocalGenerator();
     this->GG->SetCurrentLocalGenerator(lg);
+#if defined(CMAKE_BUILD_WITH_CMAKE)
+    this->GG->GetFileLockPool().PushFileScope();
+#endif
     }
   ~cmLocalGeneratorCurrent()
     {
+#if defined(CMAKE_BUILD_WITH_CMAKE)
+    this->GG->GetFileLockPool().PopFileScope();
+#endif
     this->GG->SetCurrentLocalGenerator(this->LG);
     }
 };
@@ -221,19 +227,19 @@ void cmLocalGenerator::SetupPathConversions()
   std::string outdir;
   outdir =
     cmSystemTools::CollapseFullPath(this->Makefile->GetHomeDirectory());
-  cmSystemTools::SplitPath(outdir.c_str(), this->HomeDirectoryComponents);
+  cmSystemTools::SplitPath(outdir, this->HomeDirectoryComponents);
   outdir =
     cmSystemTools::CollapseFullPath(this->Makefile->GetStartDirectory());
-  cmSystemTools::SplitPath(outdir.c_str(), this->StartDirectoryComponents);
+  cmSystemTools::SplitPath(outdir, this->StartDirectoryComponents);
 
   outdir = cmSystemTools::CollapseFullPath
     (this->Makefile->GetHomeOutputDirectory());
-  cmSystemTools::SplitPath(outdir.c_str(),
+  cmSystemTools::SplitPath(outdir,
                            this->HomeOutputDirectoryComponents);
 
   outdir = cmSystemTools::CollapseFullPath
     (this->Makefile->GetStartOutputDirectory());
-  cmSystemTools::SplitPath(outdir.c_str(),
+  cmSystemTools::SplitPath(outdir,
                            this->StartOutputDirectoryComponents);
 }
 
@@ -259,6 +265,17 @@ void cmLocalGenerator::ConfigureFinalPass()
 
 void cmLocalGenerator::TraceDependencies()
 {
+  std::vector<std::string> configs;
+  this->Makefile->GetConfigurations(configs);
+  if (configs.empty())
+    {
+    configs.push_back("");
+    }
+  for(std::vector<std::string>::const_iterator ci = configs.begin();
+      ci != configs.end(); ++ci)
+    {
+    this->GlobalGenerator->CreateEvaluationSourceFiles(*ci);
+    }
   // Generate the rule files for each target.
   cmGeneratorTargetsType targets = this->Makefile->GetGeneratorTargets();
   for(cmGeneratorTargetsType::iterator t = targets.begin();
@@ -681,7 +698,7 @@ void cmLocalGenerator::AddBuildTargetRule(const std::string& llang,
         objVector.push_back(ofname);
         this->AddCustomCommandToCreateObject(ofname.c_str(),
                                              llang, *(*i), target);
-        objs += this->Convert(ofname,START_OUTPUT,MAKEFILE);
+        objs += this->Convert(ofname,START_OUTPUT,SHELL);
         objs += " ";
         }
       }
@@ -873,6 +890,13 @@ cmLocalGenerator::ExpandRuleVariable(std::string const& variable,
     if(variable == "OBJECT_DIR")
       {
       return replaceValues.ObjectDir;
+      }
+    }
+  if(replaceValues.ObjectFileDir)
+    {
+    if(variable == "OBJECT_FILE_DIR")
+      {
+      return replaceValues.ObjectFileDir;
       }
     }
   if(replaceValues.Objects)
@@ -1240,7 +1264,7 @@ cmLocalGenerator::ConvertToOutputForExistingCommon(const std::string& remote,
      cmSystemTools::FileExists(remote.c_str()))
     {
     std::string tmp;
-    if(cmSystemTools::GetShortPath(remote.c_str(), tmp))
+    if(cmSystemTools::GetShortPath(remote, tmp))
       {
       return this->Convert(tmp, NONE, format, true);
       }
@@ -1280,9 +1304,11 @@ cmLocalGenerator::ConvertToOutputForExisting(RelativeRoot remote,
 //----------------------------------------------------------------------------
 std::string
 cmLocalGenerator::ConvertToIncludeReference(std::string const& path,
-                                            OutputFormat format)
+                                            OutputFormat format,
+                                            bool forceFullPaths)
 {
-  return this->ConvertToOutputForExisting(path, START_OUTPUT, format);
+  return this->ConvertToOutputForExisting(
+    path, forceFullPaths? FULL : START_OUTPUT, format);
 }
 
 //----------------------------------------------------------------------------
@@ -1290,6 +1316,7 @@ std::string cmLocalGenerator::GetIncludeFlags(
                                      const std::vector<std::string> &includes,
                                      cmGeneratorTarget* target,
                                      const std::string& lang,
+                                     bool forceFullPaths,
                                      bool forResponseFile,
                                      const std::string& config)
 {
@@ -1361,7 +1388,7 @@ std::string cmLocalGenerator::GetIncludeFlags(
       {
       std::string frameworkDir = *i;
       frameworkDir += "/../";
-      frameworkDir = cmSystemTools::CollapseFullPath(frameworkDir.c_str());
+      frameworkDir = cmSystemTools::CollapseFullPath(frameworkDir);
       if(emitted.insert(frameworkDir).second)
         {
         if (sysFwSearchFlag && target &&
@@ -1394,7 +1421,7 @@ std::string cmLocalGenerator::GetIncludeFlags(
       flagUsed = true;
       }
     std::string includePath =
-      this->ConvertToIncludeReference(*i, shellFormat);
+      this->ConvertToIncludeReference(*i, shellFormat, forceFullPaths);
     if(quotePaths && includePath.size() && includePath[0] != '\"')
       {
       includeFlags << "\"";
@@ -1603,10 +1630,10 @@ void cmLocalGenerator::GetIncludeDirectories(std::vector<std::string>& dirs,
       {
       // Emit this directory only if it is a subdirectory of the
       // top-level source or binary tree.
-      if(cmSystemTools::ComparePath(i->c_str(), topSourceDir) ||
-         cmSystemTools::ComparePath(i->c_str(), topBinaryDir) ||
-         cmSystemTools::IsSubDirectory(i->c_str(), topSourceDir) ||
-         cmSystemTools::IsSubDirectory(i->c_str(), topBinaryDir))
+      if(cmSystemTools::ComparePath(*i, topSourceDir) ||
+         cmSystemTools::ComparePath(*i, topBinaryDir) ||
+         cmSystemTools::IsSubDirectory(*i, topSourceDir) ||
+         cmSystemTools::IsSubDirectory(*i, topBinaryDir))
         {
         if(emitted.insert(*i).second)
           {
@@ -1854,7 +1881,7 @@ void cmLocalGenerator::OutputLinkLibraries(std::string& linkLibraries,
                              ((useWatcomQuote) ? WATCOMQUOTE : SHELL);
   bool escapeAllowMakeVars = !forResponseFile;
   cmOStringStream fout;
-  const char* config = this->Makefile->GetDefinition("CMAKE_BUILD_TYPE");
+  std::string config = this->Makefile->GetSafeDefinition("CMAKE_BUILD_TYPE");
   cmComputeLinkInformation* pcli = tgt.Target->GetLinkInformation(config);
   if(!pcli)
     {
@@ -2099,11 +2126,11 @@ bool cmLocalGenerator::GetRealDependency(const std::string& inName,
         {
         tLocation = target->GetLocation(config);
         tLocation = cmSystemTools::GetFilenamePath(tLocation);
-        tLocation = cmSystemTools::CollapseFullPath(tLocation.c_str());
+        tLocation = cmSystemTools::CollapseFullPath(tLocation);
         }
       std::string depLocation = cmSystemTools::GetFilenamePath(
         std::string(inName));
-      depLocation = cmSystemTools::CollapseFullPath(depLocation.c_str());
+      depLocation = cmSystemTools::CollapseFullPath(depLocation);
       if(depLocation != tLocation)
         {
         // it is a full path to a depend that has the same name
@@ -2195,8 +2222,16 @@ AddCompilerRequirementFlag(std::string &flags, cmTarget* target,
     return;
     }
   std::string extProp = lang + "_EXTENSIONS";
-  bool ext = target->GetPropertyAsBool(extProp);
-  std::string type = ext ? "EXTENSION" : "STANDARD";
+  std::string type = "EXTENSION";
+  bool ext = true;
+  if (const char* extPropValue = target->GetProperty(extProp))
+    {
+    if (cmSystemTools::IsOff(extPropValue))
+      {
+      ext = false;
+      type = "STANDARD";
+      }
+    }
 
   if (target->GetPropertyAsBool(lang + "_STANDARD_REQUIRED"))
     {
@@ -2214,7 +2249,10 @@ AddCompilerRequirementFlag(std::string &flags, cmTarget* target,
            "does not know the compile flags to use to enable it.";
       this->GetMakefile()->IssueMessage(cmake::FATAL_ERROR, e.str());
       }
-    this->AppendFlags(flags, opt);
+    else
+      {
+      this->AppendFlagEscape(flags, opt);
+      }
     return;
     }
 
@@ -2222,6 +2260,7 @@ AddCompilerRequirementFlag(std::string &flags, cmTarget* target,
   if (langStdMap.empty())
     {
     // Maintain sorted order, most recent first.
+    langStdMap["CXX"].push_back("14");
     langStdMap["CXX"].push_back("11");
     langStdMap["CXX"].push_back("98");
 
@@ -2259,7 +2298,7 @@ AddCompilerRequirementFlag(std::string &flags, cmTarget* target,
 
     if (const char *opt = target->GetMakefile()->GetDefinition(option_flag))
       {
-      this->AppendFlags(flags, opt);
+      this->AppendFlagEscape(flags, opt);
       return;
       }
     }
@@ -2721,7 +2760,7 @@ std::string cmLocalGenerator::Convert(const std::string& source,
                                       result);
         break;
       case FULL:
-        result = cmSystemTools::CollapseFullPath(result.c_str());
+        result = cmSystemTools::CollapseFullPath(result);
         break;
       case NONE:
         break;
@@ -2736,7 +2775,7 @@ std::string cmLocalGenerator::ConvertToOutputFormat(const std::string& source,
 {
   std::string result = source;
   // Convert it to an output path.
-  if (output == MAKEFILE)
+  if (output == MAKERULE)
     {
     result = cmSystemTools::ConvertToOutputPath(result.c_str());
     }
@@ -2785,7 +2824,7 @@ std::string cmLocalGenerator::Convert(RelativeRoot remote,
   if(!local.empty() && (!optional || this->UseRelativePaths))
     {
     std::vector<std::string> components;
-    cmSystemTools::SplitPath(local.c_str(), components);
+    cmSystemTools::SplitPath(local, components);
     std::string result = this->ConvertToRelativePath(components, remotePath);
     return this->ConvertToOutputFormat(result, output);
     }
@@ -2805,7 +2844,7 @@ std::string cmLocalGenerator::FindRelativePathTopSource()
     {
     std::string parentTop = parent->FindRelativePathTopSource();
     if(cmSystemTools::IsSubDirectory(
-         this->Makefile->GetStartDirectory(), parentTop.c_str()))
+         this->Makefile->GetStartDirectory(), parentTop))
       {
       return parentTop;
       }
@@ -2825,7 +2864,7 @@ std::string cmLocalGenerator::FindRelativePathTopBinary()
     {
     std::string parentTop = parent->FindRelativePathTopBinary();
     if(cmSystemTools::IsSubDirectory(
-         this->Makefile->GetStartOutputDirectory(), parentTop.c_str()))
+         this->Makefile->GetStartOutputDirectory(), parentTop))
       {
       return parentTop;
       }
@@ -2911,12 +2950,12 @@ cmLocalGenerator::ConvertToRelativePath(const std::vector<std::string>& local,
   // Identify the longest shared path component between the remote
   // path and the local path.
   std::vector<std::string> remote;
-  cmSystemTools::SplitPath(in_remote.c_str(), remote);
+  cmSystemTools::SplitPath(in_remote, remote);
   unsigned int common=0;
   while(common < remote.size() &&
         common < local.size() &&
-        cmSystemTools::ComparePath(remote[common].c_str(),
-                                   local[common].c_str()))
+        cmSystemTools::ComparePath(remote[common],
+                                   local[common]))
     {
     ++common;
     }
@@ -2979,6 +3018,17 @@ cmLocalGenerator::ConvertToRelativePath(const std::vector<std::string>& local,
 }
 
 //----------------------------------------------------------------------------
+class cmInstallTargetGeneratorLocal: public cmInstallTargetGenerator
+{
+public:
+  cmInstallTargetGeneratorLocal(cmTarget& t, const char* dest, bool implib):
+    cmInstallTargetGenerator(
+      t, dest, implib, "", std::vector<std::string>(), "Unspecified",
+      cmInstallGenerator::SelectMessageLevel(t.GetMakefile()),
+      false) {}
+};
+
+//----------------------------------------------------------------------------
 void
 cmLocalGenerator
 ::GenerateTargetInstallRules(
@@ -3023,7 +3073,8 @@ cmLocalGenerator
         case cmTarget::MODULE_LIBRARY:
           {
           // Use a target install generator.
-          cmInstallTargetGenerator g(l->second, destination.c_str(), false);
+          cmInstallTargetGeneratorLocal
+            g(l->second, destination.c_str(), false);
           g.Generate(os, config, configurationTypes);
           }
           break;
@@ -3033,16 +3084,19 @@ cmLocalGenerator
           // Special code to handle DLL.  Install the import library
           // to the normal destination and the DLL to the runtime
           // destination.
-          cmInstallTargetGenerator g1(l->second, destination.c_str(), true);
+          cmInstallTargetGeneratorLocal
+            g1(l->second, destination.c_str(), true);
           g1.Generate(os, config, configurationTypes);
           // We also skip over the leading slash given by the user.
           destination = l->second.GetRuntimeInstallPath().substr(1);
           cmSystemTools::ConvertToUnixSlashes(destination);
-          cmInstallTargetGenerator g2(l->second, destination.c_str(), false);
+          cmInstallTargetGeneratorLocal
+            g2(l->second, destination.c_str(), false);
           g2.Generate(os, config, configurationTypes);
 #else
           // Use a target install generator.
-          cmInstallTargetGenerator g(l->second, destination.c_str(), false);
+          cmInstallTargetGeneratorLocal
+            g(l->second, destination.c_str(), false);
           g.Generate(os, config, configurationTypes);
 #endif
           }

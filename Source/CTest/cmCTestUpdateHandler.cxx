@@ -98,7 +98,7 @@ cmCTestUpdateHandlerLocale::~cmCTestUpdateHandlerLocale()
     {
     std::string put = "LC_MESSAGES=";
     put += saveLCMessages;
-    cmSystemTools::PutEnv(put.c_str());
+    cmSystemTools::PutEnv(put);
     }
   else
     {
@@ -258,12 +258,13 @@ int cmCTestUpdateHandler::ProcessHandler()
   double elapsed_time_start = cmSystemTools::GetTime();
 
   bool updated = vc->Update();
-
+  std::string buildname = cmCTest::SafeBuildIdField(
+    this->CTest->GetCTestConfiguration("BuildName"));
   os << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
     << "<Update mode=\"Client\" Generator=\"ctest-"
     << cmVersion::GetCMakeVersion() << "\">\n"
     << "\t<Site>" << this->CTest->GetCTestConfiguration("Site") << "</Site>\n"
-    << "\t<BuildName>" << this->CTest->GetCTestConfiguration("BuildName")
+    << "\t<BuildName>" << buildname
     << "</BuildName>\n"
     << "\t<BuildStamp>" << this->CTest->GetCurrentTag() << "-"
     << this->CTest->GetTestModelString() << "</BuildStamp>" << std::endl;

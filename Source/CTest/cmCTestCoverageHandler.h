@@ -76,12 +76,21 @@ private:
   int HandlePHPCoverage(cmCTestCoverageHandlerContainer* cont);
 
   //! Handle coverage for Python with coverage.py
-  int HandlePythonCoverage(cmCTestCoverageHandlerContainer* cont);
+  int HandleCoberturaCoverage(cmCTestCoverageHandlerContainer* cont);
 
   //! Handle coverage for mumps
   int HandleMumpsCoverage(cmCTestCoverageHandlerContainer* cont);
 
-  //! Handle coverage using Bullseye
+  //! Handle coverage for Jacoco
+  int HandleJacocoCoverage(cmCTestCoverageHandlerContainer* cont);
+
+  //! Handle coverage for Delphi (Pascal)
+  int HandleDelphiCoverage(cmCTestCoverageHandlerContainer* cont);
+
+  //! Handle coverage for Jacoco
+  int HandleBlanketJSCoverage(cmCTestCoverageHandlerContainer* cont);
+
+//! Handle coverage using Bullseye
   int HandleBullseyeCoverage(cmCTestCoverageHandlerContainer* cont);
   int RunBullseyeSourceSummary(cmCTestCoverageHandlerContainer* cont);
   int RunBullseyeCoverageBranch(cmCTestCoverageHandlerContainer* cont,

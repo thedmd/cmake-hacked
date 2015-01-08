@@ -28,12 +28,6 @@
 #define CMAKE_NO_ANSI_FOR_SCOPE
 #endif
 
-#ifdef __BORLANDC__
-# pragma warn -8030 /* Temporary used for parameter */
-# pragma warn -8027 /* 'for' not inlined.  */
-# pragma warn -8026 /* 'exception' not inlined.  */
-# pragma warn -8004 /* value never used */
-#endif
 
 #ifdef __ICL
 #pragma warning ( disable : 985 )
@@ -78,10 +72,6 @@ public:
 #if defined(_MSC_VER)
 # pragma warning (push,1)
 #endif
-#if defined(__BORLANDC__)
-# pragma warn -8008 /* condition is always false (RESET BELOW!) */
-# pragma warn -8066 /* unreachable code (RESET BELOW!) */
-#endif
 
 #ifndef CMAKE_NO_ANSI_STREAM_HEADERS
 #  include <fstream>
@@ -112,10 +102,6 @@ public:
 #include <set>
 #include <deque>
 
-#if defined(__BORLANDC__)
-# pragma warn .8008 /* condition is always false (disabled above) */
-# pragma warn .8066 /* unreachable code (disabled above) */
-#endif
 #if defined(_MSC_VER)
 # pragma warning(pop)
 #endif
@@ -134,10 +120,6 @@ public:
 // include blockers are put in place that prevent including the
 // C-style versions from ever including the sub-headers.  Therefore we
 // have to include the sub-headers here to get the using declarations.
-#if defined(__BORLANDC__)
-# include <mem.h>    /* mem... functions from string.h */
-# include <search.h> /* search functions from stdlib.h */
-#endif
 
 
 #if !defined(_WIN32) && defined(__COMO__)
@@ -411,9 +393,7 @@ inline bool cmHasLiteralSuffixImpl(const char* str1,
   return len >= N && strcmp(str1 + len - N, str2) == 0;
 }
 
-#if defined(_MSC_VER) && _MSC_VER < 1300 \
-  || defined(__GNUC__) && __GNUC__ < 3 \
-  || defined(__BORLANDC__)
+#if defined(__GNUC__) && __GNUC__ < 3
 
 #define cmArrayBegin(a) a
 #define cmArraySize(a) (sizeof(a)/sizeof(*a))
@@ -460,12 +440,6 @@ struct cmStrCmp {
   bool operator()(const char * input) const
   {
     return strcmp(input, m_test.c_str()) == 0;
-  }
-
-  // For use with binary_search
-  bool operator()(const char *str1, const char *str2) const
-  {
-    return strcmp(str1, str2) < 0;
   }
 
 private:

@@ -278,13 +278,13 @@
 #                            Only available for CUDA version 3.2+.
 #   CUDA_cusparse_LIBRARY -- CUDA Sparse Matrix library.
 #                            Only available for CUDA version 3.2+.
-#   CUDA_npp_LIBRARY      -- NVIDIA Performance Primitives library.
+#   CUDA_npp_LIBRARY      -- NVIDIA Performance Primitives lib.
 #                            Only available for CUDA version 4.0+.
-#   CUDA_nppc_LIBRARY      -- NVIDIA Performance Primitives library (core).
+#   CUDA_nppc_LIBRARY     -- NVIDIA Performance Primitives lib (core).
 #                            Only available for CUDA version 5.5+.
-#   CUDA_nppi_LIBRARY      -- NVIDIA Performance Primitives library (image processing).
+#   CUDA_nppi_LIBRARY     -- NVIDIA Performance Primitives lib (image processing).
 #                            Only available for CUDA version 5.5+.
-#   CUDA_npps_LIBRARY      -- NVIDIA Performance Primitives library (signal processing).
+#   CUDA_npps_LIBRARY     -- NVIDIA Performance Primitives lib (signal processing).
 #                            Only available for CUDA version 5.5+.
 #   CUDA_nvcuvenc_LIBRARY -- CUDA Video Encoder library.
 #                            Only available for CUDA version 3.2+.
@@ -452,7 +452,17 @@ set(CUDA_NVCC_FLAGS "" CACHE STRING "Semi-colon delimit multiple arguments.")
 if(CMAKE_GENERATOR MATCHES "Visual Studio")
   set(CUDA_HOST_COMPILER "$(VCInstallDir)bin" CACHE FILEPATH "Host side compiler used by NVCC")
 else()
-  set(CUDA_HOST_COMPILER "${CMAKE_C_COMPILER}" CACHE FILEPATH "Host side compiler used by NVCC")
+  # Using cc which is symlink to clang may let NVCC think it is GCC and issue
+  # unhandled -dumpspecs option to clang. Also in case neither
+  # CMAKE_C_COMPILER is defined (project does not use C language) nor
+  # CUDA_HOST_COMPILER is specified manually we should skip -ccbin and let
+  # nvcc use its own default C compiler.
+  if(DEFINED CMAKE_C_COMPILER AND NOT DEFINED CUDA_HOST_COMPILER)
+    get_filename_component(c_compiler_realpath "${CMAKE_C_COMPILER}" REALPATH)
+  else()
+    set(c_compiler_realpath "")
+  endif()
+  set(CUDA_HOST_COMPILER "${c_compiler_realpath}" CACHE FILEPATH "Host side compiler used by NVCC")
 endif()
 
 # Propagate the host flags to the host compiler via -Xcompiler
@@ -693,18 +703,6 @@ if(CUDA_BUILD_EMULATION AND CUDA_CUDARTEMU_LIBRARY)
 else()
   set(CUDA_LIBRARIES ${CUDA_CUDART_LIBRARY})
 endif()
-if(APPLE)
-  # We need to add the path to cudart to the linker using rpath, since the
-  # library name for the cuda libraries is prepended with @rpath.
-  if(CUDA_BUILD_EMULATION AND CUDA_CUDARTEMU_LIBRARY)
-    get_filename_component(_cuda_path_to_cudart "${CUDA_CUDARTEMU_LIBRARY}" PATH)
-  else()
-    get_filename_component(_cuda_path_to_cudart "${CUDA_CUDART_LIBRARY}" PATH)
-  endif()
-  if(_cuda_path_to_cudart)
-    list(APPEND CUDA_LIBRARIES -Wl,-rpath "-Wl,${_cuda_path_to_cudart}")
-  endif()
-endif()
 
 # 1.1 toolkit on linux doesn't appear to have a separate library on
 # some platforms.
@@ -884,15 +882,15 @@ macro(CUDA_GET_SOURCES_AND_OPTIONS _sources _cmake_options _options)
   set( ${_options} )
   set( _found_options FALSE )
   foreach(arg ${ARGN})
-    if(arg STREQUAL "OPTIONS")
+    if("x${arg}" STREQUAL "xOPTIONS")
       set( _found_options TRUE )
     elseif(
-        arg STREQUAL "WIN32" OR
-        arg STREQUAL "MACOSX_BUNDLE" OR
-        arg STREQUAL "EXCLUDE_FROM_ALL" OR
-        arg STREQUAL "STATIC" OR
-        arg STREQUAL "SHARED" OR
-        arg STREQUAL "MODULE"
+        "x${arg}" STREQUAL "xWIN32" OR
+        "x${arg}" STREQUAL "xMACOSX_BUNDLE" OR
+        "x${arg}" STREQUAL "xEXCLUDE_FROM_ALL" OR
+        "x${arg}" STREQUAL "xSTATIC" OR
+        "x${arg}" STREQUAL "xSHARED" OR
+        "x${arg}" STREQUAL "xMODULE"
         )
       list(APPEND ${_cmake_options} ${arg})
     else()
@@ -1422,7 +1420,7 @@ function(CUDA_LINK_SEPARABLE_COMPILATION_OBJECTS output_file cuda_target options
     # If -ccbin, --compiler-bindir has been specified, don't do anything.  Otherwise add it here.
     list( FIND nvcc_flags "-ccbin" ccbin_found0 )
     list( FIND nvcc_flags "--compiler-bindir" ccbin_found1 )
-    if( ccbin_found0 LESS 0 AND ccbin_found1 LESS 0 )
+    if( ccbin_found0 LESS 0 AND ccbin_found1 LESS 0 AND CUDA_HOST_COMPILER )
       list(APPEND nvcc_flags -ccbin "\"${CUDA_HOST_COMPILER}\"")
     endif()
     # Create a list of flags specified by CUDA_NVCC_FLAGS_${CONFIG}

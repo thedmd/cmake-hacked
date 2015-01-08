@@ -58,12 +58,7 @@ bool cmDepends::Write(std::ostream &makeDepends,
     // Get the source and object file.
     std::string const& src = *si++;
     if(si == pairs.end()) { break; }
-    std::string obj = *si++;
-
-    // Make sure the object file is relative to the top of the build tree.
-    obj = this->LocalGenerator->Convert(obj,
-                                        cmLocalGenerator::HOME_OUTPUT,
-                                        cmLocalGenerator::MAKEFILE);
+    std::string const& obj = *si++;
     dependencies[obj].insert(src);
     }
   for(std::map<std::string, std::set<std::string> >::const_iterator
@@ -99,7 +94,7 @@ bool cmDepends::Check(const char *makeFile, const char *internalFile,
     // Get the CWD but do not call CollapseFullPath because
     // we only need it to cd back, and the form does not matter
     oldcwd = cmSystemTools::GetCurrentWorkingDirectory(false);
-    cmSystemTools::ChangeDirectory(this->CompileDirectory.c_str());
+    cmSystemTools::ChangeDirectory(this->CompileDirectory);
     }
 
   // Check whether dependencies must be regenerated.
@@ -116,7 +111,7 @@ bool cmDepends::Check(const char *makeFile, const char *internalFile,
   // Restore working directory.
   if(oldcwd != ".")
     {
-    cmSystemTools::ChangeDirectory(oldcwd.c_str());
+    cmSystemTools::ChangeDirectory(oldcwd);
     }
 
   return okay;

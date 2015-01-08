@@ -12,7 +12,7 @@ Add sources to a target.
 Specify sources to use when compiling a given target.  The
 named ``<target>`` must have been created by a command such as
 :command:`add_executable` or :command:`add_library` and must not be an
-:prop_tgt:`IMPORTED Target`.
+:ref:`IMPORTED Target <Imported Targets>`.
 
 The ``INTERFACE``, ``PUBLIC`` and ``PRIVATE`` keywords are required to
 specify the scope of the following arguments.  ``PRIVATE`` and ``PUBLIC``
@@ -21,6 +21,10 @@ items will populate the :prop_tgt:`SOURCES` property of
 :prop_tgt:`INTERFACE_SOURCES` property of ``<target>``.  The
 following arguments specify sources.  Repeated calls for the same
 ``<target>`` append items in the order called.
+
+Targets with :prop_tgt:`INTERFACE_SOURCES` may not be exported with the
+:command:`export` or :command:`install(EXPORT)` commands. This limitation may be
+lifted in a future version of CMake.
 
 Arguments to ``target_sources`` may use "generator expressions"
 with the syntax ``$<...>``. See the :manual:`cmake-generator-expressions(7)`

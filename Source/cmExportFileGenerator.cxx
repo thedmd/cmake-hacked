@@ -377,8 +377,7 @@ void cmExportFileGenerator::PopulateIncludeDirectoriesInterface(
   const char *propName = "INTERFACE_INCLUDE_DIRECTORIES";
   const char *input = target->GetProperty(propName);
 
-  cmListFileBacktrace lfbt;
-  cmGeneratorExpression ge(lfbt);
+  cmGeneratorExpression ge;
 
   std::string dirs = cmGeneratorExpression::Preprocess(
                                             tei->InterfaceIncludeDirectories,
@@ -866,15 +865,16 @@ cmExportFileGenerator
 }
 
 //----------------------------------------------------------------------------
+template <typename T>
 void
 cmExportFileGenerator
 ::SetImportLinkProperty(std::string const& suffix,
                         cmTarget* target,
                         const std::string& propName,
-                        std::vector<std::string> const& entries,
+                        std::vector<T> const& entries,
                         ImportPropertyMap& properties,
                         std::vector<std::string>& missingTargets
-                       )
+  )
 {
   // Skip the property if there are no entries.
   if(entries.empty())
@@ -885,7 +885,7 @@ cmExportFileGenerator
   // Construct the property value.
   std::string link_entries;
   const char* sep = "";
-  for(std::vector<std::string>::const_iterator li = entries.begin();
+  for(typename std::vector<T>::const_iterator li = entries.begin();
       li != entries.end(); ++li)
     {
     // Separate this from the previous entry.
@@ -902,7 +902,6 @@ cmExportFileGenerator
   prop += suffix;
   properties[prop] = link_entries;
 }
-
 
 //----------------------------------------------------------------------------
 void cmExportFileGenerator::GenerateImportHeaderCode(std::ostream& os,

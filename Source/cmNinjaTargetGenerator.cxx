@@ -277,7 +277,7 @@ std::string
 cmNinjaTargetGenerator
 ::GetSourceFilePath(cmSourceFile const* source) const
 {
-  return ConvertToNinjaPath(source->GetFullPath().c_str());
+  return ConvertToNinjaPath(source->GetFullPath());
 }
 
 std::string
@@ -298,7 +298,7 @@ cmNinjaTargetGenerator
 std::string cmNinjaTargetGenerator::GetTargetOutputDir() const
 {
   std::string dir = this->Target->GetDirectory(this->GetConfigName());
-  return ConvertToNinjaPath(dir.c_str());
+  return ConvertToNinjaPath(dir);
 }
 
 std::string
@@ -346,11 +346,11 @@ bool cmNinjaTargetGenerator::SetMsvcTargetPdbVariable(cmNinjaVars& vars) const
       }
 
     vars["TARGET_PDB"] = this->GetLocalGenerator()->ConvertToOutputFormat(
-                          ConvertToNinjaPath(pdbPath.c_str()),
+                          ConvertToNinjaPath(pdbPath),
                           cmLocalGenerator::SHELL);
     vars["TARGET_COMPILE_PDB"] =
       this->GetLocalGenerator()->ConvertToOutputFormat(
-        ConvertToNinjaPath(compilePdbPath.c_str()),
+        ConvertToNinjaPath(compilePdbPath),
         cmLocalGenerator::SHELL);
 
     EnsureParentDirectoryExists(pdbPath);
@@ -385,6 +385,7 @@ cmNinjaTargetGenerator
   vars.TargetPDB = "$TARGET_PDB";
   vars.TargetCompilePDB = "$TARGET_COMPILE_PDB";
   vars.ObjectDir = "$OBJECT_DIR";
+  vars.ObjectFileDir = "$OBJECT_FILE_DIR";
 
   cmMakefile* mf = this->GetMakefile();
 
@@ -453,7 +454,10 @@ cmNinjaTargetGenerator
   std::vector<std::string> compileCmds;
   cmSystemTools::ExpandListArgument(compileCmd, compileCmds);
 
-  compileCmds.front().insert(0, cldeps);
+  if (!compileCmds.empty())
+    {
+    compileCmds.front().insert(0, cldeps);
+    }
 
   for (std::vector<std::string>::iterator i = compileCmds.begin();
        i != compileCmds.end(); ++i)
@@ -476,7 +480,7 @@ cmNinjaTargetGenerator
                                       deptype,
                                       /*rspfile*/ "",
                                       /*rspcontent*/ "",
-                                      /*restat*/ false,
+                                      /*restat*/ "",
                                       /*generator*/ false);
 }
 
@@ -537,31 +541,36 @@ cmNinjaTargetGenerator
     cmCustomCommandGenerator ccg(*cc, this->GetConfigName(),
                                  this->GetMakefile());
     const std::vector<std::string>& ccoutputs = ccg.GetOutputs();
+    const std::vector<std::string>& ccbyproducts= ccg.GetByproducts();
     std::transform(ccoutputs.begin(), ccoutputs.end(),
+                   std::back_inserter(orderOnlyDeps), MapToNinjaPath());
+    std::transform(ccbyproducts.begin(), ccbyproducts.end(),
                    std::back_inserter(orderOnlyDeps), MapToNinjaPath());
     }
 
-  cmNinjaDeps orderOnlyTarget;
-  orderOnlyTarget.push_back(this->OrderDependsTargetForTarget());
-  this->GetGlobalGenerator()->WritePhonyBuild(this->GetBuildFileStream(),
-                                          "Order-only phony target for "
-                                            + this->GetTargetName(),
-                                          orderOnlyTarget,
-                                          cmNinjaDeps(),
-                                          cmNinjaDeps(),
-                                          orderOnlyDeps);
-
+  if (!orderOnlyDeps.empty())
+    {
+    cmNinjaDeps orderOnlyTarget;
+    orderOnlyTarget.push_back(this->OrderDependsTargetForTarget());
+    this->GetGlobalGenerator()->WritePhonyBuild(this->GetBuildFileStream(),
+                                                "Order-only phony target for "
+                                                  + this->GetTargetName(),
+                                                orderOnlyTarget,
+                                                cmNinjaDeps(),
+                                                cmNinjaDeps(),
+                                                orderOnlyDeps);
+    }
   std::vector<cmSourceFile const*> objectSources;
   this->GeneratorTarget->GetObjectSources(objectSources, config);
   for(std::vector<cmSourceFile const*>::const_iterator
         si = objectSources.begin(); si != objectSources.end(); ++si)
     {
-    this->WriteObjectBuildStatement(*si);
+    this->WriteObjectBuildStatement(*si, !orderOnlyDeps.empty());
     }
   std::string def = this->GeneratorTarget->GetModuleDefinitionFile(config);
   if(!def.empty())
     {
-    this->ModuleDefinitionFile = this->ConvertToNinjaPath(def.c_str());
+    this->ModuleDefinitionFile = this->ConvertToNinjaPath(def);
     }
 
   this->GetBuildFileStream() << "\n";
@@ -569,7 +578,8 @@ cmNinjaTargetGenerator
 
 void
 cmNinjaTargetGenerator
-::WriteObjectBuildStatement(cmSourceFile const* source)
+::WriteObjectBuildStatement(
+  cmSourceFile const* source, bool writeOrderDependsTargetForTarget)
 {
   std::string comment;
   const std::string language = source->GetLanguage();
@@ -598,7 +608,10 @@ cmNinjaTargetGenerator
   }
 
   cmNinjaDeps orderOnlyDeps;
-  orderOnlyDeps.push_back(this->OrderDependsTargetForTarget());
+  if (writeOrderDependsTargetForTarget)
+    {
+    orderOnlyDeps.push_back(this->OrderDependsTargetForTarget());
+    }
 
   // If the source file is GENERATED and does not have a custom command
   // (either attached to this source file or another one), assume that one of
@@ -621,8 +634,12 @@ cmNinjaTargetGenerator
 
   std::string objectDir = this->Target->GetSupportDirectory();
   vars["OBJECT_DIR"] = this->GetLocalGenerator()->ConvertToOutputFormat(
-                         ConvertToNinjaPath(objectDir.c_str()),
+                         ConvertToNinjaPath(objectDir),
                          cmLocalGenerator::SHELL);
+  std::string objectFileDir = cmSystemTools::GetFilenamePath(objectFileName);
+  vars["OBJECT_FILE_DIR"] = this->GetLocalGenerator()->ConvertToOutputFormat(
+                              ConvertToNinjaPath(objectFileDir),
+                              cmLocalGenerator::SHELL);
 
   this->addPoolNinjaVariable("JOB_POOL_COMPILE", this->GetTarget(), vars);
 
@@ -639,7 +656,7 @@ cmNinjaTargetGenerator
     if (!cmSystemTools::FileIsFullPath(sourceFileName.c_str()))
       {
       escapedSourceFileName = cmSystemTools::CollapseFullPath(
-        escapedSourceFileName.c_str(),
+        escapedSourceFileName,
         this->GetGlobalGenerator()->GetCMakeInstance()->
           GetHomeOutputDirectory());
       }
@@ -651,6 +668,7 @@ cmNinjaTargetGenerator
     compileObjectVars.Source = escapedSourceFileName.c_str();
     compileObjectVars.Object = objectFileName.c_str();
     compileObjectVars.ObjectDir = objectDir.c_str();
+    compileObjectVars.ObjectFileDir = objectFileDir.c_str();
     compileObjectVars.Flags = vars["FLAGS"].c_str();
     compileObjectVars.Defines = vars["DEFINES"].c_str();
 
@@ -742,7 +760,7 @@ void
 cmNinjaTargetGenerator
 ::EnsureParentDirectoryExists(const std::string& path) const
 {
-  EnsureDirectoryExists(cmSystemTools::GetParentDirectory(path.c_str()));
+  EnsureDirectoryExists(cmSystemTools::GetParentDirectory(path));
 }
 
 
@@ -763,14 +781,14 @@ cmNinjaTargetGenerator::MacOSXContentGeneratorType::operator()(
   // Get the input file location.
   std::string input = source.GetFullPath();
   input =
-    this->Generator->GetLocalGenerator()->ConvertToNinjaPath(input.c_str());
+    this->Generator->GetLocalGenerator()->ConvertToNinjaPath(input);
 
   // Get the output file location.
   std::string output = macdir;
   output += "/";
   output += cmSystemTools::GetFilenameName(input);
   output =
-    this->Generator->GetLocalGenerator()->ConvertToNinjaPath(output.c_str());
+    this->Generator->GetLocalGenerator()->ConvertToNinjaPath(output);
 
   // Write a build statement to copy the content into the bundle.
   this->Generator->GetGlobalGenerator()->WriteMacOSXContentBuild(input,

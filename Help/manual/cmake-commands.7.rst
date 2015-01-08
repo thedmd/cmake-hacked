@@ -3,7 +3,7 @@
 cmake-commands(7)
 *****************
 
-.. only:: html or latex
+.. only:: html
 
    .. contents::
 
@@ -31,6 +31,7 @@ These commands may be used freely in CMake projects.
    /command/cmake_minimum_required
    /command/cmake_policy
    /command/configure_file
+   /command/continue
    /command/create_test_sourcelist
    /command/define_property
    /command/elseif
@@ -127,6 +128,8 @@ versions of CMake.  Do not use them in new code.
    /command/utility_source
    /command/variable_requires
    /command/write_file
+
+.. _`CTest Commands`:
 
 CTest Commands
 ==============

@@ -73,7 +73,7 @@ macro(SWIG_MODULE_INITIALIZE name language)
   set(SWIG_MODULE_${name}_SWIG_LANGUAGE_FLAG "${swig_lowercase_language}")
 
   set(SWIG_MODULE_${name}_REAL_NAME "${name}")
-  if (CMAKE_SWIG_FLAGS MATCHES "-noproxy")
+  if (";${CMAKE_SWIG_FLAGS};" MATCHES ";-noproxy;")
     set (SWIG_MODULE_${name}_NOPROXY TRUE)
   endif ()
   if("${SWIG_MODULE_${name}_LANGUAGE}" STREQUAL "UNKNOWN")
@@ -272,6 +272,8 @@ macro(SWIG_ADD_MODULE name language)
     if(WIN32 AND NOT CYGWIN)
       set_target_properties(${SWIG_MODULE_${name}_REAL_NAME} PROPERTIES SUFFIX ".pyd")
     endif()
+  elseif ("${swig_lowercase_language}" STREQUAL "r")
+    set_target_properties(${SWIG_MODULE_${name}_REAL_NAME} PROPERTIES PREFIX "")
   elseif ("${swig_lowercase_language}" STREQUAL "ruby")
     # In ruby you want:
     #      require 'LIBRARY'

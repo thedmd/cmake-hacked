@@ -225,8 +225,8 @@ bool cmCTestSubmitHandler::SubmitUsingFTP(const std::string& localprefix,
       std::string upload_as
         = url + "/" + remoteprefix + cmSystemTools::GetFilenameName(*file);
 
-      struct stat st;
-      if ( ::stat(local_file.c_str(), &st) )
+
+      if ( !cmSystemTools::FileExists(local_file.c_str()) )
         {
         cmCTestLog(this->CTest, ERROR_MESSAGE, "   Cannot find file: "
           << local_file << std::endl);
@@ -234,8 +234,9 @@ bool cmCTestSubmitHandler::SubmitUsingFTP(const std::string& localprefix,
         ::curl_global_cleanup();
         return false;
         }
+      unsigned long filelen = cmSystemTools::FileLength(local_file);
 
-      ftpfile = cmsys::SystemTools::Fopen(local_file.c_str(), "rb");
+      ftpfile = cmsys::SystemTools::Fopen(local_file, "rb");
       *this->LogFile << "\tUpload file: " << local_file << " to "
           << upload_as << std::endl;
       cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, "   Upload file: "
@@ -252,7 +253,7 @@ bool cmCTestSubmitHandler::SubmitUsingFTP(const std::string& localprefix,
 
       // and give the size of the upload (optional)
       ::curl_easy_setopt(curl, CURLOPT_INFILESIZE,
-        static_cast<long>(st.st_size));
+        static_cast<long>(filelen));
 
       // and give curl the buffer for errors
       ::curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, &error_buffer);
@@ -466,8 +467,7 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(const std::string& localprefix,
         upload_as += md5;
         }
 
-      struct stat st;
-      if ( ::stat(local_file.c_str(), &st) )
+      if( !cmSystemTools::FileExists(local_file.c_str()) )
         {
         cmCTestLog(this->CTest, ERROR_MESSAGE, "   Cannot find file: "
           << local_file << std::endl);
@@ -475,11 +475,12 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(const std::string& localprefix,
         ::curl_global_cleanup();
         return false;
         }
+      unsigned long filelen = cmSystemTools::FileLength(local_file);
 
-      ftpfile = cmsys::SystemTools::Fopen(local_file.c_str(), "rb");
+      ftpfile = cmsys::SystemTools::Fopen(local_file, "rb");
       cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, "   Upload file: "
         << local_file << " to "
-        << upload_as << " Size: " << st.st_size << std::endl);
+        << upload_as << " Size: " << filelen << std::endl);
 
       // specify target
       ::curl_easy_setopt(curl,CURLOPT_URL, upload_as.c_str());
@@ -489,7 +490,7 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(const std::string& localprefix,
 
       // and give the size of the upload (optional)
       ::curl_easy_setopt(curl, CURLOPT_INFILESIZE,
-        static_cast<long>(st.st_size));
+        static_cast<long>(filelen));
 
       // and give curl the buffer for errors
       ::curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, &error_buffer);
@@ -566,7 +567,7 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(const std::string& localprefix,
             << count << std::endl);
 
           ::fclose(ftpfile);
-          ftpfile = cmsys::SystemTools::Fopen(local_file.c_str(), "rb");
+          ftpfile = cmsys::SystemTools::Fopen(local_file, "rb");
           ::curl_easy_setopt(curl, CURLOPT_INFILE, ftpfile);
 
           chunk.clear();
@@ -930,13 +931,13 @@ bool cmCTestSubmitHandler::SubmitUsingCP(
     cmSystemTools::ConvertToUnixSlashes(lfname);
     lfname += "/" + *file;
     std::string rfname = destination + "/" + remoteprefix + *file;
-    cmSystemTools::CopyFileAlways(lfname.c_str(), rfname.c_str());
+    cmSystemTools::CopyFileAlways(lfname, rfname);
     cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, "   Copy file: "
         << lfname << " to "
         << rfname << std::endl);
     }
   std::string tagDoneFile = destination + "/" + remoteprefix + "DONE";
-  cmSystemTools::Touch(tagDoneFile.c_str(), true);
+  cmSystemTools::Touch(tagDoneFile, true);
   if ( problems )
     {
     return false;
@@ -1417,20 +1418,20 @@ int cmCTestSubmitHandler::ProcessHandler()
     // change to the build directory so that we can uses a relative path
     // on windows since scp dosn't support "c:" a drive in the path
     oldWorkingDirectory = cmSystemTools::GetCurrentWorkingDirectory();
-    cmSystemTools::ChangeDirectory(buildDirectory.c_str());
+    cmSystemTools::ChangeDirectory(buildDirectory);
 
     if ( !this->SubmitUsingSCP(
         this->CTest->GetCTestConfiguration("ScpCommand"),
         "Testing/"+this->CTest->GetCurrentTag(), files, prefix, url) )
       {
-      cmSystemTools::ChangeDirectory(oldWorkingDirectory.c_str());
+      cmSystemTools::ChangeDirectory(oldWorkingDirectory);
       cmCTestLog(this->CTest, ERROR_MESSAGE,
         "   Problems when submitting via SCP"
         << std::endl);
       ofs << "   Problems when submitting via SCP" << std::endl;
       return -1;
       }
-    cmSystemTools::ChangeDirectory(oldWorkingDirectory.c_str());
+    cmSystemTools::ChangeDirectory(oldWorkingDirectory);
     cmCTestLog(this->CTest, HANDLER_OUTPUT, "   Submission successful"
       << std::endl);
     ofs << "   Submission successful" << std::endl;
@@ -1446,7 +1447,7 @@ int cmCTestSubmitHandler::ProcessHandler()
     // on windows since scp dosn't support "c:" a drive in the path
     std::string
       oldWorkingDirectory = cmSystemTools::GetCurrentWorkingDirectory();
-    cmSystemTools::ChangeDirectory(buildDirectory.c_str());
+    cmSystemTools::ChangeDirectory(buildDirectory);
     cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, "   Change directory: "
                << buildDirectory << std::endl);
 
@@ -1456,14 +1457,14 @@ int cmCTestSubmitHandler::ProcessHandler()
            prefix,
            location) )
       {
-      cmSystemTools::ChangeDirectory(oldWorkingDirectory.c_str());
+      cmSystemTools::ChangeDirectory(oldWorkingDirectory);
       cmCTestLog(this->CTest, ERROR_MESSAGE,
         "   Problems when submitting via CP"
         << std::endl);
       ofs << "   Problems when submitting via cp" << std::endl;
       return -1;
       }
-    cmSystemTools::ChangeDirectory(oldWorkingDirectory.c_str());
+    cmSystemTools::ChangeDirectory(oldWorkingDirectory);
     cmCTestLog(this->CTest, HANDLER_OUTPUT, "   Submission successful"
       << std::endl);
     ofs << "   Submission successful" << std::endl;
@@ -1478,8 +1479,10 @@ int cmCTestSubmitHandler::ProcessHandler()
 //----------------------------------------------------------------------------
 std::string cmCTestSubmitHandler::GetSubmitResultsPrefix()
 {
+  std::string buildname = cmCTest::SafeBuildIdField(
+    this->CTest->GetCTestConfiguration("BuildName"));
   std::string name = this->CTest->GetCTestConfiguration("Site") +
-    "___" + this->CTest->GetCTestConfiguration("BuildName") +
+    "___" + buildname +
     "___" + this->CTest->GetCurrentTag() + "-" +
     this->CTest->GetTestModelString() + "___XML___";
   return name;

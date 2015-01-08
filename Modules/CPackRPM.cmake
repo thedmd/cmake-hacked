@@ -29,6 +29,7 @@
 # However as a handy reminder here comes the list of specific variables:
 #
 # .. variable:: CPACK_RPM_PACKAGE_SUMMARY
+#               CPACK_RPM_<component>_PACKAGE_SUMMARY
 #
 #  The RPM package summary.
 #
@@ -100,11 +101,13 @@
 #  * Default   : -
 #
 # .. variable:: CPACK_RPM_PACKAGE_DESCRIPTION
+#               CPACK_RPM_<component>_PACKAGE_DESCRIPTION
 #
 #  RPM package description.
 #
 #  * Mandatory : YES
-#  * Default : CPACK_PACKAGE_DESCRIPTION_FILE if set or "no package
+#  * Default : CPACK_COMPONENT_<compName>_DESCRIPTION (component based installers
+#    only) if set, CPACK_PACKAGE_DESCRIPTION_FILE if set or "no package
 #    description available"
 #
 # .. variable:: CPACK_RPM_COMPRESSION_TYPE
@@ -134,6 +137,56 @@
 #  The required package list of an RPM file could be printed with::
 #
 #   rpm -qp --requires file.rpm
+#
+# .. variable:: CPACK_RPM_PACKAGE_REQUIRES_PRE
+#
+#  RPM spec requires(pre) field.
+#
+#  * Mandatory : NO
+#  * Default   : -
+#
+#  May be used to set RPM preinstall dependencies (requires(pre)).  Note that you must enclose
+#  the complete requires string between quotes, for example::
+#
+#   set(CPACK_RPM_PACKAGE_REQUIRES_PRE "shadow-utils, initscripts")
+#
+# .. variable:: CPACK_RPM_PACKAGE_REQUIRES_POST
+#
+#  RPM spec requires(post) field.
+#
+#  * Mandatory : NO
+#  * Default   : -
+#
+#  May be used to set RPM postinstall dependencies (requires(post)).  Note that you must enclose
+#  the complete requires string between quotes, for example::
+#
+#   set(CPACK_RPM_PACKAGE_REQUIRES_POST "shadow-utils, initscripts")
+#
+#
+# .. variable:: CPACK_RPM_PACKAGE_REQUIRES_POSTUN
+#
+#  RPM spec requires(postun) field.
+#
+#  * Mandatory : NO
+#  * Default   : -
+#
+#  May be used to set RPM postuninstall dependencies (requires(postun)).  Note that you must enclose
+#  the complete requires string between quotes, for example::
+#
+#   set(CPACK_RPM_PACKAGE_REQUIRES_POSTUN "shadow-utils, initscripts")
+#
+#
+# .. variable:: CPACK_RPM_PACKAGE_REQUIRES_PREUN
+#
+#  RPM spec requires(preun) field.
+#
+#  * Mandatory : NO
+#  * Default   : -
+#
+#  May be used to set RPM preuninstall dependencies (requires(preun)).  Note that you must enclose
+#  the complete requires string between quotes, for example::
+#
+#   set(CPACK_RPM_PACKAGE_REQUIRES_PREUN "shadow-utils, initscripts")
 #
 # .. variable:: CPACK_RPM_PACKAGE_SUGGESTS
 #
@@ -384,7 +437,7 @@ if(CPACK_RPM_PACKAGE_DEBUG)
                     OUTPUT_VARIABLE _TMP_LSB_RELEASE_OUTPUT
                     ERROR_QUIET
                     OUTPUT_STRIP_TRAILING_WHITESPACE)
-    string(REPLACE "\n" ", "
+    string(REGEX REPLACE "\n" ", "
            LSB_RELEASE_OUTPUT
            ${_TMP_LSB_RELEASE_OUTPUT})
   else ()
@@ -397,7 +450,7 @@ endif()
 # to shut down warning about space in buildtree
 # some recent RPM version should support space in different places.
 # not checked [yet].
-if(CPACK_TOPLEVEL_DIRECTORY MATCHES " ")
+if(CPACK_TOPLEVEL_DIRECTORY MATCHES ".* .*")
   message(FATAL_ERROR "${RPMBUILD_EXECUTABLE} can't handle paths with spaces, use a build directory without spaces for building RPMs.")
 endif()
 
@@ -414,6 +467,7 @@ endif()
 # Are we packaging components ?
 if(CPACK_RPM_PACKAGE_COMPONENT)
   set(CPACK_RPM_PACKAGE_COMPONENT_PART_NAME "-${CPACK_RPM_PACKAGE_COMPONENT}")
+  string(TOUPPER ${CPACK_RPM_PACKAGE_COMPONENT} CPACK_RPM_PACKAGE_COMPONENT_UPPER)
 else()
   set(CPACK_RPM_PACKAGE_COMPONENT_PART_NAME "")
 endif()
@@ -430,12 +484,31 @@ set(WDIR "${CPACK_TOPLEVEL_DIRECTORY}/${CPACK_PACKAGE_FILE_NAME}${CPACK_RPM_PACK
 #
 
 # CPACK_RPM_PACKAGE_SUMMARY (mandatory)
+
+# CPACK_RPM_PACKAGE_SUMMARY_ is used only locally so that it can be unset each time before use otherwise
+# component packaging could leak variable content between components
+unset(CPACK_RPM_PACKAGE_SUMMARY_)
+if(CPACK_RPM_PACKAGE_SUMMARY)
+  set(CPACK_RPM_PACKAGE_SUMMARY_ ${CPACK_RPM_PACKAGE_SUMMARY})
+  unset(CPACK_RPM_PACKAGE_SUMMARY)
+endif()
+
+#Check for component summary first.
+#If not set, it will use regular package summary logic.
+if(CPACK_RPM_PACKAGE_COMPONENT)
+  if(CPACK_RPM_${CPACK_RPM_PACKAGE_COMPONENT}_PACKAGE_SUMMARY)
+    set(CPACK_RPM_PACKAGE_SUMMARY ${CPACK_RPM_${CPACK_RPM_PACKAGE_COMPONENT}_PACKAGE_SUMMARY})
+  endif()
+endif()
+
 if(NOT CPACK_RPM_PACKAGE_SUMMARY)
-  # if neither var is defined lets use the name as summary
-  if(NOT CPACK_PACKAGE_DESCRIPTION_SUMMARY)
-    string(TOLOWER "${CPACK_PACKAGE_NAME}" CPACK_RPM_PACKAGE_SUMMARY)
-  else()
+  if(CPACK_RPM_PACKAGE_SUMMARY_)
+    set(CPACK_RPM_PACKAGE_SUMMARY ${CPACK_RPM_PACKAGE_SUMMARY_})
+  elseif(CPACK_PACKAGE_DESCRIPTION_SUMMARY)
     set(CPACK_RPM_PACKAGE_SUMMARY ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
+  else()
+    # if neither var is defined lets use the name as summary
+    string(TOLOWER "${CPACK_PACKAGE_NAME}" CPACK_RPM_PACKAGE_SUMMARY)
   endif()
 endif()
 
@@ -508,12 +581,33 @@ endif()
 #     if it is defined
 #   - set to a default value
 #
-if (NOT CPACK_RPM_PACKAGE_DESCRIPTION)
-        if (CPACK_PACKAGE_DESCRIPTION_FILE)
-                file(READ ${CPACK_PACKAGE_DESCRIPTION_FILE} CPACK_RPM_PACKAGE_DESCRIPTION)
-        else ()
-                set(CPACK_RPM_PACKAGE_DESCRIPTION "no package description available")
-        endif ()
+
+# CPACK_RPM_PACKAGE_DESCRIPTION_ is used only locally so that it can be unset each time before use otherwise
+# component packaging could leak variable content between components
+unset(CPACK_RPM_PACKAGE_DESCRIPTION_)
+if(CPACK_RPM_PACKAGE_DESCRIPTION)
+  set(CPACK_RPM_PACKAGE_DESCRIPTION_ ${CPACK_RPM_PACKAGE_DESCRIPTION})
+  unset(CPACK_RPM_PACKAGE_DESCRIPTION)
+endif()
+
+#Check for a component description first.
+#If not set, it will use regular package description logic.
+if(CPACK_RPM_PACKAGE_COMPONENT)
+  if(CPACK_RPM_${CPACK_RPM_PACKAGE_COMPONENT}_PACKAGE_DESCRIPTION)
+    set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_RPM_${CPACK_RPM_PACKAGE_COMPONENT}_PACKAGE_DESCRIPTION})
+  elseif(CPACK_COMPONENT_${CPACK_RPM_PACKAGE_COMPONENT_UPPER}_DESCRIPTION)
+    set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_COMPONENT_${CPACK_RPM_PACKAGE_COMPONENT_UPPER}_DESCRIPTION})
+  endif()
+endif()
+
+if(NOT CPACK_RPM_PACKAGE_DESCRIPTION)
+  if(CPACK_RPM_PACKAGE_DESCRIPTION_)
+    set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_RPM_PACKAGE_DESCRIPTION_})
+  elseif(CPACK_PACKAGE_DESCRIPTION_FILE)
+    file(READ ${CPACK_PACKAGE_DESCRIPTION_FILE} CPACK_RPM_PACKAGE_DESCRIPTION)
+  else ()
+    set(CPACK_RPM_PACKAGE_DESCRIPTION "no package description available")
+  endif ()
 endif ()
 
 # CPACK_RPM_COMPRESSION_TYPE
@@ -556,7 +650,7 @@ endif()
 # There may be some COMPONENT specific variables as well
 # If component specific var is not provided we use the global one
 # for each component
-foreach(_RPM_SPEC_HEADER URL REQUIRES SUGGESTS PROVIDES OBSOLETES PREFIX CONFLICTS AUTOPROV AUTOREQ AUTOREQPROV)
+foreach(_RPM_SPEC_HEADER URL REQUIRES SUGGESTS PROVIDES OBSOLETES PREFIX CONFLICTS AUTOPROV AUTOREQ AUTOREQPROV REQUIRES_PRE REQUIRES_POST REQUIRES_PREUN REQUIRES_POSTUN)
     if(CPACK_RPM_PACKAGE_DEBUG)
       message("CPackRPM:Debug: processing ${_RPM_SPEC_HEADER}")
     endif()
@@ -584,24 +678,29 @@ foreach(_RPM_SPEC_HEADER URL REQUIRES SUGGESTS PROVIDES OBSOLETES PREFIX CONFLIC
         endif()
     endif()
 
+  # Do not forget to unset previously set header (from previous component)
+  unset(TMP_RPM_${_RPM_SPEC_HEADER})
   # Treat the RPM Spec keyword iff it has been properly defined
   if(DEFINED CPACK_RPM_PACKAGE_${_RPM_SPEC_HEADER}_TMP)
     # Transform NAME --> Name e.g. PROVIDES --> Provides
     # The Upper-case first letter and lowercase tail is the
     # appropriate value required in the final RPM spec file.
-    string(LENGTH ${_RPM_SPEC_HEADER} _PACKAGE_HEADER_STRLENGTH)
-    math(EXPR _PACKAGE_HEADER_STRLENGTH "${_PACKAGE_HEADER_STRLENGTH} - 1")
-    string(SUBSTRING ${_RPM_SPEC_HEADER} 1 ${_PACKAGE_HEADER_STRLENGTH} _PACKAGE_HEADER_TAIL)
+    string(SUBSTRING ${_RPM_SPEC_HEADER} 1 -1 _PACKAGE_HEADER_TAIL)
     string(TOLOWER "${_PACKAGE_HEADER_TAIL}" _PACKAGE_HEADER_TAIL)
     string(SUBSTRING ${_RPM_SPEC_HEADER} 0 1 _PACKAGE_HEADER_NAME)
     set(_PACKAGE_HEADER_NAME "${_PACKAGE_HEADER_NAME}${_PACKAGE_HEADER_TAIL}")
+    # The following keywords require parentheses around the "pre" or "post" suffix in the final RPM spec file.
+    set(SCRIPTS_REQUIREMENTS_LIST REQUIRES_PRE REQUIRES_POST REQUIRES_PREUN REQUIRES_POSTUN)
+    list(FIND SCRIPTS_REQUIREMENTS_LIST ${_RPM_SPEC_HEADER} IS_SCRIPTS_REQUIREMENT_FOUND)
+    if(NOT ${IS_SCRIPTS_REQUIREMENT_FOUND} EQUAL -1)
+      string(REPLACE "_" "(" _PACKAGE_HEADER_NAME "${_PACKAGE_HEADER_NAME}")
+      set(_PACKAGE_HEADER_NAME "${_PACKAGE_HEADER_NAME})")
+    endif()
     if(CPACK_RPM_PACKAGE_DEBUG)
       message("CPackRPM:Debug: User defined ${_PACKAGE_HEADER_NAME}:\n ${CPACK_RPM_PACKAGE_${_RPM_SPEC_HEADER}_TMP}")
     endif()
     set(TMP_RPM_${_RPM_SPEC_HEADER} "${_PACKAGE_HEADER_NAME}: ${CPACK_RPM_PACKAGE_${_RPM_SPEC_HEADER}_TMP}")
-  else()
-    # Do not forget to unset previously set header (from previous component)
-    unset(TMP_RPM_${_RPM_SPEC_HEADER})
+    unset(CPACK_RPM_PACKAGE_${_RPM_SPEC_HEADER}_TMP)
   endif()
 endforeach()
 
@@ -991,6 +1090,10 @@ Group:          \@CPACK_RPM_PACKAGE_GROUP\@
 Vendor:         \@CPACK_RPM_PACKAGE_VENDOR\@
 \@TMP_RPM_URL\@
 \@TMP_RPM_REQUIRES\@
+\@TMP_RPM_REQUIRES_PRE\@
+\@TMP_RPM_REQUIRES_POST\@
+\@TMP_RPM_REQUIRES_PREUN\@
+\@TMP_RPM_REQUIRES_POSTUN\@
 \@TMP_RPM_PROVIDES\@
 \@TMP_RPM_OBSOLETES\@
 \@TMP_RPM_CONFLICTS\@
@@ -1099,4 +1202,16 @@ else()
   if(ALIEN_EXECUTABLE)
     message(FATAL_ERROR "RPM packaging through alien not done (yet)")
   endif()
+endif()
+
+# reset variables from temporary variables
+if(CPACK_RPM_PACKAGE_SUMMARY_)
+  set(CPACK_RPM_PACKAGE_SUMMARY ${CPACK_RPM_PACKAGE_SUMMARY_})
+else()
+  unset(CPACK_RPM_PACKAGE_SUMMARY)
+endif()
+if(CPACK_RPM_PACKAGE_DESCRIPTION_)
+  set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_RPM_PACKAGE_DESCRIPTION_})
+else()
+  unset(CPACK_RPM_PACKAGE_DESCRIPTION)
 endif()

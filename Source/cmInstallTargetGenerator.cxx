@@ -24,8 +24,10 @@ cmInstallTargetGenerator
 ::cmInstallTargetGenerator(cmTarget& t, const char* dest, bool implib,
                            const char* file_permissions,
                            std::vector<std::string> const& configurations,
-                           const char* component, bool optional):
-  cmInstallGenerator(dest, configurations, component), Target(&t),
+                           const char* component,
+                           MessageLevel message,
+                           bool optional):
+  cmInstallGenerator(dest, configurations, component, message), Target(&t),
   ImportLibrary(implib), FilePermissions(file_permissions), Optional(optional)
 {
   this->ActionsPerConfig = true;
@@ -93,7 +95,7 @@ void cmInstallTargetGenerator::GenerateScriptForConfig(std::ostream& os,
     case cmTarget::INTERFACE_LIBRARY:
       // Not reachable. We never create a cmInstallTargetGenerator for
       // an INTERFACE_LIBRARY.
-      assert(!"INTERFACE_LIBRARY targets have no installable outputs.");
+      assert(0 && "INTERFACE_LIBRARY targets have no installable outputs.");
       break;
     case cmTarget::OBJECT_LIBRARY:
     case cmTarget::UTILITY:
@@ -209,6 +211,20 @@ void cmInstallTargetGenerator::GenerateScriptForConfig(std::ostream& os,
 
       // Tweaks apply to the binary inside the bundle.
       std::string to1 = toDir + targetNameReal;
+
+      filesFrom.push_back(from1);
+      filesTo.push_back(to1);
+      }
+    else if(this->Target->IsCFBundleOnApple())
+      {
+      // Install the whole app bundle directory.
+      type = cmInstallType_DIRECTORY;
+      literal_args += " USE_SOURCE_PERMISSIONS";
+
+      std::string targetNameBase = targetName.substr(0, targetName.find('/'));
+
+      std::string from1 = fromDirConfig + targetNameBase;
+      std::string to1 = toDir + targetName;
 
       filesFrom.push_back(from1);
       filesTo.push_back(to1);
@@ -661,46 +677,72 @@ cmInstallTargetGenerator
     return;
     }
 
-  if(this->Target->GetMakefile()->IsOn("CMAKE_PLATFORM_HAS_INSTALLNAME"))
+  cmMakefile* mf = this->Target->GetMakefile();
+
+  if(mf->IsOn("CMAKE_PLATFORM_HAS_INSTALLNAME"))
     {
     // If using install_name_tool, set up the rules to modify the rpaths.
     std::string installNameTool =
-      this->Target->GetMakefile()->
-      GetSafeDefinition("CMAKE_INSTALL_NAME_TOOL");
+      mf->GetSafeDefinition("CMAKE_INSTALL_NAME_TOOL");
 
     std::vector<std::string> oldRuntimeDirs, newRuntimeDirs;
     cli->GetRPath(oldRuntimeDirs, false);
     cli->GetRPath(newRuntimeDirs, true);
 
-    // Note: These paths are kept unique to avoid install_name_tool corruption.
-    std::set<std::string> runpaths;
-    for(std::vector<std::string>::const_iterator i = oldRuntimeDirs.begin();
-        i != oldRuntimeDirs.end(); ++i)
-      {
-      std::string runpath = this->Target->GetMakefile()->GetLocalGenerator()->
-        GetGlobalGenerator()->ExpandCFGIntDir(*i, config);
+    std::string darwin_major_version_s =
+      mf->GetSafeDefinition("DARWIN_MAJOR_VERSION");
 
-      if(runpaths.find(runpath) == runpaths.end())
-        {
-        runpaths.insert(runpath);
-        os << indent << "execute_process(COMMAND " << installNameTool << "\n";
-        os << indent << "  -delete_rpath \"" << runpath << "\"\n";
-        os << indent << "  \"" << toDestDirPath << "\")\n";
-        }
+    std::stringstream ss(darwin_major_version_s);
+    int darwin_major_version;
+    ss >> darwin_major_version;
+    if(!ss.fail() && darwin_major_version <= 9 &&
+       (!oldRuntimeDirs.empty() || !newRuntimeDirs.empty())
+      )
+      {
+      cmOStringStream msg;
+      msg << "WARNING: Target \"" << this->Target->GetName()
+        << "\" has runtime paths which cannot be changed during install.  "
+        << "To change runtime paths, OS X version 10.6 or newer is required.  "
+        << "Therefore, runtime paths will not be changed when installing.  "
+        << "CMAKE_BUILD_WITH_INSTALL_RPATH may be used to work around"
+           " this limitation.";
+      mf->IssueMessage(cmake::WARNING, msg.str());
       }
-
-    runpaths.clear();
-    for(std::vector<std::string>::const_iterator i = newRuntimeDirs.begin();
-        i != newRuntimeDirs.end(); ++i)
+    else
       {
-      std::string runpath = this->Target->GetMakefile()->GetLocalGenerator()->
-        GetGlobalGenerator()->ExpandCFGIntDir(*i, config);
-
-      if(runpaths.find(runpath) == runpaths.end())
+      // Note: These paths are kept unique to avoid
+      // install_name_tool corruption.
+      std::set<std::string> runpaths;
+      for(std::vector<std::string>::const_iterator i = oldRuntimeDirs.begin();
+          i != oldRuntimeDirs.end(); ++i)
         {
-        os << indent << "execute_process(COMMAND " << installNameTool << "\n";
-        os << indent << "  -add_rpath \"" << runpath << "\"\n";
-        os << indent << "  \"" << toDestDirPath << "\")\n";
+        std::string runpath =
+          mf->GetLocalGenerator()->
+          GetGlobalGenerator()->ExpandCFGIntDir(*i, config);
+
+        if(runpaths.find(runpath) == runpaths.end())
+          {
+          runpaths.insert(runpath);
+          os << indent << "execute_process(COMMAND " << installNameTool <<"\n";
+          os << indent << "  -delete_rpath \"" << runpath << "\"\n";
+          os << indent << "  \"" << toDestDirPath << "\")\n";
+          }
+        }
+
+      runpaths.clear();
+      for(std::vector<std::string>::const_iterator i = newRuntimeDirs.begin();
+          i != newRuntimeDirs.end(); ++i)
+        {
+        std::string runpath =
+          mf->GetLocalGenerator()->
+          GetGlobalGenerator()->ExpandCFGIntDir(*i, config);
+
+        if(runpaths.find(runpath) == runpaths.end())
+          {
+          os << indent << "execute_process(COMMAND " << installNameTool <<"\n";
+          os << indent << "  -add_rpath \"" << runpath << "\"\n";
+          os << indent << "  \"" << toDestDirPath << "\")\n";
+          }
         }
       }
     }

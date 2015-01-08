@@ -11,6 +11,9 @@
 ============================================================================*/
 
 #include "cmWIXFilesSourceWriter.h"
+#include "cmWIXAccessControlList.h"
+
+#include <cmInstalledFile.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -110,7 +113,9 @@ void cmWIXFilesSourceWriter::EmitUninstallShortcut(
 }
 
 std::string cmWIXFilesSourceWriter::EmitComponentCreateFolder(
-  std::string const& directoryId, std::string const& guid)
+  std::string const& directoryId,
+  std::string const& guid,
+  cmInstalledFile const* installedFile)
 {
   std::string componentId =
     std::string("CM_C_EMPTY_") + directoryId;
@@ -124,6 +129,12 @@ std::string cmWIXFilesSourceWriter::EmitComponentCreateFolder(
 
   BeginElement("CreateFolder");
 
+  if(installedFile)
+    {
+    cmWIXAccessControlList acl(Logger, *installedFile, *this);
+    acl.Apply();
+    }
+
   EndElement("CreateFolder");
   EndElement("Component");
   EndElement("DirectoryRef");
@@ -135,7 +146,8 @@ std::string cmWIXFilesSourceWriter::EmitComponentFile(
   std::string const& directoryId,
   std::string const& id,
   std::string const& filePath,
-  cmWIXPatch &patch)
+  cmWIXPatch &patch,
+  cmInstalledFile const* installedFile)
 {
   std::string componentId = std::string("CM_C") + id;
   std::string fileId = std::string("CM_F") + id;
@@ -146,6 +158,18 @@ std::string cmWIXFilesSourceWriter::EmitComponentFile(
   BeginElement("Component");
   AddAttribute("Id", componentId);
   AddAttribute("Guid", "*");
+
+  if(installedFile)
+    {
+    if(installedFile->GetPropertyAsBool("CPACK_NEVER_OVERWRITE"))
+      {
+      AddAttribute("NeverOverwrite", "yes");
+      }
+    if(installedFile->GetPropertyAsBool("CPACK_PERMANENT"))
+      {
+      AddAttribute("Permanent", "yes");
+      }
+    }
 
   BeginElement("File");
   AddAttribute("Id", fileId);
@@ -158,6 +182,12 @@ std::string cmWIXFilesSourceWriter::EmitComponentFile(
   if(!(fileMode & S_IWRITE))
     {
     AddAttribute("ReadOnly", "yes");
+    }
+
+  if(installedFile)
+    {
+    cmWIXAccessControlList acl(Logger, *installedFile, *this);
+    acl.Apply();
     }
 
   patch.ApplyFragment(fileId, *this);

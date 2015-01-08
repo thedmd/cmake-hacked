@@ -31,6 +31,28 @@ endif()
 # they might not if qt was not enabled for the build
 include("@QT_DIALOG_CPACK_OPTIONS_FILE@" OPTIONAL)
 
+if(CPACK_GENERATOR MATCHES "IFW")
+  # Installer configuration
+  set(CPACK_IFW_PACKAGE_TITLE "CMake Build Tool")
+  set(CPACK_IFW_PRODUCT_URL "http://www.cmake.org")
+  @_CPACK_IFW_PACKAGE_ICON@
+  set(CPACK_IFW_PACKAGE_WINDOW_ICON
+    "@CMake_SOURCE_DIR@/Source/QtDialog/CMakeSetup128.png")
+  # Package configuration group
+  set(CPACK_IFW_PACKAGE_GROUP CMake)
+  # Group configuration
+  set(CPACK_COMPONENT_GROUP_CMAKE_DISPLAY_NAME
+    "@CPACK_PACKAGE_NAME@")
+  set(CPACK_COMPONENT_GROUP_CMAKE_DESCRIPTION
+    "@CPACK_PACKAGE_DESCRIPTION_SUMMARY@")
+  # IFW group configuration
+  set(CPACK_IFW_COMPONENT_GROUP_CMAKE_VERSION
+    "@_CPACK_IFW_PACKAGE_VERSION@")
+  set(CPACK_IFW_COMPONENT_GROUP_CMAKE_LICENSES
+    "@CPACK_PACKAGE_NAME@ Copyright" "@CPACK_RESOURCE_FILE_LICENSE@")
+  @_CPACK_IFW_PACKAGE_SCRIPT@
+endif()
+
 if(CPACK_GENERATOR MATCHES "CygwinSource")
   # when packaging source make sure the .build directory is not included
     set(CPACK_SOURCE_IGNORE_FILES

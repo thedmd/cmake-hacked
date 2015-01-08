@@ -68,6 +68,12 @@ int cmCTestBuildAndTestHandler::RunCMake(std::string* outstring,
     generator += this->BuildGenerator;
     args.push_back(generator);
     }
+  if(!this->BuildGeneratorPlatform.empty())
+    {
+    std::string platform = "-A";
+    platform += this->BuildGeneratorPlatform;
+    args.push_back(platform);
+    }
   if(this->BuildGeneratorToolset.size())
     {
     std::string toolset = "-T";
@@ -103,7 +109,7 @@ int cmCTestBuildAndTestHandler::RunCMake(std::string* outstring,
     out << "Error: cmake execution failed\n";
     out << cmakeOutString << "\n";
     // return to the original directory
-    cmSystemTools::ChangeDirectory(cwd.c_str());
+    cmSystemTools::ChangeDirectory(cwd);
     if(outstring)
       {
       *outstring = out.str();
@@ -122,7 +128,7 @@ int cmCTestBuildAndTestHandler::RunCMake(std::string* outstring,
       out << "Error: cmake execution failed\n";
       out << cmakeOutString << "\n";
       // return to the original directory
-      cmSystemTools::ChangeDirectory(cwd.c_str());
+      cmSystemTools::ChangeDirectory(cwd);
       if(outstring)
         {
         *outstring = out.str();
@@ -235,17 +241,18 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
   std::string cwd = cmSystemTools::GetCurrentWorkingDirectory();
   out << "Internal cmake changing into directory: "
     << this->BinaryDir << std::endl;
-  if (!cmSystemTools::FileIsDirectory(this->BinaryDir.c_str()))
+  if (!cmSystemTools::FileIsDirectory(this->BinaryDir))
     {
     cmSystemTools::MakeDirectory(this->BinaryDir.c_str());
     }
-  cmSystemTools::ChangeDirectory(this->BinaryDir.c_str());
+  cmSystemTools::ChangeDirectory(this->BinaryDir);
 
   if(this->BuildNoCMake)
     {
     // Make the generator available for the Build call below.
     cm.SetGlobalGenerator(cm.CreateGlobalGenerator(
                             this->BuildGenerator));
+    cm.SetGeneratorPlatform(this->BuildGeneratorPlatform);
     cm.SetGeneratorToolset(this->BuildGeneratorToolset);
 
     // Load the cache to make CMAKE_MAKE_PROGRAM available.
@@ -301,7 +308,7 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
     int retVal = cm.GetGlobalGenerator()->Build(
       this->SourceDir, this->BinaryDir,
       this->BuildProject, *tarIt,
-      &output, this->BuildMakeProgram,
+      output, this->BuildMakeProgram,
       config,
       !this->BuildNoClean,
       false, remainingTime);
@@ -367,7 +374,7 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
       cmCTestLog(this->CTest, ERROR_MESSAGE, out.str());
       }
     // return to the original directory
-    cmSystemTools::ChangeDirectory(cwd.c_str());
+    cmSystemTools::ChangeDirectory(cwd);
     return 1;
     }
 
@@ -384,7 +391,7 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
   if(this->BuildRunDir.size())
     {
     out << "Run test in directory: " << this->BuildRunDir << "\n";
-    cmSystemTools::ChangeDirectory(this->BuildRunDir.c_str());
+    cmSystemTools::ChangeDirectory(this->BuildRunDir);
     }
   out << "Running test command: \"" << fullPath << "\"";
   for(size_t k=0; k < this->TestCommandArgs.size(); ++k)
@@ -446,9 +453,9 @@ int cmCTestBuildAndTestHandler::ProcessCommandLineArguments(
       // dir must exist before CollapseFullPath is called
       cmSystemTools::MakeDirectory(this->BinaryDir.c_str());
       this->BinaryDir
-        = cmSystemTools::CollapseFullPath(this->BinaryDir.c_str());
+        = cmSystemTools::CollapseFullPath(this->BinaryDir);
       this->SourceDir
-        = cmSystemTools::CollapseFullPath(this->SourceDir.c_str());
+        = cmSystemTools::CollapseFullPath(this->SourceDir);
       }
     else
       {
@@ -489,6 +496,12 @@ int cmCTestBuildAndTestHandler::ProcessCommandLineArguments(
     {
     idx++;
     this->BuildGenerator = allArgs[idx];
+    }
+  if(currentArg == "--build-generator-platform" &&
+     idx < allArgs.size() - 1)
+    {
+    idx++;
+    this->BuildGeneratorPlatform = allArgs[idx];
     }
   if(currentArg == "--build-generator-toolset" &&
      idx < allArgs.size() - 1)

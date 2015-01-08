@@ -92,6 +92,7 @@ cmLocalUnixMakefileGenerator3::cmLocalUnixMakefileGenerator3()
   this->SkipAssemblySourceRules = false;
   this->MakeCommandEscapeTargetTwice = false;
   this->BorlandMakeCurlyHack = false;
+  this->NoMultiOutputMultiDepRules = false;
 }
 
 //----------------------------------------------------------------------------
@@ -315,36 +316,43 @@ void cmLocalUnixMakefileGenerator3::WriteLocalMakefile()
 
     // Check whether preprocessing and assembly rules make sense.
     // They make sense only for C and C++ sources.
-    bool lang_is_c_or_cxx = false;
+    bool lang_has_preprocessor = false;
+    bool lang_has_assembly = false;
+
     for(std::vector<LocalObjectEntry>::const_iterator ei =
           lo->second.begin(); ei != lo->second.end(); ++ei)
       {
-      if(ei->Language == "C" || ei->Language == "CXX")
+      if(ei->Language == "C" ||
+         ei->Language == "CXX" ||
+         ei->Language == "Fortran")
         {
-        lang_is_c_or_cxx = true;
+        // Right now, C, C++ and Fortran have both a preprocessor and the
+        // ability to generate assembly code
+        lang_has_preprocessor = true;
+        lang_has_assembly = true;
         break;
         }
       }
 
     // Add convenience rules for preprocessed and assembly files.
-    if(lang_is_c_or_cxx && (do_preprocess_rules || do_assembly_rules))
+    if(lang_has_preprocessor && do_preprocess_rules)
       {
       std::string::size_type dot_pos = lo->first.rfind(".");
       std::string base = lo->first.substr(0, dot_pos);
-      if(do_preprocess_rules)
-        {
-        this->WriteObjectConvenienceRule(
-          ruleFileStream, "target to preprocess a source file",
-          (base + ".i").c_str(), lo->second);
-          lo->second.HasPreprocessRule = true;
-        }
-      if(do_assembly_rules)
-        {
-        this->WriteObjectConvenienceRule(
-          ruleFileStream, "target to generate assembly for a file",
-          (base + ".s").c_str(), lo->second);
-          lo->second.HasAssembleRule = true;
-        }
+      this->WriteObjectConvenienceRule(
+        ruleFileStream, "target to preprocess a source file",
+       (base + ".i").c_str(), lo->second);
+      lo->second.HasPreprocessRule = true;
+      }
+
+    if(lang_has_assembly && do_assembly_rules)
+      {
+      std::string::size_type dot_pos = lo->first.rfind(".");
+      std::string base = lo->first.substr(0, dot_pos);
+      this->WriteObjectConvenienceRule(
+       ruleFileStream, "target to generate assembly for a file",
+       (base + ".s").c_str(), lo->second);
+      lo->second.HasAssembleRule = true;
       }
     }
 
@@ -611,6 +619,30 @@ cmLocalUnixMakefileGenerator3
                          comment);
     return;
     }
+  std::vector<std::string> outputs(1, target);
+  this->WriteMakeRule(os, comment,
+                      outputs, depends, commands,
+                      symbolic, in_help);
+}
+
+//----------------------------------------------------------------------------
+void
+cmLocalUnixMakefileGenerator3
+::WriteMakeRule(std::ostream& os,
+                const char* comment,
+                const std::vector<std::string>& outputs,
+                const std::vector<std::string>& depends,
+                const std::vector<std::string>& commands,
+                bool symbolic,
+                bool in_help)
+{
+  // Make sure there is an output.
+  if(outputs.empty())
+    {
+    cmSystemTools::Error("No outputs for WriteMakeRule! called with comment: ",
+                         comment);
+    return;
+    }
 
   std::string replace;
 
@@ -629,8 +661,18 @@ cmLocalUnixMakefileGenerator3
     }
 
   // Construct the left hand side of the rule.
-  replace = target;
-  std::string tgt = this->Convert(replace,HOME_OUTPUT,MAKEFILE);
+  std::string tgt;
+  {
+  const char* sep = "";
+  for (std::vector<std::string>::const_iterator i = outputs.begin();
+       i != outputs.end(); ++i)
+    {
+    tgt += sep;
+    tgt += this->Convert(*i,HOME_OUTPUT,MAKERULE);
+    sep = " ";
+    }
+  }
+
   const char* space = "";
   if(tgt.size() == 1)
     {
@@ -655,6 +697,19 @@ cmLocalUnixMakefileGenerator3
     // No dependencies.  The commands will always run.
     os << cmMakeSafe(tgt) << space << ":\n";
     }
+  else if(this->NoMultiOutputMultiDepRules && outputs.size() >= 2)
+    {
+    // Borland make does not understand multiple dependency rules when
+    // there are multiple outputs, so write them all on one line.
+    os << cmMakeSafe(tgt) << space << ":";
+    for(std::vector<std::string>::const_iterator dep = depends.begin();
+        dep != depends.end(); ++dep)
+      {
+      replace = this->Convert(*dep, HOME_OUTPUT, MAKERULE);
+      os << " " << cmMakeSafe(replace);
+      }
+    os << "\n";
+    }
   else
     {
     // Split dependencies into multiple rule lines.  This allows for
@@ -663,7 +718,7 @@ cmLocalUnixMakefileGenerator3
         dep != depends.end(); ++dep)
       {
       replace = *dep;
-      replace = this->Convert(replace,HOME_OUTPUT,MAKEFILE);
+      replace = this->Convert(replace,HOME_OUTPUT,MAKERULE);
       os << cmMakeSafe(tgt) << space << ": " << cmMakeSafe(replace) << "\n";
       }
     }
@@ -683,7 +738,11 @@ cmLocalUnixMakefileGenerator3
   // Add the output to the local help if requested.
   if(in_help)
     {
-    this->LocalHelp.push_back(target);
+    for (std::vector<std::string>::const_iterator i = outputs.begin();
+         i != outputs.end(); ++i)
+      {
+      this->LocalHelp.push_back(*i);
+      }
     }
 }
 
@@ -700,7 +759,7 @@ cmLocalUnixMakefileGenerator3
     // name.  This is needed to avoid funny quoting problems on
     // lines with shell redirection operators.
     std::string scmd;
-    if(cmSystemTools::GetShortPath(cmd.c_str(), scmd))
+    if(cmSystemTools::GetShortPath(cmd, scmd))
       {
       return this->Convert(scmd, NONE, SHELL);
       }
@@ -1702,6 +1761,8 @@ cmLocalUnixMakefileGenerator3
 //----------------------------------------------------------------------------
 void cmLocalUnixMakefileGenerator3::CheckMultipleOutputs(bool verbose)
 {
+  // Nothing populates multiple output pairs anymore, but we need to
+  // honor it when working in a build tree generated by an older CMake.
   cmMakefile* mf = this->Makefile;
 
   // Get the string listing the multiple output pairs.
@@ -1733,7 +1794,7 @@ void cmLocalUnixMakefileGenerator3::CheckMultipleOutputs(bool verbose)
             << depender << "\" does not exist." << std::endl;
         cmSystemTools::Stdout(msg.str().c_str());
         }
-      cmSystemTools::RemoveFile(dependee.c_str());
+      cmSystemTools::RemoveFile(dependee);
       }
     }
 }
@@ -1988,7 +2049,7 @@ void cmLocalUnixMakefileGenerator3::ClearDependencies(cmMakefile* mf,
     // Remove the internal dependency check file to force
     // regeneration.
     std::string internalDependFile = dir + "/depend.internal";
-    cmSystemTools::RemoveFile(internalDependFile.c_str());
+    cmSystemTools::RemoveFile(internalDependFile);
     }
 }
 

@@ -183,8 +183,8 @@ int cmCTestScriptHandler::ProcessHandler()
   for (size_t i=0; i <  this->ConfigurationScripts.size(); ++i)
     {
     // for each script run it
-    res += this->RunConfigurationScript
-      (cmSystemTools::CollapseFullPath(this->ConfigurationScripts[i].c_str()),
+    res |= this->RunConfigurationScript
+      (cmSystemTools::CollapseFullPath(this->ConfigurationScripts[i]),
        this->ScriptProcessScope[i]);
     }
   if ( res )
@@ -317,6 +317,15 @@ int cmCTestScriptHandler::ExecuteScript(const std::string& total_script_arg)
   return retVal;
 }
 
+static void ctestScriptProgressCallback(const char *m, float, void* cd)
+{
+  cmCTest* ctest = static_cast<cmCTest*>(cd);
+  if(m && *m)
+    {
+    cmCTestLog(ctest, HANDLER_OUTPUT, "-- " << m << std::endl);
+    }
+}
+
 void cmCTestScriptHandler::CreateCMake()
 {
   // create a cmake instance to read the configuration script
@@ -333,6 +342,8 @@ void cmCTestScriptHandler::CreateCMake()
 
   this->LocalGenerator = this->GlobalGenerator->CreateLocalGenerator();
   this->Makefile = this->LocalGenerator->GetMakefile();
+
+  this->CMake->SetProgressCallback(ctestScriptProgressCallback, this->CTest);
 
   // Set CMAKE_CURRENT_SOURCE_DIR and CMAKE_CURRENT_BINARY_DIR.
   // Also, some commands need Makefile->GetCurrentDirectory().
@@ -471,8 +482,8 @@ int cmCTestScriptHandler::ExtractVariables()
     = this->Makefile->GetSafeDefinition("CTEST_BINARY_DIRECTORY");
 
   // add in translations for src and bin
-  cmSystemTools::AddKeepPath(this->SourceDir.c_str());
-  cmSystemTools::AddKeepPath(this->BinaryDir.c_str());
+  cmSystemTools::AddKeepPath(this->SourceDir);
+  cmSystemTools::AddKeepPath(this->BinaryDir);
 
   this->CTestCmd
     = this->Makefile->GetSafeDefinition("CTEST_COMMAND");
@@ -732,11 +743,11 @@ int cmCTestScriptHandler::BackupDirectories()
     // if for some reason those directories exist then first delete them
     if (cmSystemTools::FileExists(this->BackupSourceDir.c_str()))
       {
-      cmSystemTools::RemoveADirectory(this->BackupSourceDir.c_str());
+      cmSystemTools::RemoveADirectory(this->BackupSourceDir);
       }
     if (cmSystemTools::FileExists(this->BackupBinaryDir.c_str()))
       {
-      cmSystemTools::RemoveADirectory(this->BackupBinaryDir.c_str());
+      cmSystemTools::RemoveADirectory(this->BackupBinaryDir);
       }
 
     // first rename the src and binary directories
@@ -980,8 +991,8 @@ int cmCTestScriptHandler::RunConfigurationDashboard()
   // if all was succesful, delete the backup dirs to free up disk space
   if (this->Backup)
     {
-    cmSystemTools::RemoveADirectory(this->BackupSourceDir.c_str());
-    cmSystemTools::RemoveADirectory(this->BackupBinaryDir.c_str());
+    cmSystemTools::RemoveADirectory(this->BackupSourceDir);
+    cmSystemTools::RemoveADirectory(this->BackupBinaryDir);
     }
 
   return 0;
@@ -1022,11 +1033,11 @@ void cmCTestScriptHandler::RestoreBackupDirectories()
     // if for some reason those directories exist then first delete them
     if (cmSystemTools::FileExists(this->SourceDir.c_str()))
       {
-      cmSystemTools::RemoveADirectory(this->SourceDir.c_str());
+      cmSystemTools::RemoveADirectory(this->SourceDir);
       }
     if (cmSystemTools::FileExists(this->BinaryDir.c_str()))
       {
-      cmSystemTools::RemoveADirectory(this->BinaryDir.c_str());
+      cmSystemTools::RemoveADirectory(this->BinaryDir);
       }
     // rename the src and binary directories
     rename(this->BackupSourceDir.c_str(), this->SourceDir.c_str());
@@ -1089,7 +1100,7 @@ bool cmCTestScriptHandler::TryToRemoveBinaryDirectoryOnce(
   const std::string& directoryPath)
 {
   cmsys::Directory directory;
-  directory.Load(directoryPath.c_str());
+  directory.Load(directoryPath);
 
   for(unsigned long i = 0; i < directory.GetNumberOfFiles(); ++i)
     {
@@ -1102,26 +1113,26 @@ bool cmCTestScriptHandler::TryToRemoveBinaryDirectoryOnce(
 
     std::string fullPath = directoryPath + std::string("/") + path;
 
-    bool isDirectory = cmSystemTools::FileIsDirectory(fullPath.c_str()) &&
-      !cmSystemTools::FileIsSymlink(fullPath.c_str());
+    bool isDirectory = cmSystemTools::FileIsDirectory(fullPath) &&
+      !cmSystemTools::FileIsSymlink(fullPath);
 
     if(isDirectory)
       {
-      if(!cmSystemTools::RemoveADirectory(fullPath.c_str()))
+      if(!cmSystemTools::RemoveADirectory(fullPath))
         {
         return false;
         }
       }
     else
       {
-      if(!cmSystemTools::RemoveFile(fullPath.c_str()))
+      if(!cmSystemTools::RemoveFile(fullPath))
         {
         return false;
         }
       }
   }
 
-  return cmSystemTools::RemoveADirectory(directoryPath.c_str());
+  return cmSystemTools::RemoveADirectory(directoryPath);
 }
 
 //-------------------------------------------------------------------------

@@ -56,13 +56,11 @@ SET(CMAKE_REQUIRED_LIBRARIES)
 SET(CMAKE_REQUIRED_FLAGS)
 
 # Disable warnings to avoid changing 3rd party code.
-IF("${CMAKE_C_COMPILER_ID}" MATCHES
+IF(CMAKE_C_COMPILER_ID MATCHES
     "^(GNU|Clang|AppleClang|XL|VisualAge|SunPro|MIPSpro|HP|Intel)$")
   SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w")
-ELSEIF("${CMAKE_C_COMPILER_ID}" MATCHES "^(PathScale)$")
+ELSEIF(CMAKE_C_COMPILER_ID STREQUAL "PathScale")
   SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -woffall")
-ELSEIF(BORLAND)
-  SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w-")
 ENDIF()
 
 # Enable CTest/CDash support
@@ -275,7 +273,6 @@ IF(BZIP2_FOUND)
 ENDIF(BZIP2_FOUND)
 MARK_AS_ADVANCED(CLEAR BZIP2_INCLUDE_DIR)
 MARK_AS_ADVANCED(CLEAR BZIP2_LIBRARIES)
-IF(0) # CMake does not need LZMA or LZO2 support in libarchive
 #
 # Find LZMA
 #
@@ -291,15 +288,19 @@ IF(LZMA_FOUND)
   SET(HAVE_LZMA_H 1)
   INCLUDE_DIRECTORIES(${LZMA_INCLUDE_DIR})
   LIST(APPEND ADDITIONAL_LIBS ${LZMA_LIBRARIES})
-  # Test if a macro is needed for the library.
-  TRY_MACRO_FOR_LIBRARY(
-    "${LZMA_INCLUDE_DIR}" "${LZMA_LIBRARIES}"
-    COMPILES
-    "#include <lzma.h>\nint main() {return (int)lzma_version_number(); }"
-    "WITHOUT_LZMA_API_STATIC;LZMA_API_STATIC")
-  IF(NOT WITHOUT_LZMA_API_STATIC AND LZMA_API_STATIC)
+  IF(CMAKE_USE_SYSTEM_LIBLZMA)
+    # Test if a macro is needed for the library.
+    TRY_MACRO_FOR_LIBRARY(
+      "${LZMA_INCLUDE_DIR}" "${LZMA_LIBRARIES}"
+      COMPILES
+      "#include <lzma.h>\nint main() {return (int)lzma_version_number(); }"
+      "WITHOUT_LZMA_API_STATIC;LZMA_API_STATIC")
+    IF(NOT WITHOUT_LZMA_API_STATIC AND LZMA_API_STATIC)
+      ADD_DEFINITIONS(-DLZMA_API_STATIC)
+    ENDIF(NOT WITHOUT_LZMA_API_STATIC AND LZMA_API_STATIC)
+  ELSE()
     ADD_DEFINITIONS(-DLZMA_API_STATIC)
-  ENDIF(NOT WITHOUT_LZMA_API_STATIC AND LZMA_API_STATIC)
+  ENDIF()
 ELSEIF(LZMADEC_FOUND)
   SET(HAVE_LIBLZMADEC 1)
   SET(HAVE_LZMADEC_H 1)
@@ -308,6 +309,7 @@ ELSEIF(LZMADEC_FOUND)
 ELSE(LZMA_FOUND)
 # LZMA not found and will not be used.
 ENDIF(LZMA_FOUND)
+IF(0) # CMake does not need LZO2 support in libarchive
 #
 # Find LZO2
 #
@@ -662,14 +664,14 @@ ENDMACRO(CHECK_CRYPTO_WIN CRYPTO_LIST)
 MACRO(CHECK_ICONV LIB TRY_ICONV_CONST)
   IF(NOT HAVE_ICONV)
     CMAKE_PUSH_CHECK_STATE()	# Save the state of the variables
-    IF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$")
+    IF (CMAKE_C_COMPILER_ID STREQUAL "GNU")
       #
       # During checking iconv proto type, we should use -Werror to avoid the
       # success of iconv detection with a warnig which success is a miss
       # detection. So this needs for all build mode(even it's a release mode).
       #
       SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -Werror")
-    ENDIF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$")
+    ENDIF (CMAKE_C_COMPILER_ID STREQUAL "GNU")
     IF (MSVC)
       # NOTE: /WX option is the same as gcc's -Werror option.
       SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} /WX")
@@ -836,14 +838,14 @@ ENDIF()
 # Check functions
 #
 CMAKE_PUSH_CHECK_STATE()	# Save the state of the variables
-IF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$")
+IF (CMAKE_C_COMPILER_ID STREQUAL "GNU")
   #
   # During checking functions, we should use -fno-builtin to avoid the
   # failure of function detection which failure is an error "conflicting
   # types for built-in function" caused by using -Werror option.
   #
   SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -fno-builtin")
-ENDIF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$")
+ENDIF ()
 CHECK_SYMBOL_EXISTS(_CrtSetReportMode "crtdbg.h" HAVE__CrtSetReportMode)
 CHECK_FUNCTION_EXISTS_GLIBC(chflags HAVE_CHFLAGS)
 CHECK_FUNCTION_EXISTS_GLIBC(chown HAVE_CHOWN)

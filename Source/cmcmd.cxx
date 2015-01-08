@@ -61,6 +61,8 @@ void CMakeCommandUsage(const char* program)
     << "  echo [string]...          - displays arguments as text\n"
     << "  echo_append [string]...   - displays arguments as text but no new "
        "line\n"
+    << "  env [--unset=NAME]... [NAME=VALUE]... COMMAND [ARG]...\n"
+    << "                            - run command in a modified environment\n"
     << "  environment               - display the current environment\n"
     << "  make_directory dir        - create a directory\n"
     << "  md5sum file1 [...]        - compute md5sum of files\n"
@@ -126,7 +128,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
     // Copy directory content
     if (args[1] == "copy_directory" && args.size() == 4)
       {
-      if(!cmSystemTools::CopyADirectory(args[2].c_str(), args[3].c_str()))
+      if(!cmSystemTools::CopyADirectory(args[2], args[3]))
         {
         std::cerr << "Error copying directory from \""
                   << args[2] << "\" to \"" << args[3]
@@ -153,7 +155,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
     // Compare files
     if (args[1] == "compare_files" && args.size() == 4)
       {
-      if(cmSystemTools::FilesDiffer(args[2].c_str(), args[3].c_str()))
+      if(cmSystemTools::FilesDiffer(args[2], args[3]))
         {
         std::cerr << "Files \""
                   << args[2] << "\" to \"" << args[3]
@@ -190,6 +192,55 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
       return 0;
       }
 
+    else if (args[1] == "env" )
+      {
+      std::vector<std::string>::const_iterator ai = args.begin() + 2;
+      std::vector<std::string>::const_iterator ae = args.end();
+      for(; ai != ae; ++ai)
+        {
+        std::string const& a = *ai;
+        if(cmHasLiteralPrefix(a, "--unset="))
+          {
+          // Unset environment variable.
+          cmSystemTools::UnPutEnv(a.c_str() + 8);
+          }
+        else if(!a.empty() && a[0] == '-')
+          {
+          // Environment variable and command names cannot start in '-',
+          // so this must be an unknown option.
+          std::cerr << "cmake -E env: unknown option '" << a << "'"
+                    << std::endl;
+          return 1;
+          }
+        else if(a.find("=") != a.npos)
+          {
+          // Set environment variable.
+          cmSystemTools::PutEnv(a);
+          }
+        else
+          {
+          // This is the beginning of the command.
+          break;
+          }
+        }
+
+      if(ai == ae)
+        {
+        std::cerr << "cmake -E env: no command given" << std::endl;
+        return 1;
+        }
+
+      // Execute command from remaining arguments.
+      std::vector<std::string> cmd(ai, ae);
+      int retval;
+      if(cmSystemTools::RunSingleCommand(
+           cmd, 0, &retval, NULL, cmSystemTools::OUTPUT_PASSTHROUGH))
+        {
+        return retval;
+        }
+      return 1;
+      }
+
 #if defined(CMAKE_BUILD_WITH_CMAKE)
     // Command to create a symbolic link.  Fails on platforms not
     // supporting them.
@@ -218,8 +269,8 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
 
     else if (args[1] == "remove_directory" && args.size() == 3)
       {
-      if(cmSystemTools::FileIsDirectory(args[2].c_str()) &&
-         !cmSystemTools::RemoveADirectory(args[2].c_str()))
+      if(cmSystemTools::FileIsDirectory(args[2]) &&
+         !cmSystemTools::RemoveADirectory(args[2]))
         {
         std::cerr << "Error removing directory \"" << args[2]
                   << "\".\n";
@@ -242,7 +293,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
           {
           // Complain if the file could not be removed, still exists,
           // and the -f option was not given.
-          if(!cmSystemTools::RemoveFile(args[cc].c_str()) && !force &&
+          if(!cmSystemTools::RemoveFile(args[cc]) && !force &&
              cmSystemTools::FileExists(args[cc].c_str()))
             {
             return 1;
@@ -258,7 +309,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
         {
         // Complain if the file could not be removed, still exists,
         // and the -f option was not given.
-        if(!cmSystemTools::Touch(args[cc].c_str(), true))
+        if(!cmSystemTools::Touch(args[cc], true))
           {
           return 1;
           }
@@ -272,7 +323,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
         {
         // Complain if the file could not be removed, still exists,
         // and the -f option was not given.
-        if(!cmSystemTools::Touch(args[cc].c_str(), false))
+        if(!cmSystemTools::Touch(args[cc], false))
           {
           return 1;
           }
@@ -402,10 +453,10 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
       // basically remove the directory
       std::string dirName = args[2];
       dirName += "/Progress";
-      cmSystemTools::RemoveADirectory(dirName.c_str());
+      cmSystemTools::RemoveADirectory(dirName);
 
       // is the last argument a filename that exists?
-      FILE *countFile = cmsys::SystemTools::Fopen(args[3].c_str(),"r");
+      FILE *countFile = cmsys::SystemTools::Fopen(args[3],"r");
       int count;
       if (countFile)
         {
@@ -425,7 +476,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
         // write the count into the directory
         std::string fName = dirName;
         fName += "/count.txt";
-        FILE *progFile = cmsys::SystemTools::Fopen(fName.c_str(),"w");
+        FILE *progFile = cmsys::SystemTools::Fopen(fName,"w");
         if (progFile)
           {
           fprintf(progFile,"%i\n",count);
@@ -446,7 +497,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
       // read the count
       fName = dirName;
       fName += "/count.txt";
-      progFile = cmsys::SystemTools::Fopen(fName.c_str(),"r");
+      progFile = cmsys::SystemTools::Fopen(fName,"r");
       int count = 0;
       if (!progFile)
         {
@@ -466,7 +517,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
         fName = dirName;
         fName += "/";
         fName += args[i];
-        progFile = cmsys::SystemTools::Fopen(fName.c_str(),"w");
+        progFile = cmsys::SystemTools::Fopen(fName,"w");
         if (progFile)
           {
           fprintf(progFile,"empty");
@@ -474,7 +525,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
           }
         }
       int fileNum = static_cast<int>
-        (cmsys::Directory::GetNumberOfFilesInDirectory(dirName.c_str()));
+        (cmsys::Directory::GetNumberOfFilesInDirectory(dirName));
       if (count > 0)
         {
         // print the progress
@@ -498,7 +549,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
           "' because existing path cannot be removed: " << emsg << "\n";
         return 1;
         }
-      if(!cmSystemTools::CreateSymlink(args[2].c_str(), args[3].c_str()))
+      if(!cmSystemTools::CreateSymlink(args[2], args[3]))
         {
         std::string emsg = cmSystemTools::GetLastSystemError();
         std::cerr <<
@@ -609,10 +660,10 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
 
       // Create a local generator configured for the directory in
       // which dependencies will be scanned.
-      homeDir = cmSystemTools::CollapseFullPath(homeDir.c_str());
-      startDir = cmSystemTools::CollapseFullPath(startDir.c_str());
-      homeOutDir = cmSystemTools::CollapseFullPath(homeOutDir.c_str());
-      startOutDir = cmSystemTools::CollapseFullPath(startOutDir.c_str());
+      homeDir = cmSystemTools::CollapseFullPath(homeDir);
+      startDir = cmSystemTools::CollapseFullPath(startDir);
+      homeOutDir = cmSystemTools::CollapseFullPath(homeOutDir);
+      startOutDir = cmSystemTools::CollapseFullPath(startOutDir);
       cm.SetHomeDirectory(homeDir);
       cm.SetStartDirectory(startDir);
       cm.SetHomeOutputDirectory(homeOutDir);
@@ -834,15 +885,15 @@ int cmcmd::SymlinkExecutable(std::vector<std::string>& args)
 bool cmcmd::SymlinkInternal(std::string const& file, std::string const& link)
 {
   if(cmSystemTools::FileExists(link.c_str()) ||
-     cmSystemTools::FileIsSymlink(link.c_str()))
+     cmSystemTools::FileIsSymlink(link))
     {
-    cmSystemTools::RemoveFile(link.c_str());
+    cmSystemTools::RemoveFile(link);
     }
 #if defined(_WIN32) && !defined(__CYGWIN__)
   return cmSystemTools::CopyFileAlways(file.c_str(), link.c_str());
 #else
   std::string linktext = cmSystemTools::GetFilenameName(file);
-  return cmSystemTools::CreateSymlink(linktext.c_str(), link.c_str());
+  return cmSystemTools::CreateSymlink(linktext, link);
 #endif
 }
 
@@ -1267,7 +1318,7 @@ int cmcmd::VisualStudioLinkIncremental(std::vector<std::string>& args,
     }
   std::string manifestFile = targetName;
   manifestFile += ".embed.manifest";
-  std::string fullPath= cmSystemTools::CollapseFullPath(manifestFile.c_str());
+  std::string fullPath= cmSystemTools::CollapseFullPath(manifestFile);
   fout << type << " /* CREATEPROCESS_MANIFEST_RESOURCE_ID "
     "*/ 24 /* RT_MANIFEST */ " << "\"" << fullPath << "\"";
   fout.close();

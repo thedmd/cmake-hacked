@@ -11,7 +11,7 @@ get_property(c_known_features GLOBAL PROPERTY CMAKE_C_KNOWN_FEATURES)
 write_compiler_detection_header(
   FILE "${CMAKE_CURRENT_BINARY_DIR}/test_compiler_detection.h"
   PREFIX TEST
-  COMPILERS GNU Clang
+  COMPILERS GNU Clang AppleClang
   VERSION 3.1
   PROLOG "// something"
   EPILOG "// more"
@@ -35,6 +35,10 @@ if (NOT CMAKE_CXX_COMPILE_FEATURES AND NOT CMAKE_C_COMPILE_FEATURES)
   return()
 endif()
 
+string(REGEX REPLACE "^([0-9]+)\\.[0-9]+\\.[0-9]+.*" "\\1" COMPILER_VERSION_MAJOR "${CMAKE_CXX_COMPILER_VERSION}")
+string(REGEX REPLACE "^[0-9]+\\.([0-9]+)\\.[0-9]+.*" "\\1" COMPILER_VERSION_MINOR "${CMAKE_CXX_COMPILER_VERSION}")
+string(REGEX REPLACE "^[0-9]+\\.[0-9]+\\.([0-9]+).*" "\\1" COMPILER_VERSION_PATCH "${CMAKE_CXX_COMPILER_VERSION}")
+
 macro(set_defines target true_defs false_defs)
   set(defines)
   foreach(def ${true_defs})
@@ -46,19 +50,47 @@ macro(set_defines target true_defs false_defs)
   target_compile_definitions(${target}
     PRIVATE
       ${defines}
+      EXPECTED_COMPILER_VERSION_MAJOR=${COMPILER_VERSION_MAJOR}
+      EXPECTED_COMPILER_VERSION_MINOR=${COMPILER_VERSION_MINOR}
+      EXPECTED_COMPILER_VERSION_PATCH=${COMPILER_VERSION_PATCH}
   )
 endmacro()
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL GNU
-    OR CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+    OR CMAKE_CXX_COMPILER_ID STREQUAL Clang
+    OR CMAKE_CXX_COMPILER_ID STREQUAL AppleClang)
   # False for C++98 mode.
   list(APPEND false_defs EXPECTED_COMPILER_CXX_DELEGATING_CONSTRUCTORS)
   list(APPEND false_defs EXPECTED_COMPILER_CXX_VARIADIC_TEMPLATES)
 endif()
 
+if (CMAKE_C_COMPILER_ID STREQUAL GNU
+    OR CMAKE_C_COMPILER_ID STREQUAL Clang
+    OR CMAKE_C_COMPILER_ID STREQUAL AppleClang)
+  add_executable(C_undefined c_undefined.c)
+  set_property(TARGET C_undefined PROPERTY CXX_STANDARD 90)
+  target_compile_options(C_undefined PRIVATE -Werror=undef)
+endif()
+
 add_executable(WriteCompilerDetectionHeader main.cpp)
 set_property(TARGET WriteCompilerDetectionHeader PROPERTY CXX_STANDARD 98)
 set_defines(WriteCompilerDetectionHeader "${true_defs}" "${false_defs}")
+
+write_compiler_detection_header(
+  FILE "${CMAKE_CURRENT_BINARY_DIR}/compiler_multi_files/multi_file_compiler_detection.h"
+  PREFIX MULTI
+  OUTPUT_FILES_VAR multi_files
+  OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/compiler_multi_files/compiler_support"
+  COMPILERS GNU Clang AppleClang
+  VERSION 3.1
+  FEATURES
+    ${cxx_known_features} ${c_known_features}
+)
+
+add_executable(multi_files multi_files.cpp)
+set_property(TARGET multi_files PROPERTY CXX_STANDARD 98)
+target_include_directories(multi_files PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/compiler_multi_files)
+set_defines(multi_files "${true_defs}" "${false_defs}")
 
 if(MSVC)
   return() # MSVC has only one mode.
@@ -79,3 +111,8 @@ endif()
 add_executable(WriteCompilerDetectionHeader_11 main.cpp)
 set_property(TARGET WriteCompilerDetectionHeader_11 PROPERTY CXX_STANDARD 11)
 set_defines(WriteCompilerDetectionHeader_11 "${true_defs}" "${false_defs}")
+
+add_executable(multi_files_11 multi_files.cpp)
+set_property(TARGET multi_files_11 PROPERTY CXX_STANDARD 11)
+target_include_directories(multi_files_11 PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/compiler_multi_files)
+set_defines(multi_files_11 "${true_defs}" "${false_defs}")

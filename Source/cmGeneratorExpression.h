@@ -41,7 +41,7 @@ class cmGeneratorExpression
 {
 public:
   /** Construct. */
-  cmGeneratorExpression(cmListFileBacktrace const& backtrace);
+  cmGeneratorExpression(cmListFileBacktrace const* backtrace = NULL);
   ~cmGeneratorExpression();
 
   cmsys::auto_ptr<cmCompiledGeneratorExpression> Parse(
@@ -70,7 +70,7 @@ private:
   cmGeneratorExpression(const cmGeneratorExpression &);
   void operator=(const cmGeneratorExpression &);
 
-  cmListFileBacktrace const& Backtrace;
+  cmListFileBacktrace const* Backtrace;
 };
 
 class cmCompiledGeneratorExpression
@@ -111,6 +111,14 @@ public:
   {
     return this->HadContextSensitiveCondition;
   }
+  bool GetHadHeadSensitiveCondition() const
+  {
+    return this->HadHeadSensitiveCondition;
+  }
+  std::set<cmTarget const*> GetSourceSensitiveTargets() const
+  {
+    return this->SourceSensitiveTargets;
+  }
 
   void SetEvaluateForBuildsystem(bool eval)
   {
@@ -141,6 +149,8 @@ private:
                                                           MaxLanguageStandard;
   mutable std::string Output;
   mutable bool HadContextSensitiveCondition;
+  mutable bool HadHeadSensitiveCondition;
+  mutable std::set<cmTarget const*>  SourceSensitiveTargets;
   bool EvaluateForBuildsystem;
 };
 

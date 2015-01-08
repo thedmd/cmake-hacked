@@ -276,7 +276,7 @@ void cmExtraCodeBlocksGenerator
                          it->second[0]->GetMakefile()->GetHomeDirectory(),
                          jt->c_str());
       std::vector<std::string> splitted;
-      cmSystemTools::SplitPath(relative.c_str(), splitted, false);
+      cmSystemTools::SplitPath(relative, splitted, false);
       // Split filename from path
       std::string fileName = *(splitted.end()-1);
       splitted.erase(splitted.end() - 1, splitted.end());
@@ -574,7 +574,7 @@ void cmExtraCodeBlocksGenerator::AppendTarget(cmGeneratedFileStream& fout,
         }
       }
 
-    const char* buildType = makefile->GetDefinition("CMAKE_BUILD_TYPE");
+    std::string buildType = makefile->GetSafeDefinition("CMAKE_BUILD_TYPE");
     std::string location;
     if ( target->GetType()==cmTarget::OBJECT_LIBRARY)
       {
