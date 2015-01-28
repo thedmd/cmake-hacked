@@ -116,10 +116,10 @@ void cmCTestRunTest::CompressOutput()
   unsigned char *encoded_buffer
     = new unsigned char[static_cast<int>(outSize * 1.5)];
 
-  unsigned long rlen
+  size_t rlen
     = cmsysBase64_Encode(out, strm.total_out, encoded_buffer, 1);
 
-  for(unsigned long i = 0; i < rlen; i++)
+  for(size_t i = 0; i < rlen; i++)
     {
     this->CompressedOutput += encoded_buffer[i];
     }
@@ -155,7 +155,7 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
     std::string> >::iterator passIt;
   bool forceFail = false;
   bool outputTestErrorsToConsole = false;
-  if ( this->TestProperties->RequiredRegularExpressions.size() > 0 )
+  if (!this->TestProperties->RequiredRegularExpressions.empty())
     {
     bool found = false;
     for ( passIt = this->TestProperties->RequiredRegularExpressions.begin();
@@ -184,7 +184,7 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
       }
     reason += "]";
     }
-  if ( this->TestProperties->ErrorRegularExpressions.size() > 0 )
+  if (!this->TestProperties->ErrorRegularExpressions.empty())
     {
     for ( passIt = this->TestProperties->ErrorRegularExpressions.begin();
           passIt != this->TestProperties->ErrorRegularExpressions.end();
@@ -318,7 +318,7 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
     *this->TestHandler->LogFile
       << "----------------------------------------------------------"
       << std::endl;
-    if(this->TestResult.Reason.size())
+    if(!this->TestResult.Reason.empty())
       {
       *this->TestHandler->LogFile << reasonType << ":\n"
         << this->TestResult.Reason << "\n";
@@ -670,7 +670,7 @@ bool cmCTestRunTest::ForkProcess(double testTimeOut, bool explicitTimeout,
   cmSystemTools::SaveRestoreEnvironment sre;
 #endif
 
-  if (environment && environment->size()>0)
+  if (environment && !environment->empty())
     {
     cmSystemTools::AppendEnv(*environment);
     }
@@ -694,7 +694,7 @@ void cmCTestRunTest::WriteLogOutputTop(size_t completed, size_t total)
     cmCTestLog(this->CTest, HANDLER_OUTPUT, "Test");
     }
 
-  cmOStringStream indexStr;
+  std::ostringstream indexStr;
   indexStr << " #" << this->Index << ":";
   cmCTestLog(this->CTest, HANDLER_OUTPUT,
              std::setw(3 + getNumWidth(this->TestHandler->GetMaxIndex()))

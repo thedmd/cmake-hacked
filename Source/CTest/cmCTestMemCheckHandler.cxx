@@ -75,7 +75,7 @@ public:
         this->ParseError(atts);
         }
       // Create the log
-      cmOStringStream ostr;
+      std::ostringstream ostr;
       ostr << name << ":\n";
       int i = 0;
       for(; atts[i] != 0; i+=2)
@@ -198,7 +198,7 @@ void cmCTestMemCheckHandler::GenerateTestCommand(
 {
   std::vector<std::string>::size_type pp;
   std::string index;
-  cmOStringStream stream;
+  std::ostringstream stream;
   std::string memcheckcommand
     = cmSystemTools::ConvertToOutputPath(this->MemoryTester.c_str());
   stream << test;
@@ -223,7 +223,7 @@ void cmCTestMemCheckHandler::GenerateTestCommand(
     this->MemoryTesterEnvironmentVariable;
   for ( pp = 0; pp < this->MemoryTesterOptions.size(); pp ++ )
     {
-    if(memTesterEnvironmentVariable.size())
+    if(!memTesterEnvironmentVariable.empty())
       {
       // If we are using env to pass options, append all the options to
       // this string with space separation.
@@ -241,7 +241,7 @@ void cmCTestMemCheckHandler::GenerateTestCommand(
     }
   // if this is an env option type, then add the env string as a single
   // argument.
-  if(memTesterEnvironmentVariable.size())
+  if(!memTesterEnvironmentVariable.empty())
     {
     std::string::size_type pos = memTesterEnvironmentVariable.find("??");
     if (pos != std::string::npos)
@@ -592,7 +592,7 @@ bool cmCTestMemCheckHandler::InitializeMemoryChecking()
       this->MemoryTesterStyle = cmCTestMemCheckHandler::VALGRIND;
       }
     }
-  if(this->MemoryTester.size() == 0 )
+  if(this->MemoryTester.empty())
     {
     cmCTestLog(this->CTest, WARNING,
                "Memory checker (MemoryCheckCommand) "
@@ -834,7 +834,7 @@ bool cmCTestMemCheckHandler::ProcessMemCheckSanitizerOutput(
   int defects = 0;
   std::vector<std::string> lines;
   cmSystemTools::Split(str.c_str(), lines);
-  cmOStringStream ostr;
+  std::ostringstream ostr;
   log = "";
   for( std::vector<std::string>::iterator i = lines.begin();
        i != lines.end(); ++i)
@@ -848,10 +848,10 @@ bool cmCTestMemCheckHandler::ProcessMemCheckSanitizerOutput(
       {
       resultFound = sanitizerWarning.match(1);
       }
-    if(resultFound.size())
+    if(!resultFound.empty())
       {
       std::vector<int>::size_type idx = this->FindOrAddWarning(resultFound);
-      if(result.size() == 0 || idx > result.size()-1)
+      if(result.empty() || idx > result.size()-1)
         {
         result.push_back(1);
         }
@@ -878,7 +878,7 @@ bool cmCTestMemCheckHandler::ProcessMemCheckPurifyOutput(
 {
   std::vector<std::string> lines;
   cmSystemTools::Split(str.c_str(), lines);
-  cmOStringStream ostr;
+  std::ostringstream ostr;
   log = "";
 
   cmsys::RegularExpression pfW("^\\[[WEI]\\] ([A-Z][A-Z][A-Z][A-Z]*): ");
@@ -941,7 +941,7 @@ bool cmCTestMemCheckHandler::ProcessMemCheckValgrindOutput(
 
   std::string::size_type cc;
 
-  cmOStringStream ostr;
+  std::ostringstream ostr;
   log = "";
 
   int defects = 0;
@@ -1197,7 +1197,7 @@ cmCTestMemCheckHandler::PostProcessBoundsCheckerTest(cmCTestTestResult& res,
              << res.Name << std::endl);
   std::vector<std::string> files;
   this->TestOutputFileNames(test, files);
-  if ( files.size() == 0 )
+  if (files.empty())
     {
     return;
     }
@@ -1269,7 +1269,7 @@ void cmCTestMemCheckHandler::TestOutputFileNames(int test,
                                                  files)
 {
   std::string index;
-  cmOStringStream stream;
+  std::ostringstream stream;
   stream << test;
   index = stream.str();
   std::string ofile = this->MemoryTesterOutputFile;
@@ -1280,7 +1280,7 @@ void cmCTestMemCheckHandler::TestOutputFileNames(int test,
     ofile += ".*";
     cmsys::Glob g;
     g.FindFiles(ofile);
-    if(g.GetFiles().size() == 0)
+    if(g.GetFiles().empty())
       {
       std::string log = "Cannot find memory tester output file: "
         + ofile;

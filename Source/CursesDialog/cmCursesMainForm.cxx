@@ -69,11 +69,7 @@ cmCursesMainForm::~cmCursesMainForm()
   // Clean-up composites
   if (this->Entries)
     {
-    std::vector<cmCursesCacheEntryComposite*>::iterator it;
-    for (it = this->Entries->begin(); it != this->Entries->end(); ++it)
-      {
-      delete *it;
-      }
+    cmDeleteAll(*this->Entries);
     }
   delete this->Entries;
   if (this->CMakeInstance)
@@ -188,12 +184,7 @@ void cmCursesMainForm::InitializeUI()
   // Clean old entries
   if (this->Entries)
     {
-    // Have to call delete on each pointer
-    std::vector<cmCursesCacheEntryComposite*>::iterator it;
-    for (it = this->Entries->begin(); it != this->Entries->end(); ++it)
-      {
-      delete *it;
-      }
+    cmDeleteAll(*this->Entries);
     }
   delete this->Entries;
   this->Entries = newEntries;
@@ -902,7 +893,7 @@ void cmCursesMainForm::HandleInput()
       if ( key == 10 || key == KEY_ENTER )
         {
         this->SearchMode = false;
-        if ( this->SearchString.size() > 0 )
+        if (!this->SearchString.empty())
           {
           this->JumpToCacheEntry(this->SearchString.c_str());
           this->OldSearchString = this->SearchString;
@@ -927,7 +918,7 @@ void cmCursesMainForm::HandleInput()
         }
       else if ( key == ctrl('h') || key == KEY_BACKSPACE || key == KEY_DC )
         {
-        if ( this->SearchString.size() > 0 )
+        if (!this->SearchString.empty())
           {
           this->SearchString.resize(this->SearchString.size()-1);
           }
@@ -1076,7 +1067,7 @@ void cmCursesMainForm::HandleInput()
         }
       else if ( key == 'n' )
         {
-        if ( this->OldSearchString.size() > 0 )
+        if (!this->OldSearchString.empty())
           {
           this->JumpToCacheEntry(this->OldSearchString.c_str());
           }
@@ -1210,7 +1201,7 @@ void cmCursesMainForm::JumpToCacheEntry(const char* astr)
   int findex = start_index;
   for(;;)
     {
-    if ( str.size() > 0 )
+    if (!str.empty())
       {
       cmCursesWidget* lbl = 0;
       if ( findex >= 0 )

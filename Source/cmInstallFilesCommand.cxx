@@ -47,11 +47,8 @@ bool cmInstallFilesCommand
   else
     {
     this->IsFilesForm = false;
-    std::vector<std::string>::const_iterator s = args.begin();
-    for (++s;s != args.end(); ++s)
-      {
-      this->FinalArgs.push_back(*s);
-      }
+    this->FinalArgs.insert(this->FinalArgs.end(),
+                           args.begin() + 1, args.end());
     }
 
   this->Makefile->GetLocalGenerator()->GetGlobalGenerator()
@@ -83,7 +80,7 @@ void cmInstallFilesCommand::FinalPass()
       {
       // replace any variables
       std::string temps = *s;
-      if (cmSystemTools::GetFilenamePath(temps).size() > 0)
+      if (!cmSystemTools::GetFilenamePath(temps).empty())
         {
           testf = cmSystemTools::GetFilenamePath(temps) + "/" +
             cmSystemTools::GetFilenameWithoutLastExtension(temps) + ext;

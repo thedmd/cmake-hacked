@@ -62,6 +62,7 @@ void cmExtraEclipseCDT4Generator
     if (*lit == "CXX")
       {
       this->Natures.insert("org.eclipse.cdt.core.ccnature");
+      this->Natures.insert("org.eclipse.cdt.core.cnature");
       }
     else if (*lit == "C")
       {
@@ -1179,7 +1180,7 @@ std::string
 cmExtraEclipseCDT4Generator::GetPathBasename(const std::string& path)
 {
   std::string outputBasename = path;
-  while (outputBasename.size() > 0 &&
+  while (!outputBasename.empty() &&
          (outputBasename[outputBasename.size() - 1] == '/' ||
           outputBasename[outputBasename.size() - 1] == '\\'))
     {

@@ -153,7 +153,6 @@ endif()
 # Sources for CMakeLib
 #
 set(SRCS
-  cmStandardIncludes.cxx
   cmArchiveWrite.cxx
   cmBootstrapCommands1.cxx
   cmBootstrapCommands2.cxx
@@ -176,6 +175,8 @@ set(SRCS
   cmCPackPropertiesGenerator.cxx
   cmCryptoHash.cxx
   cmCryptoHash.h
+  cmCurl.cxx
+  cmCurl.h
   cmCustomCommand.cxx
   cmCustomCommand.h
   cmCustomCommandGenerator.cxx
@@ -336,6 +337,8 @@ set(SRCS
   cmake.cxx
   cmake.h
 
+  cm_get_date.h
+  cm_get_date.c
   cm_sha2.h
   cm_sha2.c
   cm_utf8.h
@@ -496,12 +499,20 @@ if(WIN32 AND NOT CYGWIN)
   install(TARGETS cmcldeps DESTINATION bin)
 endif()
 
+foreach(v CURL_CA_BUNDLE CURL_CA_PATH)
+  if(${v})
+    set_property(SOURCE cmCurl.cxx APPEND PROPERTY COMPILE_DEFINITIONS ${v}="${${v}}")
+  endif()
+endforeach()
+
 # create a library used by the command line and the GUI
 add_library(CMakeLib ${SRCS})
 target_link_libraries(CMakeLib cmsys
   ${CMAKE_EXPAT_LIBRARIES} ${CMAKE_ZLIB_LIBRARIES}
   ${CMAKE_TAR_LIBRARIES} ${CMAKE_COMPRESS_LIBRARIES}
-  ${CMAKE_CURL_LIBRARIES} )
+  ${CMAKE_CURL_LIBRARIES}
+  ${CMAKE_JSONCPP_LIBRARIES}
+  )
 
 # On Apple we need CoreFoundation
 if(APPLE)
@@ -534,6 +545,7 @@ set(CTEST_SRCS cmCTest.cxx
   CTest/cmCTestConfigureHandler.cxx
   CTest/cmCTestCoverageCommand.cxx
   CTest/cmCTestCoverageHandler.cxx
+  CTest/cmCTestCurl.cxx
   CTest/cmParseMumpsCoverage.cxx
   CTest/cmParseCacheCoverage.cxx
   CTest/cmParseGTMCoverage.cxx

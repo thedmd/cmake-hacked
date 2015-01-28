@@ -117,7 +117,7 @@ int main (int argc, char const* const* argv)
 
   cmSystemTools::EnableMSVCDebugHook();
 
-  if ( cmSystemTools::GetCurrentWorkingDirectory().size() == 0 )
+  if (cmSystemTools::GetCurrentWorkingDirectory().empty())
     {
     cmCPack_Log(&log, cmCPackLog::LOG_ERROR,
       "Current working directory cannot be established." << std::endl);
@@ -426,7 +426,7 @@ int main (int argc, char const* const* argv)
                 = mf->GetDefinition("CPACK_PACKAGE_VERSION_MINOR");
               const char* projVersionPatch
                 = mf->GetDefinition("CPACK_PACKAGE_VERSION_PATCH");
-              cmOStringStream ostr;
+              std::ostringstream ostr;
               ostr << projVersionMajor << "." << projVersionMinor << "."
                 << projVersionPatch;
               mf->AddDefinition("CPACK_PACKAGE_VERSION",

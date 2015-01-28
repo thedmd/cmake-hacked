@@ -36,6 +36,7 @@ Variables that Provide Information
    /variable/CMAKE_EXECUTABLE_SUFFIX
    /variable/CMAKE_EXTRA_GENERATOR
    /variable/CMAKE_EXTRA_SHARED_LIBRARY_SUFFIXES
+   /variable/CMAKE_FIND_PACKAGE_NAME
    /variable/CMAKE_GENERATOR
    /variable/CMAKE_GENERATOR_PLATFORM
    /variable/CMAKE_GENERATOR_TOOLSET
@@ -180,6 +181,7 @@ Variables that Describe the System
    /variable/CMAKE_SYSTEM_VERSION
    /variable/CYGWIN
    /variable/ENV
+   /variable/MINGW
    /variable/MSVC10
    /variable/MSVC11
    /variable/MSVC12

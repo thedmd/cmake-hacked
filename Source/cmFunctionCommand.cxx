@@ -103,7 +103,7 @@ bool cmFunctionHelperCommand::InvokeInitialPass
   cmMakefile::PolicyPushPop polScope(this->Makefile, true, this->Policies);
 
   // set the value of argc
-  cmOStringStream strStream;
+  std::ostringstream strStream;
   strStream << expandedArgs.size();
   this->Makefile->AddDefinition("ARGC",strStream.str().c_str());
   this->Makefile->MarkVariableAsUsed("ARGC");
@@ -111,7 +111,7 @@ bool cmFunctionHelperCommand::InvokeInitialPass
   // set the values for ARGV0 ARGV1 ...
   for (unsigned int t = 0; t < expandedArgs.size(); ++t)
     {
-    cmOStringStream tmpStream;
+    std::ostringstream tmpStream;
     tmpStream << "ARGV" << t;
     this->Makefile->AddDefinition(tmpStream.str(),
                                   expandedArgs[t].c_str());
@@ -132,14 +132,14 @@ bool cmFunctionHelperCommand::InvokeInitialPass
   unsigned int cnt = 0;
   for ( eit = expandedArgs.begin(); eit != expandedArgs.end(); ++eit )
     {
-    if ( argvDef.size() > 0 )
+    if (!argvDef.empty())
       {
       argvDef += ";";
       }
     argvDef += *eit;
     if ( cnt >= this->Args.size()-1 )
       {
-      if ( argnDef.size() > 0 )
+      if (!argnDef.empty())
         {
         argnDef += ";";
         }
@@ -271,11 +271,7 @@ bool cmFunctionCommand
 
   // create a function blocker
   cmFunctionFunctionBlocker *f = new cmFunctionFunctionBlocker();
-  for(std::vector<std::string>::const_iterator j = args.begin();
-      j != args.end(); ++j)
-    {
-    f->Args.push_back(*j);
-    }
+  f->Args.insert(f->Args.end(), args.begin(), args.end());
   this->Makefile->AddFunctionBlocker(f);
   return true;
 }

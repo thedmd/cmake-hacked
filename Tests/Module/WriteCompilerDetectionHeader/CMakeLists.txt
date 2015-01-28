@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 3.1.0)
 project(WriteCompilerDetectionHeader)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
@@ -11,7 +11,7 @@ get_property(c_known_features GLOBAL PROPERTY CMAKE_C_KNOWN_FEATURES)
 write_compiler_detection_header(
   FILE "${CMAKE_CURRENT_BINARY_DIR}/test_compiler_detection.h"
   PREFIX TEST
-  COMPILERS GNU Clang AppleClang
+  COMPILERS GNU Clang AppleClang SunPro
   VERSION 3.1
   PROLOG "// something"
   EPILOG "// more"
@@ -25,12 +25,14 @@ if (NOT CMAKE_CXX_COMPILE_FEATURES AND NOT CMAKE_C_COMPILE_FEATURES)
   )
   add_executable(WriteCompilerDetectionHeader "${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp")
 
-  include(CheckCXXSourceCompiles)
-  check_cxx_source_compiles("#include \"${CMAKE_CURRENT_BINARY_DIR}/test_compiler_detection.h\"\nint main() { return 0; }\n"
-    file_include_works
-  )
-  if (file_include_works)
-    message(SEND_ERROR "Inclusion of ${CMAKE_CURRENT_BINARY_DIR}/test_compiler_detection.h was expected to cause an error, but did not.")
+  if(UNIX OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    include(CheckCXXSourceCompiles)
+    check_cxx_source_compiles("#include \"${CMAKE_CURRENT_BINARY_DIR}/test_compiler_detection.h\"\nint main() { return 0; }\n"
+      file_include_works
+    )
+    if (file_include_works)
+      message(SEND_ERROR "Inclusion of ${CMAKE_CURRENT_BINARY_DIR}/test_compiler_detection.h was expected to cause an error, but did not.")
+    endif()
   endif()
   return()
 endif()
@@ -56,19 +58,20 @@ macro(set_defines target true_defs false_defs)
   )
 endmacro()
 
-if (CMAKE_CXX_COMPILER_ID STREQUAL GNU
-    OR CMAKE_CXX_COMPILER_ID STREQUAL Clang
-    OR CMAKE_CXX_COMPILER_ID STREQUAL AppleClang)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+    OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+    OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang"
+    OR CMAKE_CXX_COMPILER_ID STREQUAL "SunPro")
   # False for C++98 mode.
   list(APPEND false_defs EXPECTED_COMPILER_CXX_DELEGATING_CONSTRUCTORS)
   list(APPEND false_defs EXPECTED_COMPILER_CXX_VARIADIC_TEMPLATES)
 endif()
 
-if (CMAKE_C_COMPILER_ID STREQUAL GNU
-    OR CMAKE_C_COMPILER_ID STREQUAL Clang
-    OR CMAKE_C_COMPILER_ID STREQUAL AppleClang)
+if (CMAKE_C_COMPILER_ID STREQUAL "GNU"
+    OR CMAKE_C_COMPILER_ID STREQUAL "Clang"
+    OR CMAKE_C_COMPILER_ID STREQUAL "AppleClang")
   add_executable(C_undefined c_undefined.c)
-  set_property(TARGET C_undefined PROPERTY CXX_STANDARD 90)
+  set_property(TARGET C_undefined PROPERTY C_STANDARD 90)
   target_compile_options(C_undefined PRIVATE -Werror=undef)
 endif()
 
@@ -81,7 +84,7 @@ write_compiler_detection_header(
   PREFIX MULTI
   OUTPUT_FILES_VAR multi_files
   OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/compiler_multi_files/compiler_support"
-  COMPILERS GNU Clang AppleClang
+  COMPILERS GNU Clang AppleClang SunPro
   VERSION 3.1
   FEATURES
     ${cxx_known_features} ${c_known_features}

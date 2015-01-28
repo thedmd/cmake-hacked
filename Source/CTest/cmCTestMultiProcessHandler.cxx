@@ -92,7 +92,7 @@ void cmCTestMultiProcessHandler::RunTests()
     }
   this->TestHandler->SetMaxIndex(this->FindMaxIndex());
   this->StartNextTests();
-  while(this->Tests.size() != 0)
+  while(!this->Tests.empty())
     {
     if(this->StopTimePassed)
       {
@@ -162,12 +162,9 @@ void cmCTestMultiProcessHandler::StartTestProcess(int test)
 //---------------------------------------------------------
 void cmCTestMultiProcessHandler::LockResources(int index)
 {
-  for(std::set<std::string>::iterator i =
-      this->Properties[index]->LockedResources.begin();
-      i != this->Properties[index]->LockedResources.end(); ++i)
-    {
-    this->LockedResources.insert(*i);
-    }
+  this->LockedResources.insert(
+      this->Properties[index]->LockedResources.begin(),
+      this->Properties[index]->LockedResources.end());
 }
 
 //---------------------------------------------------------
@@ -268,7 +265,7 @@ void cmCTestMultiProcessHandler::StartNextTests()
 bool cmCTestMultiProcessHandler::CheckOutput()
 {
   // no more output we are done
-  if(this->RunningTests.size() == 0)
+  if(this->RunningTests.empty())
     {
     return false;
     }
@@ -499,11 +496,7 @@ void cmCTestMultiProcessHandler::CreateParallelTestCostList()
       i != previousSet.end(); ++i)
       {
       TestSet const& dependencies = this->Tests[*i];
-      for(TestSet::const_iterator j = dependencies.begin();
-        j != dependencies.end(); ++j)
-        {
-        currentSet.insert(*j);
-        }
+      currentSet.insert(dependencies.begin(), dependencies.end());
       }
 
     for(TestSet::const_iterator i = currentSet.begin();
@@ -526,11 +519,8 @@ void cmCTestMultiProcessHandler::CreateParallelTestCostList()
 
     TestList sortedCopy;
 
-    for(TestSet::const_iterator j = currentSet.begin();
-      j != currentSet.end(); ++j)
-      {
-      sortedCopy.push_back(*j);
-      }
+    sortedCopy.insert(sortedCopy.end(),
+                      currentSet.begin(), currentSet.end());
 
     std::stable_sort(sortedCopy.begin(), sortedCopy.end(), comp);
 
@@ -646,7 +636,7 @@ void cmCTestMultiProcessHandler::PrintTestList()
     testRun.SetTestProperties(&p);
     testRun.ComputeArguments(); //logs the command in verbose mode
 
-    if(p.Labels.size()) //print the labels
+    if(!p.Labels.empty()) //print the labels
       {
       cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, "Labels:");
       }
@@ -655,7 +645,7 @@ void cmCTestMultiProcessHandler::PrintTestList()
       {
       cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, " " << *label);
       }
-    if(p.Labels.size()) //print the labels
+    if(!p.Labels.empty()) //print the labels
       {
       cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, std::endl);
       }
@@ -668,7 +658,7 @@ void cmCTestMultiProcessHandler::PrintTestList()
       {
       cmCTestLog(this->CTest, HANDLER_OUTPUT, "  Test");
       }
-    cmOStringStream indexStr;
+    std::ostringstream indexStr;
     indexStr << " #" << p.Index << ":";
     cmCTestLog(this->CTest, HANDLER_OUTPUT,
       std::setw(3 + getNumWidth(this->TestHandler->GetMaxIndex()))
@@ -693,7 +683,7 @@ void cmCTestMultiProcessHandler::PrintLabels()
     allLabels.insert(p.Labels.begin(), p.Labels.end());
     }
 
-  if(allLabels.size())
+  if(!allLabels.empty())
     {
     cmCTestLog(this->CTest, HANDLER_OUTPUT, "All Labels:" << std::endl);
     }

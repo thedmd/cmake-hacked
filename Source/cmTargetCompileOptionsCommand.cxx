@@ -20,7 +20,7 @@ bool cmTargetCompileOptionsCommand
 void cmTargetCompileOptionsCommand
 ::HandleImportedTarget(const std::string &tgt)
 {
-  cmOStringStream e;
+  std::ostringstream e;
   e << "Cannot specify compile options for imported target \""
     << tgt << "\".";
   this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
@@ -29,7 +29,7 @@ void cmTargetCompileOptionsCommand
 void cmTargetCompileOptionsCommand
 ::HandleMissingTarget(const std::string &name)
 {
-  cmOStringStream e;
+  std::ostringstream e;
   e << "Cannot specify compile options for target \"" << name << "\" "
        "which is not built by this project.";
   this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
@@ -39,15 +39,7 @@ void cmTargetCompileOptionsCommand
 std::string cmTargetCompileOptionsCommand
 ::Join(const std::vector<std::string> &content)
 {
-  std::string defs;
-  std::string sep;
-  for(std::vector<std::string>::const_iterator it = content.begin();
-    it != content.end(); ++it)
-    {
-    defs += sep + *it;
-    sep = ";";
-    }
-  return defs;
+  return cmJoin(content, ";");
 }
 
 //----------------------------------------------------------------------------

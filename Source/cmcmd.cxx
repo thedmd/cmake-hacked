@@ -36,7 +36,7 @@
 
 void CMakeCommandUsage(const char* program)
 {
-  cmOStringStream errorStream;
+  std::ostringstream errorStream;
 
 #ifdef CMAKE_BUILD_WITH_CMAKE
   errorStream
@@ -71,7 +71,7 @@ void CMakeCommandUsage(const char* program)
     << "  remove_directory dir      - remove a directory and its contents\n"
     << "  rename oldname newname    - rename a file or directory "
        "(on one volume)\n"
-    << "  tar [cxt][vfz][cvfj] file.tar [file/dir1 file/dir2 ...]\n"
+    << "  tar [cxt][vf][zjJ] file.tar [file/dir1 file/dir2 ...]\n"
     << "                            - create or extract a tar or zip archive\n"
     << "  sleep <number>...         - sleep for given number of seconds\n"
     << "  time command [args] ...   - run command and return elapsed time\n"
@@ -92,6 +92,51 @@ void CMakeCommandUsage(const char* program)
     ;
 
   cmSystemTools::Error(errorStream.str().c_str());
+}
+
+static bool cmTarFilesFrom(std::string const& file,
+                           std::vector<std::string>& files)
+{
+  if (cmSystemTools::FileIsDirectory(file))
+    {
+    std::ostringstream e;
+    e << "-E tar --files-from= file '" << file << "' is a directory";
+    cmSystemTools::Error(e.str().c_str());
+    return false;
+    }
+  cmsys::ifstream fin(file.c_str());
+  if (!fin)
+    {
+    std::ostringstream e;
+    e << "-E tar --files-from= file '" << file << "' not found";
+    cmSystemTools::Error(e.str().c_str());
+    return false;
+    }
+  std::string line;
+  while (cmSystemTools::GetLineFromStream(fin, line))
+    {
+    if (line.empty())
+      {
+      continue;
+      }
+    if (cmHasLiteralPrefix(line, "--add-file="))
+      {
+      files.push_back(line.substr(11));
+      }
+    else if (cmHasLiteralPrefix(line, "-"))
+      {
+      std::ostringstream e;
+      e << "-E tar --files-from='" << file << "' file invalid line:\n"
+        << line << "\n";
+      cmSystemTools::Error(e.str().c_str());
+      return false;
+      }
+    else
+      {
+      files.push_back(line);
+      }
+    }
+  return true;
 }
 
 int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
@@ -729,20 +774,64 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
       std::string flags = args[2];
       std::string outFile = args[3];
       std::vector<std::string> files;
+      std::string mtime;
+      bool doing_options = true;
       for (std::string::size_type cc = 4; cc < args.size(); cc ++)
         {
-        files.push_back(args[cc]);
+        std::string const& arg = args[cc];
+        if (doing_options && cmHasLiteralPrefix(arg, "--"))
+          {
+          if (arg == "--")
+            {
+            doing_options = false;
+            }
+          else if (cmHasLiteralPrefix(arg, "--mtime="))
+            {
+            mtime = arg.substr(8);
+            }
+          else if (cmHasLiteralPrefix(arg, "--files-from="))
+            {
+            std::string const& files_from = arg.substr(13);
+            if (!cmTarFilesFrom(files_from, files))
+              {
+              return 1;
+              }
+            }
+          else
+            {
+            cmSystemTools::Error("Unknown option to -E tar: ", arg.c_str());
+            return 1;
+            }
+          }
+        else
+          {
+          files.push_back(arg);
+          }
         }
-      bool gzip = false;
-      bool bzip2 = false;
+      cmSystemTools::cmTarCompression compress =
+        cmSystemTools::TarCompressNone;
       bool verbose = false;
+      int nCompress = 0;
       if ( flags.find_first_of('j') != flags.npos )
         {
-        bzip2 = true;
+        compress = cmSystemTools::TarCompressBZip2;
+        ++nCompress;
+        }
+      if ( flags.find_first_of('J') != flags.npos )
+        {
+        compress = cmSystemTools::TarCompressXZ;
+        ++nCompress;
         }
       if ( flags.find_first_of('z') != flags.npos )
         {
-        gzip = true;
+        compress = cmSystemTools::TarCompressGZip;
+        ++nCompress;
+        }
+      if ( nCompress > 1 )
+        {
+        cmSystemTools::Error("Can only compress a tar file one way; "
+                             "at most one flag of z, j, or J may be used");
+        return 1;
         }
       if ( flags.find_first_of('v') != flags.npos )
         {
@@ -751,16 +840,16 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
 
       if ( flags.find_first_of('t') != flags.npos )
         {
-        if ( !cmSystemTools::ListTar(outFile.c_str(), gzip, verbose) )
+        if ( !cmSystemTools::ListTar(outFile.c_str(), verbose) )
           {
-          cmSystemTools::Error("Problem creating tar: ", outFile.c_str());
+          cmSystemTools::Error("Problem listing tar: ", outFile.c_str());
           return 1;
           }
         }
       else if ( flags.find_first_of('c') != flags.npos )
         {
         if ( !cmSystemTools::CreateTar(
-               outFile.c_str(), files, gzip, bzip2, verbose) )
+               outFile.c_str(), files, compress, verbose, mtime) )
           {
           cmSystemTools::Error("Problem creating tar: ", outFile.c_str());
           return 1;
@@ -769,7 +858,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
       else if ( flags.find_first_of('x') != flags.npos )
         {
         if ( !cmSystemTools::ExtractTar(
-            outFile.c_str(), gzip, verbose) )
+            outFile.c_str(), verbose) )
           {
           cmSystemTools::Error("Problem extracting tar: ", outFile.c_str());
           return 1;
@@ -1214,7 +1303,7 @@ int cmcmd::ParseVisualStudioLinkCommand(std::vector<std::string>& args,
       targetName = i->substr(5);
       }
     }
-  if(targetName.size() == 0 || command.size() == 0)
+  if(targetName.empty() || command.empty())
     {
     return -1;
     }

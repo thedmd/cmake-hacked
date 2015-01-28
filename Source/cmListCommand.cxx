@@ -98,7 +98,7 @@ bool cmListCommand::GetList(std::vector<std::string>& list,
     return false;
     }
   // if the size of the list
-  if(listString.size() == 0)
+  if(listString.empty())
     {
     return true;
     }
@@ -109,7 +109,7 @@ bool cmListCommand::GetList(std::vector<std::string>& list,
   for(std::vector<std::string>::iterator i = list.begin();
       i != list.end(); ++i)
     {
-    if(i->size() == 0)
+    if(i->empty())
       {
       hasEmpty = true;
       break;
@@ -225,7 +225,7 @@ bool cmListCommand::HandleGetCommand(std::vector<std::string> const& args)
       }
     if ( item < 0 || nitem <= (size_t)item )
       {
-      cmOStringStream str;
+      std::ostringstream str;
       str << "index: " << item << " out of range (-"
           << varArgsExpanded.size() << ", "
           << varArgsExpanded.size()-1 << ")";
@@ -257,7 +257,7 @@ bool cmListCommand::HandleAppendCommand(std::vector<std::string> const& args)
   size_t cc;
   for ( cc = 2; cc < args.size(); ++ cc )
     {
-    if(listString.size())
+    if(!listString.empty())
       {
       listString += ";";
       }
@@ -322,13 +322,13 @@ bool cmListCommand::HandleInsertCommand(std::vector<std::string> const& args)
   if((!this->GetList(varArgsExpanded, listName)
       || varArgsExpanded.empty()) && item != 0)
     {
-    cmOStringStream str;
+    std::ostringstream str;
     str << "index: " << item << " out of range (0, 0)";
     this->SetError(str.str());
     return false;
     }
 
-  if ( varArgsExpanded.size() != 0 )
+  if (!varArgsExpanded.empty())
     {
     size_t nitem = varArgsExpanded.size();
     if ( item < 0 )
@@ -337,31 +337,19 @@ bool cmListCommand::HandleInsertCommand(std::vector<std::string> const& args)
       }
     if ( item < 0 || nitem <= (size_t)item )
       {
-      cmOStringStream str;
+      std::ostringstream str;
       str << "index: " << item << " out of range (-"
         << varArgsExpanded.size() << ", "
-        << (varArgsExpanded.size() == 0?0:(varArgsExpanded.size()-1)) << ")";
+        << (varArgsExpanded.empty() ? 0 : (varArgsExpanded.size() - 1)) << ")";
       this->SetError(str.str());
       return false;
       }
     }
-  size_t cc;
-  size_t cnt = 0;
-  for ( cc = 3; cc < args.size(); ++ cc )
-    {
-    varArgsExpanded.insert(varArgsExpanded.begin()+item+cnt, args[cc]);
-    cnt ++;
-    }
 
-  std::string value;
-  const char* sep = "";
-  for ( cc = 0; cc < varArgsExpanded.size(); cc ++ )
-    {
-    value += sep;
-    value += varArgsExpanded[cc];
-    sep = ";";
-    }
+  varArgsExpanded.insert(varArgsExpanded.begin()+item,
+                         args.begin() + 3, args.end());
 
+  std::string value = cmJoin(varArgsExpanded, ";");
   this->Makefile->AddDefinition(listName, value.c_str());
   return true;
 }
@@ -402,15 +390,8 @@ bool cmListCommand
       }
     }
 
-  std::string value;
-  const char* sep = "";
-  for ( cc = 0; cc < varArgsExpanded.size(); cc ++ )
-    {
-    value += sep;
-    value += varArgsExpanded[cc];
-    sep = ";";
-    }
 
+  std::string value = cmJoin(varArgsExpanded, ";");
   this->Makefile->AddDefinition(listName, value.c_str());
   return true;
 }
@@ -518,16 +499,7 @@ bool cmListCommand
 
   std::sort(varArgsExpanded.begin(), varArgsExpanded.end());
 
-  std::string value;
-  std::vector<std::string>::iterator it;
-  const char* sep = "";
-  for ( it = varArgsExpanded.begin(); it != varArgsExpanded.end(); ++ it )
-    {
-    value += sep;
-    value += it->c_str();
-    sep = ";";
-    }
-
+  std::string value = cmJoin(varArgsExpanded, ";");
   this->Makefile->AddDefinition(listName, value.c_str());
   return true;
 }
@@ -570,7 +542,7 @@ bool cmListCommand::HandleRemoveAtCommand(
       }
     if ( item < 0 || nitem <= (size_t)item )
       {
-      cmOStringStream str;
+      std::ostringstream str;
       str << "index: " << item << " out of range (-"
           << varArgsExpanded.size() << ", "
           << varArgsExpanded.size()-1 << ")";

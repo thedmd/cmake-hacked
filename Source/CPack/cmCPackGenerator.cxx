@@ -160,7 +160,7 @@ int cmCPackGenerator::PrepareNames()
         "Cannot open description file name: " << descFileName << std::endl);
       return 0;
       }
-    cmOStringStream ostr;
+    std::ostringstream ostr;
     std::string line;
 
     cmCPackLogger(cmCPackLog::LOG_VERBOSE,
@@ -421,7 +421,7 @@ int cmCPackGenerator::InstallProjectViaInstalledDirectories(
           }
         }
       /* rebuild symlinks in the installed tree */
-      if (symlinkedFiles.size()>0)
+      if (!symlinkedFiles.empty())
         {
         std::list< std::pair<std::string,std::string> >::iterator symlinkedIt;
         std::string curDir = cmSystemTools::GetCurrentWorkingDirectory();
@@ -628,6 +628,14 @@ int cmCPackGenerator::InstallProjectViaInstallCMakeProjects(
       cmGlobalGenerator* globalGenerator
         = this->MakefileMap->GetCMakeInstance()->CreateGlobalGenerator(
           cmakeGenerator);
+      if ( !globalGenerator )
+      {
+      cmCPackLogger(cmCPackLog::LOG_ERROR,
+                    "Specified package generator not found. "
+                    "CPACK_CMAKE_GENERATOR value is invalid."
+                    << std::endl);
+      return 0;
+      }
       // set the global flag for unix style paths on cmSystemTools as
       // soon as the generator is set.  This allows gmake to be used
       // on windows.
@@ -918,7 +926,7 @@ int cmCPackGenerator::InstallProjectViaInstallCMakeProjects(
           }
 
         if (NULL !=mf->GetDefinition("CPACK_ABSOLUTE_DESTINATION_FILES")) {
-          if (absoluteDestFiles.length()>0) {
+          if (!absoluteDestFiles.empty()) {
             absoluteDestFiles +=";";
           }
           absoluteDestFiles +=
@@ -1348,7 +1356,7 @@ int cmCPackGenerator::PrepareGroupingKind()
      groupingType = this->GetOption("CPACK_COMPONENTS_GROUPING");
   }
 
-  if (groupingType.length()>0)
+  if (!groupingType.empty())
     {
     cmCPackLogger(cmCPackLog::LOG_VERBOSE,  "["
         << this->Name << "]"
