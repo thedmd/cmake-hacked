@@ -67,6 +67,7 @@ private:
   void WriteAllSources();
   void WriteDotNetReferences();
   void WriteEmbeddedResourceGroup();
+  void WriteXamlGroup();
   void WriteWinRTReferences();
   void WriteWinRTPackageCertificateKeyFile();
   void WritePathAndIncrementalLinkOptions();
@@ -119,6 +120,8 @@ private:
   void AddMissingSourceGroups(std::set<cmSourceGroup*>& groupsUsed,
                               const std::vector<cmSourceGroup>& allGroups);
   bool IsResxHeader(const std::string& headerFile);
+  bool IsXamlHeader(const std::string& headerFile);
+  bool IsXamlSource(const std::string& sourceFile);
 
   cmIDEFlagTable const* GetClFlagTable() const;
   cmIDEFlagTable const* GetRcFlagTable() const;
