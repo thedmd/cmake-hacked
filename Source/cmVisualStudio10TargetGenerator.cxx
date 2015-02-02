@@ -549,6 +549,8 @@ void cmVisualStudio10TargetGenerator::WriteEmbeddedResourceGroup()
 
 void cmVisualStudio10TargetGenerator::WriteXamlGroup()
 {
+  bool relative = this->GlobalGenerator->GetSystemVersion() == "8.0";
+
   std::vector<cmSourceFile const*> xamlObjs;
     this->GeneratorTarget->GetXamlSources(xamlObjs, "");
   if(!xamlObjs.empty())
@@ -568,12 +570,7 @@ void cmVisualStudio10TargetGenerator::WriteXamlGroup()
           tool = "Page";
           }
 
-      std::string obj = (*oi)->GetFullPath();
-      this->WriteString("<", 2);
-      (*this->BuildFileStream ) << tool << " Include=\"";
-      this->ConvertToWindowsSlash(obj);
-      (*this->BuildFileStream ) << obj << "\">\n";
-
+      this->WriteSource(tool, *oi, ">\n", relative);
       this->WriteString("<SubType>Designer</SubType>\n", 3);
 
       this->WriteString("</", 2);
@@ -1238,9 +1235,16 @@ void cmVisualStudio10TargetGenerator::WriteHeaderSource(cmSourceFile const* sf)
     }
   else if(this->IsXamlHeader(fullPath))
     {
-    this->WriteSource("ClInclude", sf, ">\n");
+    bool relative = this->GlobalGenerator->GetSystemVersion() == "8.0";
+    this->WriteSource("ClInclude", sf, ">\n", relative);
     this->WriteString("<DependentUpon>", 3);
-    std::string hFileName = fullPath.substr(0, fullPath.find_last_of("."));
+    std::string hFileName;
+    if (relative)
+        hFileName = this->ConvertPath(sf->GetFullPath(), true);
+    else
+        hFileName = sf->GetFullPath();
+    hFileName = hFileName.substr(0, hFileName.find_last_of("."));
+    this->ConvertToWindowsSlash(hFileName);
     (*this->BuildFileStream ) << hFileName;
     this->WriteString("</DependentUpon>\n", 0);
     this->WriteString("</ClInclude>\n", 2);
@@ -1399,7 +1403,7 @@ void cmVisualStudio10TargetGenerator::WriteExtraSource(cmSourceFile const* sf)
 }
 
 void cmVisualStudio10TargetGenerator::WriteSource(
-  std::string const& tool, cmSourceFile const* sf, const char* end)
+  std::string const& tool, cmSourceFile const* sf, const char* end, bool relative)
 {
   // Visual Studio tools append relative paths to the current dir, as in:
   //
@@ -1407,10 +1411,10 @@ void cmVisualStudio10TargetGenerator::WriteSource(
   //
   // and fail if this exceeds the maximum allowed path length.  Our path
   // conversion uses full paths when possible to allow deeper trees.
-  bool forceRelative = false;
+  bool forceRelative = relative;
   std::string sourceFile = this->ConvertPath(sf->GetFullPath(), false);
-  if(this->LocalGenerator->GetVersion() == cmLocalVisualStudioGenerator::VS10
-     && cmSystemTools::FileIsFullPath(sourceFile.c_str()))
+  if((this->LocalGenerator->GetVersion() == cmLocalVisualStudioGenerator::VS10
+     && cmSystemTools::FileIsFullPath(sourceFile.c_str())) || relative)
     {
     // Normal path conversion resulted in a full path.  VS 10 (but not 11)
     // refuses to show the property page in the IDE for a source file with a
@@ -1422,7 +1426,7 @@ void cmVisualStudio10TargetGenerator::WriteSource(
     // when the combined path will not be too long so property pages appear.
     std::string sourceRel = this->ConvertPath(sf->GetFullPath(), true);
     size_t const maxLen = 250;
-    if(sf->GetCustomCommand() ||
+    if(relative || sf->GetCustomCommand() ||
        ((strlen(this->Makefile->GetCurrentOutputDirectory()) + 1 +
          sourceRel.length()) <= maxLen))
       {
@@ -1505,8 +1509,15 @@ void cmVisualStudio10TargetGenerator::WriteAllSources()
         {
         if(isXamlSource)
           {
+          bool relative = this->GlobalGenerator->GetSystemVersion() == "8.0";
           this->WriteString("<DependentUpon>", 3);
-          std::string hFileName = fullPath.substr(0, fullPath.find_last_of("."));
+          std::string hFileName;
+          if (relative)
+            hFileName = this->ConvertPath(fullPath, true);
+          else
+            hFileName = fullPath;
+          hFileName = hFileName.substr(0, hFileName.find_last_of("."));
+          this->ConvertToWindowsSlash(hFileName);
           (*this->BuildFileStream ) << hFileName;
           this->WriteString("</DependentUpon>\n", 0);
         }

@@ -61,7 +61,7 @@ private:
   void WriteExtraSource(cmSourceFile const* sf);
   void WriteNsightTegraConfigurationValues(std::string const& config);
   void WriteSource(std::string const& tool, cmSourceFile const* sf,
-                   const char* end = 0);
+                   const char* end = 0, bool relative = false);
   void WriteSources(std::string const& tool,
                     std::vector<cmSourceFile const*> const&);
   void WriteAllSources();
