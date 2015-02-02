@@ -1821,6 +1821,8 @@ void cmVisualStudio10TargetGenerator::WritePathAndIncrementalLinkOptions()
       this->OutputLinkIncremental(*config);
       }
     }
+  if (this->GlobalGenerator->TargetsWindowsStore() || this->GlobalGenerator->TargetsWindowsPhone())
+      this->WriteString("<DefaultLanguage>en-US</DefaultLanguage>\n", 3);
   this->WriteString("</PropertyGroup>\n", 2);
 }
 
