@@ -98,12 +98,8 @@ const char *cmCompiledGeneratorExpression::Evaluate(
     {
     this->Output += (*it)->Evaluate(&context, dagChecker);
 
-    for(std::set<std::string>::const_iterator
-          p = context.SeenTargetProperties.begin();
-          p != context.SeenTargetProperties.end(); ++p)
-      {
-      this->SeenTargetProperties.insert(*p);
-      }
+    this->SeenTargetProperties.insert(context.SeenTargetProperties.begin(),
+                                      context.SeenTargetProperties.end());
     if (context.HadError)
       {
       this->Output = "";
@@ -150,15 +146,7 @@ cmCompiledGeneratorExpression::cmCompiledGeneratorExpression(
 //----------------------------------------------------------------------------
 cmCompiledGeneratorExpression::~cmCompiledGeneratorExpression()
 {
-  std::vector<cmGeneratorExpressionEvaluator*>::const_iterator it
-                                                  = this->Evaluators.begin();
-  const std::vector<cmGeneratorExpressionEvaluator*>::const_iterator end
-                                                  = this->Evaluators.end();
-
-  for ( ; it != end; ++it)
-    {
-    delete *it;
-    }
+  cmDeleteAll(this->Evaluators);
 }
 
 //----------------------------------------------------------------------------

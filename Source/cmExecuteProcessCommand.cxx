@@ -189,7 +189,7 @@ bool cmExecuteProcessCommand
       }
     else
       {
-      cmOStringStream e;
+      std::ostringstream e;
       e << " given unknown argument \"" << args[i] << "\".";
       this->SetError(e.str());
       return false;
@@ -324,12 +324,12 @@ bool cmExecuteProcessCommand
                                  error_strip_trailing_whitespace);
 
   // Store the output obtained.
-  if(!output_variable.empty() && tempOutput.size())
+  if(!output_variable.empty() && !tempOutput.empty())
     {
     this->Makefile->AddDefinition(output_variable,
                                   &*tempOutput.begin());
     }
-  if(!merge_output && !error_variable.empty() && tempError.size())
+  if(!merge_output && !error_variable.empty() && !tempError.empty())
     {
     this->Makefile->AddDefinition(error_variable,
                                   &*tempError.begin());

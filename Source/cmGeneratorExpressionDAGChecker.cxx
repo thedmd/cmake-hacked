@@ -66,9 +66,7 @@ cmGeneratorExpressionDAGChecker::Initialize()
     if (it != top->Seen.end())
       {
       const std::set<std::string> &propSet = it->second;
-      const std::set<std::string>::const_iterator i
-          = propSet.find(this->Property);
-      if (i != propSet.end())
+      if (propSet.find(this->Property) != propSet.end())
         {
         this->CheckResult = ALREADY_SEEN;
         return;
@@ -106,7 +104,7 @@ void cmGeneratorExpressionDAGChecker::ReportError(
 
   if (parent && !parent->Parent)
     {
-    cmOStringStream e;
+    std::ostringstream e;
     e << "Error evaluating generator expression:\n"
       << "  " << expr << "\n"
       << "Self reference on target \""
@@ -118,7 +116,7 @@ void cmGeneratorExpressionDAGChecker::ReportError(
     }
 
   {
-  cmOStringStream e;
+  std::ostringstream e;
   e << "Error evaluating generator expression:\n"
     << "  " << expr << "\n"
     << "Dependency loop found.";
@@ -130,7 +128,7 @@ void cmGeneratorExpressionDAGChecker::ReportError(
   int loopStep = 1;
   while (parent)
     {
-    cmOStringStream e;
+    std::ostringstream e;
     e << "Loop step " << loopStep << "\n"
       << "  "
       << (parent->Content ? parent->Content->GetOriginalExpression() : expr)

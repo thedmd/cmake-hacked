@@ -24,7 +24,7 @@ cmSourceFile::cmSourceFile(cmMakefile* mf, const std::string& name):
   this->CustomCommand = 0;
   this->Properties.SetCMakeInstance(mf->GetCMakeInstance());
   this->FindFullPathFailed = false;
-  this->IsUiFile = ("ui" ==
+  this->IsUiFile = (".ui" ==
           cmSystemTools::GetFilenameLastExtension(this->Location.GetName()));
 }
 
@@ -202,7 +202,7 @@ bool cmSourceFile::FindFullPath(std::string* error)
       }
     }
 
-  cmOStringStream e;
+  std::ostringstream e;
   std::string missing = this->Location.GetDirectory();
   if(!missing.empty())
     {

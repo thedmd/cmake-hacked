@@ -90,12 +90,7 @@ cmDependsC::cmDependsC(cmLocalGenerator* lg,
 cmDependsC::~cmDependsC()
 {
   this->WriteCacheFile();
-
-  for (std::map<std::string, cmIncludeLines*>::iterator it=
-         this->FileCache.begin(); it!=this->FileCache.end(); ++it)
-    {
-    delete it->second;
-    }
+  cmDeleteAll(this->FileCache);
 }
 
 //----------------------------------------------------------------------------
@@ -125,11 +120,7 @@ bool cmDependsC::WriteDependencies(const std::set<std::string>& sources,
                                                     this->ValidDeps->find(obj);
     if (tmpIt!= this->ValidDeps->end())
       {
-      for(DependencyVector::const_iterator i=tmpIt->second.begin();
-         i != tmpIt->second.end(); ++i)
-        {
-        dependencies.insert(*i);
-        }
+      dependencies.insert(tmpIt->second.begin(), tmpIt->second.end());
       haveDeps = true;
       }
     }
@@ -294,7 +285,7 @@ bool cmDependsC::WriteDependencies(const std::set<std::string>& sources,
 //----------------------------------------------------------------------------
 void cmDependsC::ReadCacheFile()
 {
-  if(this->CacheFileName.size() == 0)
+  if(this->CacheFileName.empty())
     {
     return;
     }
@@ -383,7 +374,7 @@ void cmDependsC::ReadCacheFile()
 //----------------------------------------------------------------------------
 void cmDependsC::WriteCacheFile() const
 {
-  if(this->CacheFileName.size() == 0)
+  if(this->CacheFileName.empty())
     {
     return;
     }

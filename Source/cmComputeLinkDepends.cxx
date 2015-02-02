@@ -200,12 +200,7 @@ cmComputeLinkDepends
 //----------------------------------------------------------------------------
 cmComputeLinkDepends::~cmComputeLinkDepends()
 {
-  for(std::vector<DependSetList*>::iterator
-        i = this->InferredDependSets.begin();
-      i != this->InferredDependSets.end(); ++i)
-    {
-    delete *i;
-    }
+  cmDeleteAll(this->InferredDependSets);
   delete this->CCG;
 }
 
@@ -266,10 +261,9 @@ cmComputeLinkDepends::Compute()
   // Iterate in reverse order so we can keep only the last occurrence
   // of a shared library.
   std::set<int> emmitted;
-  const std::vector<int>& cFLO = this->FinalLinkOrder;
   for(std::vector<int>::const_reverse_iterator
-        li = cFLO.rbegin(),
-        le = cFLO.rend();
+        li = this->FinalLinkOrder.rbegin(),
+        le = this->FinalLinkOrder.rend();
       li != le; ++li)
     {
     int i = *li;
@@ -682,11 +676,8 @@ void cmComputeLinkDepends::InferDependencies()
       }
 
     // Add the inferred dependencies to the graph.
-    for(DependSet::const_iterator j = common.begin(); j != common.end(); ++j)
-      {
-      int dependee_index = *j;
-      this->EntryConstraintGraph[depender_index].push_back(dependee_index);
-      }
+    cmGraphEdgeList& edges = this->EntryConstraintGraph[depender_index];
+    edges.insert(edges.end(), common.begin(), common.end());
     }
 }
 
@@ -710,7 +701,7 @@ void cmComputeLinkDepends::CleanConstraintGraph()
 void cmComputeLinkDepends::DisplayConstraintGraph()
 {
   // Display the graph nodes and their edges.
-  cmOStringStream e;
+  std::ostringstream e;
   for(unsigned int i=0; i < this->EntryConstraintGraph.size(); ++i)
     {
     EdgeList const& nl = this->EntryConstraintGraph[i];

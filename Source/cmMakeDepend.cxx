@@ -34,12 +34,7 @@ cmMakeDepend::cmMakeDepend()
 
 cmMakeDepend::~cmMakeDepend()
 {
-  for(DependInformationMapType::iterator i =
-        this->DependInformationMap.begin();
-      i != this->DependInformationMap.end(); ++i)
-    {
-    delete i->second;
-    }
+  cmDeleteAll(this->DependInformationMap);
 }
 
 
@@ -180,7 +175,7 @@ void cmMakeDepend::GenerateDependInformation(cmDependInformation* info)
             t != this->IncludeDirectories.end(); ++t)
           {
           std::string incpath = *t;
-          if (incpath.size() && incpath[incpath.size() - 1] != '/')
+          if (!incpath.empty() && incpath[incpath.size() - 1] != '/')
             {
             incpath = incpath + "/";
             }
@@ -323,7 +318,7 @@ std::string cmMakeDepend::FullPath(const char* fname, const char *extraPath)
       i != this->IncludeDirectories.end(); ++i)
     {
     std::string path = *i;
-    if (path.size() && path[path.size() - 1] != '/')
+    if (!path.empty() && path[path.size() - 1] != '/')
       {
       path = path + "/";
       }
@@ -340,7 +335,7 @@ std::string cmMakeDepend::FullPath(const char* fname, const char *extraPath)
   if (extraPath)
     {
     std::string path = extraPath;
-    if (path.size() && path[path.size() - 1] != '/')
+    if (!path.empty() && path[path.size() - 1] != '/')
       {
       path = path + "/";
       }

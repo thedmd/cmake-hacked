@@ -22,6 +22,7 @@
 
 #include <assert.h>
 #include <algorithm>
+#include <limits>
 
 #ifndef _WIN32
 #include <unistd.h>
@@ -218,8 +219,8 @@ cmNinjaNormalTargetGenerator
     std::string targetVersionMajor;
     std::string targetVersionMinor;
     {
-    cmOStringStream majorStream;
-    cmOStringStream minorStream;
+    std::ostringstream majorStream;
+    std::ostringstream minorStream;
     int major;
     int minor;
     this->GetTarget()->GetTargetVersion(major, minor);
@@ -255,10 +256,10 @@ cmNinjaNormalTargetGenerator
       this->GetLocalGenerator()->BuildCommandLine(linkCmds);
 
     // Write the linker rule with response file if needed.
-    cmOStringStream comment;
+    std::ostringstream comment;
     comment << "Rule for linking " << this->TargetLinkLanguage << " "
             << this->GetVisibleTypeName() << ".";
-    cmOStringStream description;
+    std::ostringstream description;
     description << "Linking " << this->TargetLinkLanguage << " "
                 << this->GetVisibleTypeName() << " $TARGET_FILE";
     this->GetGlobalGenerator()->AddRule(ruleName,
@@ -366,15 +367,29 @@ cmNinjaNormalTargetGenerator
 
 static int calculateCommandLineLengthLimit(int linkRuleLength)
 {
+  static int const limits[] = {
 #ifdef _WIN32
-  return 8000 - linkRuleLength;
-#elif defined(__linux) || defined(__APPLE__) || defined(__HAIKU__)
-  // for instance ARG_MAX is 2096152 on Ubuntu or 262144 on Mac
-  return ((int)sysconf(_SC_ARG_MAX)) - linkRuleLength - 1000;
-#else
-  (void)linkRuleLength;
-  return -1;
+    8000,
 #endif
+#if defined(__APPLE__) || defined(__HAIKU__) || defined(__linux)
+    // for instance ARG_MAX is 2096152 on Ubuntu or 262144 on Mac
+    ((int)sysconf(_SC_ARG_MAX)) - 1000,
+#endif
+#if defined(__linux)
+    // #define MAX_ARG_STRLEN (PAGE_SIZE * 32) in Linux's binfmts.h
+    ((int)sysconf(_SC_PAGESIZE) * 32) - 1000,
+#endif
+    std::numeric_limits<int>::max()
+  };
+
+  size_t const arrSz = cmArraySize(limits);
+  int const sz = *std::min_element(limits, limits + arrSz);
+  if (sz == std::numeric_limits<int>::max())
+    {
+    return -1;
+    }
+
+  return sz - linkRuleLength;
 }
 
 
@@ -435,7 +450,7 @@ void cmNinjaNormalTargetGenerator::WriteLinkStatement()
   cmNinjaVars vars;
 
   // Compute the comment.
-  cmOStringStream comment;
+  std::ostringstream comment;
   comment <<
     "Link the " << this->GetVisibleTypeName() << " " << targetOutputReal;
 

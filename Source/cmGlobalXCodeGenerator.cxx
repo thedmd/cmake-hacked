@@ -969,16 +969,40 @@ struct cmSourceFilePathCompare
 };
 
 //----------------------------------------------------------------------------
-void
+struct cmCompareTargets
+{
+  bool operator () (std::string const& a, std::string const& b) const
+  {
+    if (a == "ALL_BUILD")
+      {
+      return true;
+      }
+    if (b == "ALL_BUILD")
+      {
+      return false;
+      }
+    return strcmp(a.c_str(), b.c_str()) < 0;
+  }
+};
+
+//----------------------------------------------------------------------------
+bool
 cmGlobalXCodeGenerator::CreateXCodeTargets(cmLocalGenerator* gen,
                                            std::vector<cmXCodeObject*>&
                                            targets)
 {
   this->SetCurrentLocalGenerator(gen);
   cmTargets &tgts = this->CurrentMakefile->GetTargets();
+  typedef std::map<std::string, cmTarget*, cmCompareTargets> cmSortedTargets;
+  cmSortedTargets sortedTargets;
   for(cmTargets::iterator l = tgts.begin(); l != tgts.end(); l++)
     {
-    cmTarget& cmtarget = l->second;
+    sortedTargets[l->first] = &l->second;
+    }
+  for(cmSortedTargets::iterator l = sortedTargets.begin();
+      l != sortedTargets.end(); l++)
+    {
+    cmTarget& cmtarget = *l->second;
     cmGeneratorTarget* gtgt = this->GetGeneratorTarget(&cmtarget);
 
     // make sure ALL_BUILD, INSTALL, etc are only done once
@@ -995,7 +1019,12 @@ cmGlobalXCodeGenerator::CreateXCodeTargets(cmLocalGenerator* gen,
     if(cmtarget.GetType() == cmTarget::UTILITY ||
        cmtarget.GetType() == cmTarget::GLOBAL_TARGET)
       {
-      targets.push_back(this->CreateUtilityTarget(cmtarget));
+      cmXCodeObject* t = this->CreateUtilityTarget(cmtarget);
+      if (!t)
+        {
+        return false;
+        }
+      targets.push_back(t);
       continue;
       }
 
@@ -1003,7 +1032,7 @@ cmGlobalXCodeGenerator::CreateXCodeTargets(cmLocalGenerator* gen,
     std::vector<cmSourceFile*> classes;
     if (!cmtarget.GetConfigCommonSourceFiles(classes))
       {
-      return;
+      return false;
       }
     std::sort(classes.begin(), classes.end(), cmSourceFilePathCompare());
 
@@ -1170,7 +1199,7 @@ cmGlobalXCodeGenerator::CreateXCodeTargets(cmLocalGenerator* gen,
           this->CreateString("2147483647"));
         copyFilesBuildPhase->AddAttribute("dstSubfolderSpec",
           this->CreateString("6"));
-        cmOStringStream ostr;
+        std::ostringstream ostr;
         if (cmtarget.IsFrameworkOnApple())
           {
           // dstPath in frameworks is relative to Versions/<version>
@@ -1230,6 +1259,7 @@ cmGlobalXCodeGenerator::CreateXCodeTargets(cmLocalGenerator* gen,
 
     targets.push_back(this->CreateXCodeTarget(cmtarget, buildPhases));
     }
+  return true;
 }
 
 //----------------------------------------------------------------------------
@@ -1581,7 +1611,7 @@ void  cmGlobalXCodeGenerator
         }
       else
         {
-        cmOStringStream str;
+        std::ostringstream str;
         str << "_buildpart_" << count++ ;
         tname[&ccg.GetCC()] = std::string(target.GetName()) + str.str();
         makefileStream << "\\\n\t" << tname[&ccg.GetCC()];
@@ -2299,7 +2329,7 @@ void cmGlobalXCodeGenerator::CreateBuildSettings(cmTarget& target,
 
     // VERSION -> current_version
     target.GetTargetVersion(false, major, minor, patch);
-    cmOStringStream v;
+    std::ostringstream v;
 
     // Xcode always wants at least 1.0.0 or nothing
     if(!(major == 0 && minor == 0 && patch == 0))
@@ -2311,7 +2341,7 @@ void cmGlobalXCodeGenerator::CreateBuildSettings(cmTarget& target,
 
     // SOVERSION -> compatibility_version
     target.GetTargetVersion(true, major, minor, patch);
-    cmOStringStream vso;
+    std::ostringstream vso;
 
     // Xcode always wants at least 1.0.0 or nothing
     if(!(major == 0 && minor == 0 && patch == 0))
@@ -2906,7 +2936,7 @@ void cmGlobalXCodeGenerator
 }
 
 //----------------------------------------------------------------------------
-void cmGlobalXCodeGenerator::CreateGroups(cmLocalGenerator* root,
+bool cmGlobalXCodeGenerator::CreateGroups(cmLocalGenerator* root,
                                           std::vector<cmLocalGenerator*>&
                                           generators)
 {
@@ -2949,7 +2979,7 @@ void cmGlobalXCodeGenerator::CreateGroups(cmLocalGenerator* root,
       std::vector<cmSourceFile*> classes;
       if (!cmtarget.GetConfigCommonSourceFiles(classes))
         {
-        return;
+        return false;
         }
       // Put cmSourceFile instances in proper groups:
       for(std::vector<cmSourceFile*>::const_iterator s = classes.begin();
@@ -2982,6 +3012,7 @@ void cmGlobalXCodeGenerator::CreateGroups(cmLocalGenerator* root,
         }
       }
     }
+  return true;
 }
 
 cmXCodeObject *cmGlobalXCodeGenerator
@@ -3102,7 +3133,7 @@ cmXCodeObject* cmGlobalXCodeGenerator
 }
 
 //----------------------------------------------------------------------------
-void cmGlobalXCodeGenerator
+bool cmGlobalXCodeGenerator
 ::CreateXCodeObjects(cmLocalGenerator* root,
                      std::vector<cmLocalGenerator*>&
                      generators)
@@ -3183,7 +3214,10 @@ void cmGlobalXCodeGenerator
   this->MainGroupChildren->AddObject(resourcesGroup);
 
   // now create the cmake groups
-  this->CreateGroups(root, generators);
+  if (!this->CreateGroups(root, generators))
+    {
+    return false;
+    }
 
   cmXCodeObject* productGroup = this->CreateObject(cmXCodeObject::PBXGroup);
   productGroup->AddAttribute("name", this->CreateString("Products"));
@@ -3390,7 +3424,10 @@ void cmGlobalXCodeGenerator
     {
     if(!this->IsExcluded(root, *i))
       {
-      this->CreateXCodeTargets(*i, targets);
+      if (!this->CreateXCodeTargets(*i, targets))
+        {
+        return false;
+        }
       }
     }
   // loop over all targets and add link and depend info
@@ -3419,6 +3456,7 @@ void cmGlobalXCodeGenerator
       }
     }
   this->RootObject->AddAttribute("targets", allTargets);
+  return true;
 }
 
 //----------------------------------------------------------------------------
@@ -3605,8 +3643,10 @@ cmGlobalXCodeGenerator::OutputXCodeProject(cmLocalGenerator* root,
       }
     }
 
-  this->CreateXCodeObjects(root,
-                           generators);
+  if (!this->CreateXCodeObjects(root, generators))
+    {
+    return;
+    }
   std::string xcodeDir = root->GetMakefile()->GetStartOutputDirectory();
   xcodeDir += "/";
   xcodeDir += root->GetMakefile()->GetProjectName();

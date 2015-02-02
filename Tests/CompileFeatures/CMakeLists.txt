@@ -1,5 +1,5 @@
 
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.1)
 
 project(CompileFeatures)
 
@@ -31,13 +31,62 @@ foreach(feature ${cxx_features})
   run_test(${feature} CXX)
 endforeach()
 
-if (CMAKE_CXX_COMPILER_ID STREQUAL GNU
+if (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang"
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.1)
+  # AppleClang prior to 5.1 does not set any preprocessor define to distinguish
+  # c++1y from c++11, so CMake does not support c++1y features before AppleClang 5.1.
+  list(REMOVE_ITEM CXX_non_features
+    cxx_attribute_deprecated
+    cxx_binary_literals
+  )
+endif()
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang"
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.2)
+  # AppleClang prior to 4.1 reports false for __has_feature(cxx_local_type_template_args)
+  # and __has_feature(cxx_unrestricted_unions) but it happens to pass these tests.
+  list(REMOVE_ITEM CXX_non_features
+    cxx_local_type_template_args
+    cxx_unrestricted_unions
+  )
+endif()
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL SunPro)
+  list(REMOVE_ITEM CXX_non_features
+    cxx_attribute_deprecated
+    cxx_contextual_conversions
+    cxx_extended_friend_declarations
+    cxx_long_long_type
+    cxx_sizeof_member
+    cxx_variadic_macros
+  )
+endif()
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.5)
+  # The cxx_raw_string_literals feature happens to work in some distributions
+  # of GNU 4.4, but it is first documented as available with GNU 4.5.
+  list(REMOVE_ITEM CXX_non_features
+    cxx_raw_string_literals
+  )
+endif()
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.6)
+  # The cxx_constexpr feature happens to work (for *this* testcase) with
+  # GNU 4.5, but it is first documented as available with GNU 4.6.
+  list(REMOVE_ITEM CXX_non_features
+    cxx_constexpr
+  )
+endif()
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
+  # The cxx_alignof feature happens to work (for *this* testcase) with
+  # GNU 4.7, but it is first documented as available with GNU 4.8.
   list(REMOVE_ITEM CXX_non_features
     cxx_alignof
   )
 endif()
-if (CMAKE_CXX_COMPILER_ID STREQUAL GNU
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.9)
   # GNU prior to 4.9 does not set any preprocessor define to distinguish
   # c++1y from c++11, so CMake does not support c++1y features before GNU 4.9.
@@ -62,8 +111,9 @@ foreach(lang CXX C)
       try_compile(${feature}_works
         "${CMAKE_CURRENT_BINARY_DIR}/${feature}_test"
         "${CMAKE_CURRENT_SOURCE_DIR}/feature_test.${${lang}_ext}"
-        COMPILE_DEFINITIONS "-DTEST=${CMAKE_CURRENT_SOURCE_DIR}/${feature}.${${lang}_ext}"
+        COMPILE_DEFINITIONS "-DTEST=${feature}.${${lang}_ext}"
         CMAKE_FLAGS "-DCMAKE_${lang}_STANDARD=${${lang}_standard_flag}"
+          "-DINCLUDE_DIRECTORIES=${CMAKE_CURRENT_SOURCE_DIR}"
         OUTPUT_VARIABLE OUTPUT
       )
       if (${feature}_works)
@@ -120,17 +170,90 @@ if (CMAKE_CXX_COMPILE_FEATURES)
   add_executable(IfaceCompileFeatures main.cpp)
   target_link_libraries(IfaceCompileFeatures iface)
 
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
+      add_definitions(
+        -DEXPECT_OVERRIDE_CONTROL=1
+        -DEXPECT_INHERITING_CONSTRUCTORS=1
+        -DEXPECT_FINAL=1
+        -DEXPECT_INHERITING_CONSTRUCTORS_AND_FINAL=1
+      )
+    elseif (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.7)
+      add_definitions(
+        -DEXPECT_OVERRIDE_CONTROL=1
+        -DEXPECT_INHERITING_CONSTRUCTORS=0
+        -DEXPECT_FINAL=1
+        -DEXPECT_INHERITING_CONSTRUCTORS_AND_FINAL=0
+      )
+    else()
+      add_definitions(
+        -DEXPECT_OVERRIDE_CONTROL=0
+        -DEXPECT_INHERITING_CONSTRUCTORS=0
+        -DEXPECT_FINAL=0
+        -DEXPECT_INHERITING_CONSTRUCTORS_AND_FINAL=0
+      )
+    endif()
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    add_definitions(
+      -DEXPECT_OVERRIDE_CONTROL=1
+      -DEXPECT_INHERITING_CONSTRUCTORS=1
+      -DEXPECT_FINAL=1
+      -DEXPECT_INHERITING_CONSTRUCTORS_AND_FINAL=1
+    )
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.0)
+      add_definitions(
+        -DEXPECT_OVERRIDE_CONTROL=1
+        -DEXPECT_INHERITING_CONSTRUCTORS=1
+        -DEXPECT_FINAL=1
+        -DEXPECT_INHERITING_CONSTRUCTORS_AND_FINAL=1
+      )
+    else()
+      add_definitions(
+        -DEXPECT_OVERRIDE_CONTROL=1
+        -DEXPECT_INHERITING_CONSTRUCTORS=0
+        -DEXPECT_FINAL=1
+        -DEXPECT_INHERITING_CONSTRUCTORS_AND_FINAL=0
+      )
+    endif()
+  elseif (CMAKE_CXX_COMPILER_ID STREQUAL "SunPro")
+    add_definitions(
+      -DEXPECT_OVERRIDE_CONTROL=1
+      -DEXPECT_INHERITING_CONSTRUCTORS=1
+      -DEXPECT_FINAL=1
+      -DEXPECT_INHERITING_CONSTRUCTORS_AND_FINAL=1
+    )
+  endif()
+
   add_executable(CompileFeaturesGenex genex_test.cpp)
   set_property(TARGET CompileFeaturesGenex PROPERTY CXX_STANDARD 11)
-  target_compile_definitions(CompileFeaturesGenex PRIVATE HAVE_OVERRIDE_CONTROL=$<COMPILE_FEATURES:cxx_final,cxx_override>)
+  target_compile_definitions(CompileFeaturesGenex PRIVATE
+    HAVE_OVERRIDE_CONTROL=$<COMPILE_FEATURES:cxx_final,cxx_override>
+    HAVE_AUTO_TYPE=$<COMPILE_FEATURES:cxx_auto_type>
+    HAVE_INHERITING_CONSTRUCTORS=$<COMPILE_FEATURES:cxx_inheriting_constructors>
+    HAVE_FINAL=$<COMPILE_FEATURES:cxx_final>
+    HAVE_INHERITING_CONSTRUCTORS_AND_FINAL=$<COMPILE_FEATURES:cxx_inheriting_constructors,cxx_final>
+  )
 
   add_executable(CompileFeaturesGenex2 genex_test.cpp)
-  target_compile_features(CompileFeaturesGenex2 PRIVATE cxx_constexpr)
-  target_compile_definitions(CompileFeaturesGenex2 PRIVATE HAVE_OVERRIDE_CONTROL=$<COMPILE_FEATURES:cxx_final,cxx_override>)
+  target_compile_features(CompileFeaturesGenex2 PRIVATE cxx_static_assert)
+  target_compile_definitions(CompileFeaturesGenex2 PRIVATE
+    HAVE_OVERRIDE_CONTROL=$<COMPILE_FEATURES:cxx_final,cxx_override>
+    HAVE_AUTO_TYPE=$<COMPILE_FEATURES:cxx_auto_type>
+    HAVE_INHERITING_CONSTRUCTORS=$<COMPILE_FEATURES:cxx_inheriting_constructors>
+    HAVE_FINAL=$<COMPILE_FEATURES:cxx_final>
+    HAVE_INHERITING_CONSTRUCTORS_AND_FINAL=$<COMPILE_FEATURES:cxx_inheriting_constructors,cxx_final>
+  )
 
-  add_library(noexcept_iface INTERFACE)
-  target_compile_features(noexcept_iface INTERFACE cxx_noexcept)
+  add_library(static_assert_iface INTERFACE)
+  target_compile_features(static_assert_iface INTERFACE cxx_static_assert)
   add_executable(CompileFeaturesGenex3 genex_test.cpp)
-  target_link_libraries(CompileFeaturesGenex3 PRIVATE noexcept_iface)
-  target_compile_definitions(CompileFeaturesGenex3 PRIVATE HAVE_OVERRIDE_CONTROL=$<COMPILE_FEATURES:cxx_final,cxx_override>)
+  target_link_libraries(CompileFeaturesGenex3 PRIVATE static_assert_iface)
+  target_compile_definitions(CompileFeaturesGenex3 PRIVATE
+    HAVE_OVERRIDE_CONTROL=$<COMPILE_FEATURES:cxx_final,cxx_override>
+    HAVE_AUTO_TYPE=$<COMPILE_FEATURES:cxx_auto_type>
+    HAVE_INHERITING_CONSTRUCTORS=$<COMPILE_FEATURES:cxx_inheriting_constructors>
+    HAVE_FINAL=$<COMPILE_FEATURES:cxx_final>
+    HAVE_INHERITING_CONSTRUCTORS_AND_FINAL=$<COMPILE_FEATURES:cxx_inheriting_constructors,cxx_final>
+  )
 endif()

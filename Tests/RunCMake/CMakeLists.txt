@@ -6,6 +6,7 @@ macro(add_RunCMake_test test)
     -DRunCMake_GENERATOR=${CMAKE_GENERATOR}
     -DRunCMake_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
     -DRunCMake_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}
+    -DRunCMake_MAKE_PROGRAM=${CMake_TEST_EXPLICIT_MAKE_PROGRAM}
     -DRunCMake_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/${test}
     -DRunCMake_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/${test}
     ${${test}_ARGS}
@@ -52,6 +53,7 @@ add_RunCMake_test(CMP0053)
 add_RunCMake_test(CMP0054)
 add_RunCMake_test(CMP0055)
 add_RunCMake_test(CTest)
+add_RunCMake_test(CTestSubmit)
 
 if(NOT CMake_TEST_EXTERNAL_CMAKE)
   add_RunCMake_test(CTestMemcheck
@@ -121,6 +123,7 @@ add_RunCMake_test(file)
 add_RunCMake_test(find_library)
 add_RunCMake_test(find_package)
 add_RunCMake_test(get_filename_component)
+add_RunCMake_test(get_property)
 add_RunCMake_test(if)
 add_RunCMake_test(include)
 add_RunCMake_test(include_directories)
@@ -130,6 +133,7 @@ add_RunCMake_test(project)
 add_RunCMake_test(return)
 add_RunCMake_test(string)
 add_RunCMake_test(try_compile)
+add_RunCMake_test(try_run)
 add_RunCMake_test(set)
 add_RunCMake_test(variable_watch)
 add_RunCMake_test(CMP0004)

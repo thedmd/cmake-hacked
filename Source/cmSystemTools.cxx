@@ -79,10 +79,6 @@ public:
 #endif
 };
 
-#if defined(__sgi) && !defined(__GNUC__)
-# pragma set woff 1375 /* base class destructor not virtual */
-#endif
-
 #if !defined(HAVE_ENVIRON_NOT_REQUIRE_PROTOTYPE)
 // For GetEnvironmentVariables
 # if defined(_WIN32)
@@ -828,18 +824,12 @@ bool cmSystemTools::RunSingleCommand(
 std::string
 cmSystemTools::PrintSingleCommand(std::vector<std::string> const& command)
 {
-  std::string commandStr;
-  const char* sep = "";
-  for(std::vector<std::string>::const_iterator i = command.begin();
-      i != command.end(); ++i)
+  if (command.empty())
     {
-    commandStr += sep;
-    commandStr += "\"";
-    commandStr += *i;
-    commandStr += "\"";
-    sep = " ";
+    return std::string();
     }
-  return commandStr;
+
+  return "\"" + cmJoin(command, "\" \"") + "\"";
 }
 
 bool cmSystemTools::DoesFileExistWithExtensions(
@@ -1162,7 +1152,7 @@ bool cmSystemTools::SimpleGlob(const std::string& glob,
   std::string path = cmSystemTools::GetFilenamePath(glob);
   std::string ppath = cmSystemTools::GetFilenameName(glob);
   ppath = ppath.substr(0, ppath.size()-1);
-  if ( path.size() == 0 )
+  if (path.empty())
     {
     path = "/";
     }
@@ -1273,11 +1263,7 @@ bool cmSystemTools::Split(const char* s, std::vector<std::string>& l)
 {
   std::vector<std::string> temp;
   bool res = Superclass::Split(s, temp);
-  for(std::vector<std::string>::const_iterator i = temp.begin();
-      i != temp.end(); ++i)
-    {
-    l.push_back(*i);
-    }
+  l.insert(l.end(), temp.begin(), temp.end());
   return res;
 }
 
@@ -1482,7 +1468,8 @@ bool cmSystemTools::IsPathToFramework(const char* path)
 
 bool cmSystemTools::CreateTar(const char* outFileName,
                               const std::vector<std::string>& files,
-                              bool gzip, bool bzip2, bool verbose)
+                              cmTarCompression compressType,
+                              bool verbose, std::string const& mtime)
 {
 #if defined(CMAKE_BUILD_WITH_CMAKE)
   std::string cwd = cmSystemTools::GetCurrentWorkingDirectory();
@@ -1496,10 +1483,25 @@ bool cmSystemTools::CreateTar(const char* outFileName,
     cmSystemTools::Error(e.c_str());
     return false;
     }
-  cmArchiveWrite a(fout, (gzip? cmArchiveWrite::CompressGZip :
-                          (bzip2? cmArchiveWrite::CompressBZip2 :
-                           cmArchiveWrite::CompressNone)),
-                           cmArchiveWrite::TypeTAR);
+  cmArchiveWrite::Compress compress = cmArchiveWrite::CompressNone;
+  switch (compressType)
+    {
+    case TarCompressGZip:
+      compress = cmArchiveWrite::CompressGZip;
+      break;
+    case TarCompressBZip2:
+      compress = cmArchiveWrite::CompressBZip2;
+      break;
+    case TarCompressXZ:
+      compress = cmArchiveWrite::CompressXZ;
+      break;
+    case TarCompressNone:
+      compress = cmArchiveWrite::CompressNone;
+      break;
+    }
+  cmArchiveWrite a(fout, compress,
+                   cmArchiveWrite::TypeTAR);
+  a.SetMTime(mtime);
   a.SetVerbose(verbose);
   for(std::vector<std::string>::const_iterator i = files.begin();
       i != files.end(); ++i)
@@ -1524,7 +1526,6 @@ bool cmSystemTools::CreateTar(const char* outFileName,
 #else
   (void)outFileName;
   (void)files;
-  (void)gzip;
   (void)verbose;
   return false;
 #endif
@@ -1785,7 +1786,7 @@ bool extract_tar(const char* outFileName, bool verbose,
 #endif
 
 bool cmSystemTools::ExtractTar(const char* outFileName,
-                               bool , bool verbose)
+                               bool verbose)
 {
 #if defined(CMAKE_BUILD_WITH_CMAKE)
   return extract_tar(outFileName, verbose, true);
@@ -1797,7 +1798,6 @@ bool cmSystemTools::ExtractTar(const char* outFileName,
 }
 
 bool cmSystemTools::ListTar(const char* outFileName,
-                            bool ,
                             bool verbose)
 {
 #if defined(CMAKE_BUILD_WITH_CMAKE)
@@ -2505,7 +2505,7 @@ bool cmSystemTools::ChangeRPath(std::string const& file,
         }
       if(emsg)
         {
-        cmOStringStream e;
+        std::ostringstream e;
         e << "The current " << se_name[i] << " is:\n"
           << "  " << se[i]->Value << "\n"
           << "which does not contain:\n"

@@ -16,9 +16,6 @@
 if(CMAKE_GENERATOR MATCHES "Visual Studio 7")
   set(CMAKE_SKIP_COMPATIBILITY_TESTS 1)
 endif()
-if(CMAKE_GENERATOR MATCHES "Visual Studio 6")
-  set(CMAKE_SKIP_COMPATIBILITY_TESTS 1)
-endif()
 
 if(WIN32 AND CMAKE_C_COMPILER_ID STREQUAL "Intel")
   set(_INTEL_WINDOWS 1)
@@ -75,6 +72,14 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "^parisc")
   endif()
 endif()
 
+if (CMAKE_CXX_COMPILER_ID STREQUAL SunPro)
+  if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.13)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++03")
+  else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -library=stlport4")
+  endif()
+endif()
+
 # use the ansi CXX compile flag for building cmake
 if (CMAKE_ANSI_CXXFLAGS)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_ANSI_CXXFLAGS}")
@@ -83,5 +88,3 @@ endif ()
 if (CMAKE_ANSI_CFLAGS)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_ANSI_CFLAGS}")
 endif ()
-
-include (${CMAKE_ROOT}/Modules/CMakeBackwardCompatibilityCXX.cmake)

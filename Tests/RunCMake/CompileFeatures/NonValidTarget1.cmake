@@ -7,7 +7,7 @@ else()
   set(expected_result 0)
 endif()
 
-add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/copied_file${HAVE_FINAL}.cpp"
+add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/copied_file${expected_result}.cpp"
   COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/empty.cpp" "${CMAKE_CURRENT_BINARY_DIR}/copied_file${genexvar}.cpp"
 )
 

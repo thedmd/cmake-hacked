@@ -1,6 +1,6 @@
 /*============================================================================
   CMake - Cross Platform Makefile Generator
-  Copyright 2000-2010 Kitware, Inc., Insight Software Consortium
+  Copyright 2000-2015 Kitware, Inc., Insight Software Consortium
 
   Distributed under the OSI-approved BSD License (the "License");
   see accompanying file Copyright.txt for details.
@@ -9,8 +9,13 @@
   implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
   See the License for more information.
 ============================================================================*/
+#ifndef cmCurl_h
+#define cmCurl_h
+
+#include <cmsys/Configure.h>
+#include "cm_curl.h"
 #include "cmStandardIncludes.h"
-#if !defined(CMAKE_NO_ANSI_STRING_STREAM)
-cmOStringStream::cmOStringStream() {}
-cmOStringStream::~cmOStringStream() {}
+
+std::string cmCurlSetCAInfo(::CURL *curl, const char* cafile = 0);
+
 #endif

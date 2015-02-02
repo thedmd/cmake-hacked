@@ -23,6 +23,7 @@ bool cmGetTargetPropertyCommand
   std::string var = args[0];
   const std::string& targetName = args[1];
   std::string prop;
+  bool prop_exists = false;
 
   if(args[2] == "ALIASED_TARGET")
     {
@@ -32,6 +33,7 @@ bool cmGetTargetPropertyCommand
                           this->Makefile->FindTargetToUse(targetName))
         {
         prop = target->GetName();
+        prop_exists = true;
         }
       }
     }
@@ -42,12 +44,13 @@ bool cmGetTargetPropertyCommand
     if(prop_cstr)
       {
       prop = prop_cstr;
+      prop_exists = true;
       }
     }
   else
     {
     bool issueMessage = false;
-    cmOStringStream e;
+    std::ostringstream e;
     cmake::MessageType messageType = cmake::AUTHOR_WARNING;
     switch(this->Makefile->GetPolicyStatus(cmPolicies::CMP0045))
       {
@@ -74,7 +77,7 @@ bool cmGetTargetPropertyCommand
         }
       }
     }
-  if (!prop.empty())
+  if (prop_exists)
     {
     this->Makefile->AddDefinition(var, prop.c_str());
     return true;

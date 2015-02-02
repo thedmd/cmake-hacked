@@ -87,12 +87,7 @@ cmDocumentation::cmDocumentation()
 //----------------------------------------------------------------------------
 cmDocumentation::~cmDocumentation()
 {
-  for(std::map<std::string,cmDocumentationSection *>::iterator i =
-        this->AllSections.begin();
-      i != this->AllSections.end(); ++i)
-    {
-    delete i->second;
-    }
+  cmDeleteAll(this->AllSections);
 }
 
 //----------------------------------------------------------------------------
@@ -167,7 +162,7 @@ bool cmDocumentation::PrintRequestedDocumentation(std::ostream& os)
     // given stream.
     cmsys::ofstream* fout = 0;
     std::ostream* s = &os;
-    if(i->Filename.length() > 0)
+    if(!i->Filename.empty())
       {
       fout = new cmsys::ofstream(i->Filename.c_str(), std::ios::out);
       if(fout)
@@ -882,7 +877,7 @@ bool cmDocumentation::PrintHelp(std::ostream& os)
 //----------------------------------------------------------------------------
 const char* cmDocumentation::GetNameString() const
 {
-  if(this->NameString.length() > 0)
+  if(!this->NameString.empty())
     {
     return this->NameString.c_str();
     }

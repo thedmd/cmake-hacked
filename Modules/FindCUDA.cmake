@@ -276,6 +276,8 @@
 #                            Only available for CUDA version 4.0+.
 #   CUDA_curand_LIBRARY   -- CUDA Random Number Generation library.
 #                            Only available for CUDA version 3.2+.
+#   CUDA_cusolver_LIBRARY -- CUDA Direct Solver library.
+#                            Only available for CUDA version 7.0+.
 #   CUDA_cusparse_LIBRARY -- CUDA Sparse Matrix library.
 #                            Only available for CUDA version 3.2+.
 #   CUDA_npp_LIBRARY      -- NVIDIA Performance Primitives lib.
@@ -481,6 +483,10 @@ mark_as_advanced(
   CUDA_HOST_COMPILATION_CPP
   CUDA_NVCC_FLAGS
   CUDA_PROPAGATE_HOST_FLAGS
+  CUDA_BUILD_CUBIN
+  CUDA_BUILD_EMULATION
+  CUDA_VERBOSE_BUILD
+  CUDA_SEPARABLE_COMPILATION
   )
 
 # Makefile and similar generators don't define CMAKE_CONFIGURATION_TYPES, so we
@@ -518,6 +524,7 @@ macro(cuda_unset_include_and_libraries)
   unset(CUDA_cufft_LIBRARY CACHE)
   unset(CUDA_cufftemu_LIBRARY CACHE)
   unset(CUDA_curand_LIBRARY CACHE)
+  unset(CUDA_cusolver_LIBRARY CACHE)
   unset(CUDA_cusparse_LIBRARY CACHE)
   unset(CUDA_npp_LIBRARY CACHE)
   unset(CUDA_nppc_LIBRARY CACHE)
@@ -613,7 +620,7 @@ endif()
 set(CUDA_VERSION_STRING "${CUDA_VERSION}")
 
 # Support for arm cross compilation with CUDA 5.5
-if(CUDA_VERSION VERSION_GREATER "5.0" AND CMAKE_CROSSCOMPILING AND ${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm" AND EXISTS "${CUDA_TOOLKIT_ROOT_DIR}/targets/armv7-linux-gnueabihf")
+if(CUDA_VERSION VERSION_GREATER "5.0" AND CMAKE_CROSSCOMPILING AND CMAKE_SYSTEM_PROCESSOR MATCHES "arm" AND EXISTS "${CUDA_TOOLKIT_ROOT_DIR}/targets/armv7-linux-gnueabihf")
   set(CUDA_TOOLKIT_TARGET_DIR "${CUDA_TOOLKIT_ROOT_DIR}/targets/armv7-linux-gnueabihf" CACHE PATH "Toolkit target location.")
 else()
   set(CUDA_TOOLKIT_TARGET_DIR "${CUDA_TOOLKIT_ROOT_DIR}" CACHE PATH "Toolkit target location.")
@@ -621,7 +628,7 @@ endif()
 mark_as_advanced(CUDA_TOOLKIT_TARGET_DIR)
 
 # Target CPU architecture
-if(CUDA_VERSION VERSION_GREATER "5.0" AND CMAKE_CROSSCOMPILING AND ${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm")
+if(CUDA_VERSION VERSION_GREATER "5.0" AND CMAKE_CROSSCOMPILING AND CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
   set(_cuda_target_cpu_arch_initial "ARM")
 else()
   set(_cuda_target_cpu_arch_initial "")
@@ -753,6 +760,10 @@ if(CUDA_VERSION VERSION_GREATER "5.0")
   set(CUDA_npp_LIBRARY "${CUDA_nppc_LIBRARY};${CUDA_nppi_LIBRARY};${CUDA_npps_LIBRARY}")
 elseif(NOT CUDA_VERSION VERSION_LESS "4.0")
   find_cuda_helper_libs(npp)
+endif()
+if(NOT CUDA_VERSION VERSION_LESS "7.0")
+  # cusolver showed up in version 7.0
+  find_cuda_helper_libs(cusolver)
 endif()
 
 if (CUDA_BUILD_EMULATION)
@@ -1423,7 +1434,8 @@ function(CUDA_LINK_SEPARABLE_COMPILATION_OBJECTS output_file cuda_target options
     if( ccbin_found0 LESS 0 AND ccbin_found1 LESS 0 AND CUDA_HOST_COMPILER )
       list(APPEND nvcc_flags -ccbin "\"${CUDA_HOST_COMPILER}\"")
     endif()
-    # Create a list of flags specified by CUDA_NVCC_FLAGS_${CONFIG}
+
+    # Create a list of flags specified by CUDA_NVCC_FLAGS_${CONFIG} and CMAKE_${CUDA_C_OR_CXX}_FLAGS*
     set(config_specific_flags)
     set(flags)
     foreach(config ${CUDA_configuration_types})
@@ -1438,6 +1450,13 @@ function(CUDA_LINK_SEPARABLE_COMPILATION_OBJECTS output_file cuda_target options
         list(APPEND flags $<$<CONFIG:${config}>:-Xcompiler> $<$<CONFIG:${config}>:${f}>)
       endforeach()
     endforeach()
+    # Add CMAKE_${CUDA_C_OR_CXX}_FLAGS
+    set(important_host_flags)
+    _cuda_get_important_host_flags(important_host_flags ${CMAKE_${CUDA_C_OR_CXX}_FLAGS})
+    foreach(f ${important_host_flags})
+      list(APPEND flags -Xcompiler ${f})
+    endforeach()
+
     # Add our general CUDA_NVCC_FLAGS with the configuration specifig flags
     set(nvcc_flags ${CUDA_NVCC_FLAGS} ${config_specific_flags} ${nvcc_flags})
 

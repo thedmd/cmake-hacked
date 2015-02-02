@@ -170,8 +170,10 @@ cmNinjaTargetGenerator::ComputeFlagsForObject(cmSourceFile const* source,
     std::string includeFlags =
       this->LocalGenerator->GetIncludeFlags(includes, this->GeneratorTarget,
                                             language,
-      language == "RC" ? true : false); // full include paths for RC
+      language == "RC" ? true : false,  // full include paths for RC
                                         // needed by cmcldeps
+                                            false,
+                                            this->GetConfigName());
     if(cmGlobalNinjaGenerator::IsMinGW())
       cmSystemTools::ReplaceString(includeFlags, "\\", "/");
 
@@ -468,9 +470,9 @@ cmNinjaTargetGenerator
 
 
   // Write the rule for compiling file of the given language.
-  cmOStringStream comment;
+  std::ostringstream comment;
   comment << "Rule for compiling " << lang << " files.";
-  cmOStringStream description;
+  std::ostringstream description;
   description << "Building " << lang << " object $out";
   this->GetGlobalGenerator()->AddRule(this->LanguageCompilerRule(lang),
                                       cmdLine,

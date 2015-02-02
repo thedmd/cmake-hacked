@@ -107,7 +107,7 @@ bool cmMacroHelperCommand::InvokeInitialPass
   cmMakefile::PolicyPushPop polScope(this->Makefile, true, this->Policies);
 
   // set the value of argc
-  cmOStringStream argcDefStream;
+  std::ostringstream argcDefStream;
   argcDefStream << expandedArgs.size();
   std::string argcDef = argcDefStream.str();
 
@@ -116,7 +116,7 @@ bool cmMacroHelperCommand::InvokeInitialPass
   std::string argnDef;
   bool argnDefInitialized = false;
   bool argvDefInitialized = false;
-  if( this->Functions.size())
+  if(!this->Functions.empty())
     {
     this->FilePath = this->Functions[0].FilePath;
     }
@@ -170,7 +170,7 @@ bool cmMacroHelperCommand::InvokeInitialPass
               {
               if ( cnt >= this->Args.size()-1 )
                 {
-                if ( argnDef.size() > 0 )
+                if (!argnDef.empty())
                   {
                   argnDef += ";";
                   }
@@ -195,7 +195,7 @@ bool cmMacroHelperCommand::InvokeInitialPass
             std::vector<std::string>::const_iterator eit;
             for(eit = expandedArgs.begin(); eit != expandedArgs.end(); ++eit)
               {
-              if ( argvDef.size() > 0 )
+              if (!argvDef.empty())
                 {
                 argvDef += ";";
                 }
@@ -328,11 +328,7 @@ bool cmMacroCommand::InitialPass(std::vector<std::string> const& args,
 
   // create a function blocker
   cmMacroFunctionBlocker *f = new cmMacroFunctionBlocker();
-  for(std::vector<std::string>::const_iterator j = args.begin();
-      j != args.end(); ++j)
-    {
-    f->Args.push_back(*j);
-    }
+  f->Args.insert(f->Args.end(), args.begin(), args.end());
   this->Makefile->AddFunctionBlocker(f);
   return true;
 }

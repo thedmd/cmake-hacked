@@ -16,6 +16,14 @@
 #  define _XOPEN_SOURCE_EXTENDED
 #endif
 
+#if defined(_WIN32) && (defined(_MSC_VER) || defined(__WATCOMC__) || defined(__BORLANDC__) || defined(__MINGW32__))
+#  define KWSYS_WINDOWS_DIRS
+#else
+#  if defined(__SUNPRO_CC)
+#    include <fcntl.h>
+#  endif
+#endif
+
 #include "kwsysPrivate.h"
 #include KWSYS_HEADER(RegularExpression.hxx)
 #include KWSYS_HEADER(SystemTools.hxx)
@@ -205,8 +213,7 @@ static time_t windows_filetime_to_posix_time(const FILETIME& ft)
 }
 #endif
 
-#if defined(_WIN32) && (defined(_MSC_VER) || defined(__WATCOMC__) || defined(__BORLANDC__) || defined(__MINGW32__))
-
+#ifdef KWSYS_WINDOWS_DIRS
 #include <wctype.h>
 
 inline int Mkdir(const kwsys_stl::string& dir)
@@ -4725,7 +4732,11 @@ kwsys_stl::string SystemTools::GetOperatingSystemNameAndVersion()
 
 #ifdef KWSYS_WINDOWS_DEPRECATED_GetVersionEx
 # pragma warning (push)
-# pragma warning (disable:4996)
+# ifdef __INTEL_COMPILER
+#  pragma warning (disable:1478)
+# else
+#  pragma warning (disable:4996)
+# endif
 #endif
   bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO *)&osvi);
   if (!bOsVersionInfoEx)
